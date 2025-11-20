@@ -6,7 +6,11 @@ export interface Step {
     y?: number;
     text?: string;
     timestamp: number;
-    screenshot?: string; // Base64
+    screenshot?: string; // File path
+    element_name?: string;
+    element_type?: string;
+    element_value?: string;
+    app_name?: string;
 }
 
 interface RecorderState {

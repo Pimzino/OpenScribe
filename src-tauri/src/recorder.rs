@@ -7,7 +7,10 @@ use tauri::{AppHandle, Emitter};
 use rdev::{listen, EventType, Button};
 use xcap::Monitor;
 use image::codecs::jpeg::JpegEncoder;
+use image::Rgb;
+use imageproc::drawing::{draw_filled_circle_mut, draw_hollow_circle_mut};
 use std::sync::mpsc;
+use crate::accessibility::{get_element_at_point, ElementInfo};
 
 static SCREENSHOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -19,6 +22,10 @@ struct Step {
     text: Option<String>,
     timestamp: u64,
     screenshot: Option<String>, // File path to screenshot
+    element_name: Option<String>,
+    element_type: Option<String>,
+    element_value: Option<String>,
+    app_name: Option<String>,
 }
 
 pub struct RecordingState {
@@ -45,6 +52,7 @@ struct CaptureData {
     timestamp: u64,
     step_type: String,
     text: Option<String>,
+    element_info: Option<ElementInfo>,
 }
 
 pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mutex<bool>>) {
@@ -63,7 +71,27 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
         let _ = fs::create_dir_all(&temp_dir);
 
         for data in rx_encode {
-            let rgb_image = data.image.to_rgb8();
+            let mut rgb_image = data.image.to_rgb8();
+
+            // Draw click highlight if this is a click step
+            if data.step_type == "click" {
+                if let (Some(x), Some(y)) = (data.x, data.y) {
+                    let cx = x as i32;
+                    let cy = y as i32;
+
+                    // Colors for highlight
+                    let outer_color = Rgb([255u8, 69u8, 0u8]); // Orange-red
+                    let inner_color = Rgb([255u8, 0u8, 0u8]);   // Red
+
+                    // Draw outer ring (multiple circles for thickness)
+                    for r in 30..=35 {
+                        draw_hollow_circle_mut(&mut rgb_image, (cx, cy), r, outer_color);
+                    }
+
+                    // Draw inner filled dot
+                    draw_filled_circle_mut(&mut rgb_image, (cx, cy), 5, inner_color);
+                }
+            }
 
             // Generate unique filename
             let counter = SCREENSHOT_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -91,6 +119,10 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
                 text: data.text,
                 timestamp: data.timestamp,
                 screenshot: screenshot_path,
+                element_name: data.element_info.as_ref().map(|e| e.name.clone()),
+                element_type: data.element_info.as_ref().map(|e| e.element_type.clone()),
+                element_value: data.element_info.as_ref().and_then(|e| e.value.clone()),
+                app_name: data.element_info.as_ref().and_then(|e| e.app_name.clone()),
             };
 
             let _ = app_clone.emit("new-step", step);
@@ -135,6 +167,7 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
                                 timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
                                 step_type: "type".to_string(),
                                 text: Some(key_buffer.clone()),
+                                element_info: None,
                             });
                             key_buffer.clear();
                             last_key_time = None;
@@ -180,6 +213,7 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
                                     timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
                                     step_type: "type".to_string(),
                                     text: Some(key_buffer.clone()),
+                                    element_info: None,
                                 });
                                 key_buffer.clear();
                                 last_key_time = None;
@@ -201,6 +235,9 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
                     last_click_time = Some(now);
                     last_click_pos = (x, y);
 
+                    // Get element info at click point using accessibility APIs
+                    let element_info = get_element_at_point(x, y);
+
                     // Capture Screenshot IMMEDIATELY
                     if let Some(ref mon) = monitor {
                         if let Ok(image) = mon.capture_image() {
@@ -215,12 +252,13 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
                                     timestamp,
                                     step_type: "type".to_string(),
                                     text: Some(key_buffer.clone()),
+                                    element_info: None,
                                 });
                                 key_buffer.clear();
                                 last_key_time = None;
                             }
 
-                            // 2. Emit Click Step
+                            // 2. Emit Click Step with element info
                             let _ = tx_encode.send(CaptureData {
                                 x: Some(x),
                                 y: Some(y),
@@ -228,6 +266,7 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
                                 timestamp,
                                 step_type: "click".to_string(),
                                 text: None,
+                                element_info,
                             });
                         }
                     }

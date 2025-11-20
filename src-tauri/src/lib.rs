@@ -1,5 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod recorder;
+mod accessibility;
 
 use tauri::{AppHandle, State};
 use recorder::RecordingState;

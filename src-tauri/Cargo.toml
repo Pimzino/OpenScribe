@@ -30,4 +30,17 @@ xcap = "0.0.9"
 chrono = "0.4"
 base64 = "0.21"
 image = "0.25"
+imageproc = "0.25"
+
+# Platform-specific accessibility APIs
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = ["Win32_UI_Accessibility", "Win32_Foundation", "Win32_System_Com", "Win32_System_Variant", "Win32_System_Ole"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9"
+core-graphics = "0.23"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+atspi = "0.21"
+zbus = { version = "4", default-features = false, features = ["tokio"] }
 

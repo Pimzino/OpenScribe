@@ -2,6 +2,52 @@ import { Step } from "../store/recorderStore";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { useSettingsStore } from "../store/settingsStore";
 
+// Crop image around a point (for click steps)
+async function cropAroundPoint(
+    base64Image: string,
+    x: number,
+    y: number,
+    radius: number = 300
+): Promise<string> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            if (!ctx) {
+                resolve(base64Image); // Fallback to original
+                return;
+            }
+
+            // Calculate crop region
+            const cropSize = radius * 2;
+            const startX = Math.max(0, x - radius);
+            const startY = Math.max(0, y - radius);
+            const endX = Math.min(img.width, x + radius);
+            const endY = Math.min(img.height, y + radius);
+            const width = endX - startX;
+            const height = endY - startY;
+
+            canvas.width = width;
+            canvas.height = height;
+
+            // Draw cropped region
+            ctx.drawImage(
+                img,
+                startX, startY, width, height,
+                0, 0, width, height
+            );
+
+            // Return as base64 (without data URL prefix)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            resolve(dataUrl.replace(/^data:image\/\w+;base64,/, ''));
+        };
+        img.onerror = () => resolve(base64Image); // Fallback to original
+        img.src = `data:image/jpeg;base64,${base64Image}`;
+    });
+}
+
 // Helper to convert file to base64 for AI APIs
 async function fileToBase64(filePath: string): Promise<string> {
     try {
@@ -24,28 +70,55 @@ async function generateStepDescription(
     stepNumber: number,
     totalSteps: number,
     screenshotBase64: string,
+    previousSteps: string[],
     openaiBaseUrl: string,
     openaiApiKey: string,
     openaiModel: string
 ): Promise<string> {
-    const systemPrompt = `You are a technical documentation writer. Analyze the screenshot and the user action to write a clear, concise instruction for this single step.
+    const systemPrompt = `You are a technical documentation writer creating step-by-step guides.
+
+For CLICK actions:
+- Element info (name, type, app) may be provided - use this as the primary source of truth
+- The image shows the click location with an ORANGE-RED CIRCLE marker
+- If element info is provided, use it to write accurate instructions
+- If no element info, identify the UI element from the image
+
+For TYPE actions:
+- Reference the exact text the user typed
 
 Guidelines:
-- Write in imperative mood (e.g., "Click the Submit button")
-- Be specific about what UI element to interact with
-- Include relevant context from what you see in the screenshot
-- Keep it to 1-2 sentences
-- Do NOT include step numbers, markdown formatting, or bullet points
-- Just return the plain instruction text`;
+- Write in imperative mood (e.g., "Click the Submit button", "Type 'hello' in the search field")
+- Be specific about the UI element
+- Keep to 1-2 sentences
+- No step numbers, markdown, or bullet points`;
 
-    const actionDescription = step.type_ === 'click'
-        ? `User clicked at coordinates (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`
-        : `User typed: "${step.text}"`;
+    let actionDescription: string;
+    if (step.type_ === 'click') {
+        // Build description with element info if available
+        const parts: string[] = [];
+        if (step.element_name) parts.push(`Element: "${step.element_name}"`);
+        if (step.element_type) parts.push(`Type: ${step.element_type}`);
+        if (step.app_name) parts.push(`App: ${step.app_name}`);
+
+        if (parts.length > 0) {
+            actionDescription = `User clicked: ${parts.join(', ')}. Coordinates: (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`;
+        } else {
+            actionDescription = `User clicked at coordinates (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`;
+        }
+    } else {
+        actionDescription = `User typed exactly: "${step.text}"`;
+    }
+
+    // Build context from previous steps
+    let contextText = "";
+    if (previousSteps.length > 0) {
+        contextText = `\n\nPrevious steps in this workflow:\n${previousSteps.map((desc, i) => `${i + 1}. ${desc}`).join('\n')}\n\nUse this context to understand what the user is trying to accomplish.`;
+    }
 
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
         {
             type: "text",
-            text: `This is step ${stepNumber} of ${totalSteps}.\n\nAction: ${actionDescription}\n\nAnalyze the screenshot and describe what the user should do in this step.`
+            text: `This is step ${stepNumber} of ${totalSteps}.\n\nAction: ${actionDescription}${contextText}\n\nAnalyze the screenshot and describe what the user should do in this step.`
         }
     ];
 
@@ -71,6 +144,7 @@ Guidelines:
                 { role: "user", content: userContent }
             ],
             max_tokens: 256,
+            temperature: 0.3,
         }),
     });
 
@@ -87,29 +161,18 @@ Guidelines:
     return data.choices?.[0]?.message?.content?.trim() || "Perform this action.";
 }
 
-// Generate a title for the documentation based on the first screenshot
+// Generate a title for the documentation based on the workflow
 async function generateTitle(
-    screenshotBase64: string,
+    stepDescriptions: string[],
     openaiBaseUrl: string,
     openaiApiKey: string,
     openaiModel: string
 ): Promise<string> {
-    const systemPrompt = `Analyze the screenshot and generate a short, descriptive title for a how-to guide.
+    const systemPrompt = `Based on the workflow steps provided, generate a short, descriptive title for a how-to guide.
 Return ONLY the title text, nothing else. Keep it under 10 words.
-Example: "How to Create a New Project in VS Code"`;
+Example: "How to Test Network Connectivity Using Ping"`;
 
-    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
-        {
-            type: "text",
-            text: "Generate a title for this how-to guide based on what you see in the screenshot."
-        },
-        {
-            type: "image_url",
-            image_url: {
-                url: `data:image/jpeg;base64,${screenshotBase64}`
-            }
-        }
-    ];
+    const stepsText = stepDescriptions.map((desc, i) => `${i + 1}. ${desc}`).join('\n');
 
     const response = await fetch(`${openaiBaseUrl}/chat/completions`, {
         method: "POST",
@@ -121,9 +184,10 @@ Example: "How to Create a New Project in VS Code"`;
             model: openaiModel,
             messages: [
                 { role: "system", content: systemPrompt },
-                { role: "user", content: userContent }
+                { role: "user", content: `Generate a title for this how-to guide based on these steps:\n\n${stepsText}` }
             ],
             max_tokens: 64,
+            temperature: 0.3,
         }),
     });
 
@@ -156,27 +220,32 @@ export async function generateDocumentation(steps: Step[]): Promise<string> {
         }))
     );
 
-    // Generate title from first screenshot
-    const firstScreenshot = stepsWithBase64[0]?.screenshotBase64;
-    const title = firstScreenshot
-        ? await generateTitle(firstScreenshot, openaiBaseUrl, openaiApiKey, openaiModel)
-        : "Step-by-Step Guide";
-
-    // Generate description for each step
+    // Generate description for each step with context from previous steps
     const stepDescriptions: string[] = [];
     for (let i = 0; i < stepsWithBase64.length; i++) {
         const { step, screenshotBase64 } = stepsWithBase64[i];
+
+        // For click steps, crop image around the click point
+        let imageToSend = screenshotBase64;
+        if (step.type_ === 'click' && step.x && step.y && screenshotBase64) {
+            imageToSend = await cropAroundPoint(screenshotBase64, step.x, step.y, 300);
+        }
+
         const description = await generateStepDescription(
             step,
             i + 1,
             steps.length,
-            screenshotBase64,
+            imageToSend,
+            stepDescriptions.slice(), // Pass previous step descriptions as context
             openaiBaseUrl,
             openaiApiKey,
             openaiModel
         );
         stepDescriptions.push(description);
     }
+
+    // Generate title based on all step descriptions (better context)
+    const title = await generateTitle(stepDescriptions, openaiBaseUrl, openaiApiKey, openaiModel);
 
     // Assemble the final document with screenshots
     let markdown = `# ${title}\n\n`;
