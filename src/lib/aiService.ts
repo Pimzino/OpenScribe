@@ -19,7 +19,7 @@ ${steps.map((step, index) => `
 **Action**: ${step.type_ === 'click' ? `Clicked at coordinates (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})` : `Typed: "${step.text}"`}
 **Time**: ${new Date(step.timestamp).toLocaleTimeString()}
 
-![Screenshot](data:image/png;base64,${step.screenshot})
+![Screenshot](data:image/jpeg;base64,${step.screenshot})
 `).join("\n")}
   `;
 }

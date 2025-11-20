@@ -107,7 +107,7 @@ export default function Dashboard({ onGenerate }: DashboardProps) {
                                 <>
                                     <div className="aspect-video bg-zinc-950 relative">
                                         <img
-                                            src={`data:image/png;base64,${step.screenshot}`}
+                                            src={`data:image/jpeg;base64,${step.screenshot}`}
                                             alt={`Step ${index + 1}`}
                                             className="w-full h-full object-cover"
                                         />
