@@ -36,6 +36,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(recording_state)
         .setup(move |app| {
             // Start the global listener in a background thread

@@ -1,12 +1,15 @@
 use std::thread;
 use std::time::{SystemTime, Instant, Duration};
+use std::fs;
+use std::io::BufWriter;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter};
 use rdev::{listen, EventType, Button};
 use xcap::Monitor;
-use std::io::Cursor;
-use base64::{Engine as _, engine::general_purpose};
 use image::codecs::jpeg::JpegEncoder;
 use std::sync::mpsc;
+
+static SCREENSHOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, serde::Serialize)]
 struct Step {
@@ -15,7 +18,7 @@ struct Step {
     y: Option<f64>,
     text: Option<String>,
     timestamp: u64,
-    screenshot: Option<String>, // Base64 encoded
+    screenshot: Option<String>, // File path to screenshot
 }
 
 pub struct RecordingState {
@@ -53,27 +56,44 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
 
     let app_clone = app.clone();
 
-    // Thread 3: Encoder/Emitter (Heavy lifting: JPEG encoding - much faster than PNG)
+    // Thread 3: Encoder/Emitter (Write to temp files - much faster than base64)
     thread::spawn(move || {
+        // Create temp directory for screenshots
+        let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+        let _ = fs::create_dir_all(&temp_dir);
+
         for data in rx_encode {
-            let mut buffer = Cursor::new(Vec::new());
             let rgb_image = data.image.to_rgb8();
-            let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 85);
 
-            if encoder.encode_image(&rgb_image).is_ok() {
-                let base64_str = general_purpose::STANDARD.encode(buffer.get_ref());
+            // Generate unique filename
+            let counter = SCREENSHOT_COUNTER.fetch_add(1, Ordering::SeqCst);
+            let filename = format!("screenshot_{}_{}.jpg", data.timestamp, counter);
+            let file_path = temp_dir.join(&filename);
 
-                let step = Step {
-                    type_: data.step_type,
-                    x: data.x,
-                    y: data.y,
-                    text: data.text,
-                    timestamp: data.timestamp,
-                    screenshot: Some(base64_str),
-                };
+            // Write directly to file (faster than base64 encoding + memory)
+            let screenshot_path = if let Ok(file) = fs::File::create(&file_path) {
+                let mut writer = BufWriter::new(file);
+                let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
 
-                let _ = app_clone.emit("new-step", step);
-            }
+                if encoder.encode_image(&rgb_image).is_ok() {
+                    Some(file_path.to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let step = Step {
+                type_: data.step_type,
+                x: data.x,
+                y: data.y,
+                text: data.text,
+                timestamp: data.timestamp,
+                screenshot: screenshot_path,
+            };
+
+            let _ = app_clone.emit("new-step", step);
         }
     });
 

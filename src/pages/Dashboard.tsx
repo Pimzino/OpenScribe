@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useRecorderStore, Step } from "../store/recorderStore";
 import { Play, Square, FileText, Wand2 } from "lucide-react";
@@ -107,7 +107,7 @@ export default function Dashboard({ onGenerate }: DashboardProps) {
                                 <>
                                     <div className="aspect-video bg-zinc-950 relative">
                                         <img
-                                            src={`data:image/jpeg;base64,${step.screenshot}`}
+                                            src={convertFileSrc(step.screenshot)}
                                             alt={`Step ${index + 1}`}
                                             className="w-full h-full object-cover"
                                         />
