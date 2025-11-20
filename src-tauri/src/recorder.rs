@@ -55,10 +55,21 @@ struct CaptureData {
     element_info: Option<ElementInfo>,
 }
 
+// Find the monitor that contains the given point
+fn get_monitor_at_point(x: f64, y: f64) -> Option<Monitor> {
+    Monitor::all().ok()?.into_iter().find(|m| {
+        let mx = m.x() as f64;
+        let my = m.y() as f64;
+        let mw = m.width() as f64;
+        let mh = m.height() as f64;
+        x >= mx && x < mx + mw && y >= my && y < my + mh
+    })
+}
+
 pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mutex<bool>>) {
     // Channel 1: Listener -> Capture Logic
     let (tx_event, rx_event) = mpsc::channel::<RecorderEvent>();
-    
+
     // Channel 2: Capture Logic -> Encoder
     let (tx_encode, rx_encode) = mpsc::channel::<CaptureData>();
 
@@ -137,9 +148,6 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
         let mut last_click_time: Option<Instant> = None;
         let mut last_click_pos: (f64, f64) = (0.0, 0.0);
 
-        // Cache monitor reference for performance
-        let monitor = Monitor::all().ok().and_then(|m| m.into_iter().next());
-
         let text_flush_timeout = Duration::from_millis(1500);
         let click_debounce = Duration::from_millis(150);
         let click_distance_threshold = 10.0;
@@ -158,7 +166,8 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
             // Check if we need to flush text buffer due to timeout
             if let Some(last_time) = last_key_time {
                 if last_time.elapsed() >= text_flush_timeout && !key_buffer.is_empty() {
-                    if let Some(ref mon) = monitor {
+                    // Get monitor at last click position (where user is typing)
+                    if let Some(mon) = get_monitor_at_point(last_click_pos.0, last_click_pos.1) {
                         if let Ok(image) = mon.capture_image() {
                             let _ = tx_encode.send(CaptureData {
                                 x: None,
@@ -204,7 +213,8 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
 
                     // Flush on Return or Tab
                     if (is_return || is_tab) && !key_buffer.is_empty() {
-                        if let Some(ref mon) = monitor {
+                        // Get monitor at last click position (where user is typing)
+                        if let Some(mon) = get_monitor_at_point(last_click_pos.0, last_click_pos.1) {
                             if let Ok(image) = mon.capture_image() {
                                 let _ = tx_encode.send(CaptureData {
                                     x: None,
@@ -238,8 +248,8 @@ pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mu
                     // Get element info at click point using accessibility APIs
                     let element_info = get_element_at_point(x, y);
 
-                    // Capture Screenshot IMMEDIATELY
-                    if let Some(ref mon) = monitor {
+                    // Capture Screenshot from the correct monitor
+                    if let Some(mon) = get_monitor_at_point(x, y) {
                         if let Ok(image) = mon.capture_image() {
                             let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
 
