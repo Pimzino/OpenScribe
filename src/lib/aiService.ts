@@ -18,74 +18,46 @@ async function fileToBase64(filePath: string): Promise<string> {
     }
 }
 
-export async function generateDocumentation(steps: Step[]): Promise<string> {
-    const { openaiBaseUrl, openaiApiKey, openaiModel } = useSettingsStore.getState();
+// Generate description for a single step
+async function generateStepDescription(
+    step: Step,
+    stepNumber: number,
+    totalSteps: number,
+    screenshotBase64: string,
+    openaiBaseUrl: string,
+    openaiApiKey: string,
+    openaiModel: string
+): Promise<string> {
+    const systemPrompt = `You are a technical documentation writer. Analyze the screenshot and the user action to write a clear, concise instruction for this single step.
 
-    if (!openaiApiKey) {
-        throw new Error("OpenAI API key not configured. Please go to Settings to add your API key.");
-    }
+Guidelines:
+- Write in imperative mood (e.g., "Click the Submit button")
+- Be specific about what UI element to interact with
+- Include relevant context from what you see in the screenshot
+- Keep it to 1-2 sentences
+- Do NOT include step numbers, markdown formatting, or bullet points
+- Just return the plain instruction text`;
 
-    console.log("Generating documentation for steps:", steps);
+    const actionDescription = step.type_ === 'click'
+        ? `User clicked at coordinates (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`
+        : `User typed: "${step.text}"`;
 
-    // Convert file paths to base64 for AI processing
-    const stepsWithBase64 = await Promise.all(
-        steps.map(async (step, index) => {
-            let screenshotBase64 = "";
-            if (step.screenshot) {
-                screenshotBase64 = await fileToBase64(step.screenshot);
-            }
-            return {
-                stepNumber: index + 1,
-                type: step.type_,
-                x: step.x,
-                y: step.y,
-                text: step.text,
-                timestamp: new Date(step.timestamp).toLocaleTimeString(),
-                screenshotBase64,
-            };
-        })
-    );
-
-    // Build messages for OpenAI
-    const systemPrompt = `You are a technical documentation writer. Your task is to convert user actions (clicks and typed text) into clear, professional step-by-step documentation.
-
-For each step, analyze the screenshot to understand:
-- What application or webpage is being used
-- What UI element was clicked (button, link, menu item, etc.)
-- The context and purpose of the action
-
-Write documentation that is:
-- Clear and concise
-- Uses proper technical writing style
-- Describes what the user should do (imperative mood)
-- Includes relevant context from the screenshot
-
-Format the output as Markdown with numbered steps.`;
-
-    // Build content array with text and images
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
         {
             type: "text",
-            text: `Please analyze these ${steps.length} recorded actions and generate step-by-step documentation:\n\n` +
-                stepsWithBase64.map(step =>
-                    `Step ${step.stepNumber}: ${step.type === 'click' ? `Click at (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})` : `Typed: "${step.text}"`} at ${step.timestamp}`
-                ).join('\n')
+            text: `This is step ${stepNumber} of ${totalSteps}.\n\nAction: ${actionDescription}\n\nAnalyze the screenshot and describe what the user should do in this step.`
         }
     ];
 
-    // Add screenshots as images
-    for (const step of stepsWithBase64) {
-        if (step.screenshotBase64) {
-            userContent.push({
-                type: "image_url",
-                image_url: {
-                    url: `data:image/jpeg;base64,${step.screenshotBase64}`
-                }
-            });
-        }
+    if (screenshotBase64) {
+        userContent.push({
+            type: "image_url",
+            image_url: {
+                url: `data:image/jpeg;base64,${screenshotBase64}`
+            }
+        });
     }
 
-    // Call OpenAI API
     const response = await fetch(`${openaiBaseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -98,7 +70,7 @@ Format the output as Markdown with numbered steps.`;
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userContent }
             ],
-            max_tokens: 4096,
+            max_tokens: 256,
         }),
     });
 
@@ -112,11 +84,115 @@ Format the output as Markdown with numbered steps.`;
     }
 
     const data = await response.json();
-    const generatedContent = data.choices?.[0]?.message?.content;
+    return data.choices?.[0]?.message?.content?.trim() || "Perform this action.";
+}
 
-    if (!generatedContent) {
-        throw new Error("No content generated from OpenAI");
+// Generate a title for the documentation based on the first screenshot
+async function generateTitle(
+    screenshotBase64: string,
+    openaiBaseUrl: string,
+    openaiApiKey: string,
+    openaiModel: string
+): Promise<string> {
+    const systemPrompt = `Analyze the screenshot and generate a short, descriptive title for a how-to guide.
+Return ONLY the title text, nothing else. Keep it under 10 words.
+Example: "How to Create a New Project in VS Code"`;
+
+    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+        {
+            type: "text",
+            text: "Generate a title for this how-to guide based on what you see in the screenshot."
+        },
+        {
+            type: "image_url",
+            image_url: {
+                url: `data:image/jpeg;base64,${screenshotBase64}`
+            }
+        }
+    ];
+
+    const response = await fetch(`${openaiBaseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify({
+            model: openaiModel,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userContent }
+            ],
+            max_tokens: 64,
+        }),
+    });
+
+    if (!response.ok) {
+        return "Step-by-Step Guide";
     }
 
-    return generatedContent;
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content?.trim() || "Step-by-Step Guide";
+}
+
+export async function generateDocumentation(steps: Step[]): Promise<string> {
+    const { openaiBaseUrl, openaiApiKey, openaiModel } = useSettingsStore.getState();
+
+    if (!openaiApiKey) {
+        throw new Error("OpenAI API key not configured. Please go to Settings to add your API key.");
+    }
+
+    if (steps.length === 0) {
+        throw new Error("No steps to generate documentation from.");
+    }
+
+    console.log("Generating documentation for", steps.length, "steps");
+
+    // Convert all screenshots to base64 first
+    const stepsWithBase64 = await Promise.all(
+        steps.map(async (step) => ({
+            step,
+            screenshotBase64: step.screenshot ? await fileToBase64(step.screenshot) : ""
+        }))
+    );
+
+    // Generate title from first screenshot
+    const firstScreenshot = stepsWithBase64[0]?.screenshotBase64;
+    const title = firstScreenshot
+        ? await generateTitle(firstScreenshot, openaiBaseUrl, openaiApiKey, openaiModel)
+        : "Step-by-Step Guide";
+
+    // Generate description for each step
+    const stepDescriptions: string[] = [];
+    for (let i = 0; i < stepsWithBase64.length; i++) {
+        const { step, screenshotBase64 } = stepsWithBase64[i];
+        const description = await generateStepDescription(
+            step,
+            i + 1,
+            steps.length,
+            screenshotBase64,
+            openaiBaseUrl,
+            openaiApiKey,
+            openaiModel
+        );
+        stepDescriptions.push(description);
+    }
+
+    // Assemble the final document with screenshots
+    let markdown = `# ${title}\n\n`;
+
+    for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        const description = stepDescriptions[i];
+
+        markdown += `## Step ${i + 1}\n\n`;
+        markdown += `${description}\n\n`;
+
+        if (step.screenshot) {
+            // Use file path for local display
+            markdown += `![Step ${i + 1} Screenshot](${step.screenshot})\n\n`;
+        }
+    }
+
+    return markdown;
 }

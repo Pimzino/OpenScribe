@@ -11,13 +11,20 @@ export default function Editor({ onBack }: EditorProps) {
     const { steps } = useRecorderStore();
     const [markdown, setMarkdown] = useState<string>("");
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         const generate = async () => {
-            const docs = await generateDocumentation(steps);
-            setMarkdown(docs);
-            setLoading(false);
+            try {
+                setError(null);
+                const docs = await generateDocumentation(steps);
+                setMarkdown(docs);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to generate documentation");
+            } finally {
+                setLoading(false);
+            }
         };
         generate();
     }, [steps]);
@@ -56,6 +63,20 @@ export default function Editor({ onBack }: EditorProps) {
                     <div className="flex flex-col items-center justify-center h-full text-zinc-500 gap-4">
                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                         <p>Generating documentation with AI...</p>
+                        <p className="text-xs">Processing {steps.length} steps...</p>
+                    </div>
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-4">
+                        <div className="bg-red-900/50 border border-red-800 rounded-lg p-6 max-w-md text-center">
+                            <p className="text-red-400 font-medium mb-2">Error</p>
+                            <p className="text-sm text-zinc-300">{error}</p>
+                        </div>
+                        <button
+                            onClick={onBack}
+                            className="text-sm text-zinc-400 hover:text-white transition-colors"
+                        >
+                            Go back and try again
+                        </button>
                     </div>
                 ) : (
                     <div className="max-w-3xl mx-auto bg-zinc-900 p-8 rounded-lg border border-zinc-800 shadow-lg">
