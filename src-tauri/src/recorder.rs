@@ -28,14 +28,36 @@ struct Step {
     app_name: Option<String>,
 }
 
+#[derive(Clone, serde::Deserialize)]
+pub struct HotkeyBinding {
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub key: String,
+}
+
 pub struct RecordingState {
     pub is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
+    pub start_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
+    pub stop_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
 }
 
 impl RecordingState {
     pub fn new() -> Self {
         Self {
             is_recording: std::sync::Arc::new(std::sync::Mutex::new(false)),
+            start_hotkey: std::sync::Arc::new(std::sync::Mutex::new(HotkeyBinding {
+                ctrl: true,
+                shift: false,
+                alt: true,
+                key: "KeyR".to_string(),
+            })),
+            stop_hotkey: std::sync::Arc::new(std::sync::Mutex::new(HotkeyBinding {
+                ctrl: true,
+                shift: false,
+                alt: true,
+                key: "KeyS".to_string(),
+            })),
         }
     }
 }
@@ -66,7 +88,10 @@ fn get_monitor_at_point(x: f64, y: f64) -> Option<Monitor> {
     })
 }
 
-pub fn start_listener(app: AppHandle, is_recording: std::sync::Arc<std::sync::Mutex<bool>>) {
+pub fn start_listener(
+    app: AppHandle,
+    is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
+) {
     // Channel 1: Listener -> Capture Logic
     let (tx_event, rx_event) = mpsc::channel::<RecorderEvent>();
 

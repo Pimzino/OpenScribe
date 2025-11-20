@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSettingsStore } from "../store/settingsStore";
+import { useSettingsStore, HotkeyBinding } from "../store/settingsStore";
 import { FileText, ArrowLeft, Save, Eye, EyeOff } from "lucide-react";
 
 interface SettingsProps {
@@ -11,9 +11,13 @@ export default function Settings({ onBack }: SettingsProps) {
         openaiBaseUrl,
         openaiApiKey,
         openaiModel,
+        startRecordingHotkey,
+        stopRecordingHotkey,
         setOpenaiBaseUrl,
         setOpenaiApiKey,
         setOpenaiModel,
+        setStartRecordingHotkey,
+        setStopRecordingHotkey,
         saveSettings,
         loadSettings,
         isLoaded,
@@ -22,6 +26,77 @@ export default function Settings({ onBack }: SettingsProps) {
     const [showApiKey, setShowApiKey] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [capturingHotkey, setCapturingHotkey] = useState<"start" | "stop" | null>(null);
+
+    const formatHotkey = (hotkey: HotkeyBinding): string => {
+        const parts: string[] = [];
+        if (hotkey.ctrl) parts.push("Ctrl");
+        if (hotkey.shift) parts.push("Shift");
+        if (hotkey.alt) parts.push("Alt");
+        // Convert KeyR to R, KeyS to S, etc.
+        const keyName = hotkey.key.replace("Key", "").replace("Digit", "");
+        parts.push(keyName);
+        return parts.join(" + ");
+    };
+
+    const handleHotkeyCapture = (e: React.KeyboardEvent, type: "start" | "stop") => {
+        e.preventDefault();
+        if (e.key === "Escape") {
+            setCapturingHotkey(null);
+            return;
+        }
+        // Ignore modifier-only keys
+        if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) {
+            return;
+        }
+        const hotkey: HotkeyBinding = {
+            ctrl: e.ctrlKey,
+            shift: e.shiftKey,
+            alt: e.altKey,
+            key: e.code,
+        };
+        if (type === "start") {
+            setStartRecordingHotkey(hotkey);
+        } else {
+            setStopRecordingHotkey(hotkey);
+        }
+        setCapturingHotkey(null);
+    };
+
+    const getHotkeyWarning = (hotkey: HotkeyBinding): string | null => {
+        const key = hotkey.key;
+
+        // Problematic Ctrl+Shift combinations (browser shortcuts)
+        if (hotkey.ctrl && hotkey.shift && !hotkey.alt) {
+            if (key === "KeyR") return "Conflicts with browser hard reload";
+            if (key === "KeyI") return "Conflicts with browser dev tools";
+            if (key === "KeyJ") return "Conflicts with browser downloads";
+            if (key === "KeyN") return "Conflicts with incognito window";
+        }
+
+        // Problematic Ctrl combinations
+        if (hotkey.ctrl && !hotkey.shift && !hotkey.alt) {
+            if (key === "KeyW") return "Conflicts with close tab";
+            if (key === "KeyT") return "Conflicts with new tab";
+            if (key === "KeyN") return "Conflicts with new window";
+            if (key === "KeyQ") return "Conflicts with quit application";
+        }
+
+        // Problematic Alt combinations
+        if (hotkey.alt && !hotkey.ctrl && !hotkey.shift) {
+            if (key === "F4") return "Conflicts with close window";
+        }
+
+        // Require at least one modifier
+        if (!hotkey.ctrl && !hotkey.shift && !hotkey.alt) {
+            return "Hotkey should include at least one modifier (Ctrl, Shift, or Alt)";
+        }
+
+        return null;
+    };
+
+    const startWarning = getHotkeyWarning(startRecordingHotkey);
+    const stopWarning = getHotkeyWarning(stopRecordingHotkey);
 
     useEffect(() => {
         if (!isLoaded) {
@@ -127,6 +202,60 @@ export default function Settings({ onBack }: SettingsProps) {
                             </div>
                             <p className="mt-1 text-xs text-zinc-500">
                                 Your API key is stored securely on your device
+                            </p>
+                        </div>
+
+                        {/* Hotkeys Section */}
+                        <div className="border-t border-zinc-800 pt-6 mt-6">
+                            <h3 className="text-lg font-medium text-zinc-200 mb-4">Keyboard Shortcuts</h3>
+
+                            {/* Start Recording Hotkey */}
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                    Start Recording
+                                </label>
+                                <button
+                                    onClick={() => setCapturingHotkey("start")}
+                                    onKeyDown={(e) => capturingHotkey === "start" && handleHotkeyCapture(e, "start")}
+                                    className={`w-full px-4 py-2 bg-zinc-900 border rounded-md text-left font-mono text-sm transition-colors ${
+                                        capturingHotkey === "start"
+                                            ? "border-blue-600 text-blue-400"
+                                            : startWarning
+                                            ? "border-yellow-600 text-white hover:border-yellow-500"
+                                            : "border-zinc-800 text-white hover:border-zinc-700"
+                                    }`}
+                                >
+                                    {capturingHotkey === "start" ? "Press keys..." : formatHotkey(startRecordingHotkey)}
+                                </button>
+                                {startWarning && (
+                                    <p className="mt-1 text-xs text-yellow-500">{startWarning}</p>
+                                )}
+                            </div>
+
+                            {/* Stop Recording Hotkey */}
+                            <div>
+                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                    Stop Recording
+                                </label>
+                                <button
+                                    onClick={() => setCapturingHotkey("stop")}
+                                    onKeyDown={(e) => capturingHotkey === "stop" && handleHotkeyCapture(e, "stop")}
+                                    className={`w-full px-4 py-2 bg-zinc-900 border rounded-md text-left font-mono text-sm transition-colors ${
+                                        capturingHotkey === "stop"
+                                            ? "border-blue-600 text-blue-400"
+                                            : stopWarning
+                                            ? "border-yellow-600 text-white hover:border-yellow-500"
+                                            : "border-zinc-800 text-white hover:border-zinc-700"
+                                    }`}
+                                >
+                                    {capturingHotkey === "stop" ? "Press keys..." : formatHotkey(stopRecordingHotkey)}
+                                </button>
+                                {stopWarning && (
+                                    <p className="mt-1 text-xs text-yellow-500">{stopWarning}</p>
+                                )}
+                            </div>
+                            <p className="mt-2 text-xs text-zinc-500">
+                                Click on a field and press your desired key combination
                             </p>
                         </div>
 
