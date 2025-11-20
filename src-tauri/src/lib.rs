@@ -30,6 +30,11 @@ fn stop_recording(state: State<'_, RecordingState>) {
     println!("Recording stopped");
 }
 
+#[tauri::command]
+fn delete_screenshot(path: String) -> Result<(), String> {
+    std::fs::remove_file(&path).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let recording_state = RecordingState::new();
@@ -45,7 +50,7 @@ pub fn run() {
             recorder::start_listener(app.handle().clone(), is_recording_clone);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, start_recording, stop_recording])
+        .invoke_handler(tauri::generate_handler![greet, start_recording, stop_recording, delete_screenshot])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

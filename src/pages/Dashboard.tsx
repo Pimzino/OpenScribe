@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useRecorderStore, Step } from "../store/recorderStore";
-import { Play, Square, FileText, Wand2, Settings } from "lucide-react";
+import { Play, Square, FileText, Wand2, Settings, X } from "lucide-react";
 import RecorderOverlay from "../features/recorder/RecorderOverlay";
 
 interface DashboardProps {
@@ -11,7 +11,19 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onGenerate, onSettings }: DashboardProps) {
-    const { isRecording, setIsRecording, steps, addStep, clearSteps } = useRecorderStore();
+    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps } = useRecorderStore();
+
+    const deleteStep = async (index: number) => {
+        const step = steps[index];
+        if (step.screenshot) {
+            try {
+                await invoke("delete_screenshot", { path: step.screenshot });
+            } catch (error) {
+                console.error("Failed to delete screenshot:", error);
+            }
+        }
+        removeStep(index);
+    };
 
     useEffect(() => {
         const unlisten = listen<Step>("new-step", (event) => {
@@ -110,7 +122,14 @@ export default function Dashboard({ onGenerate, onSettings }: DashboardProps) {
                 {/* Steps Preview */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {steps.map((step, index) => (
-                        <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+                        <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
+                            <button
+                                onClick={() => deleteStep(index)}
+                                className="absolute top-2 right-2 z-10 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
+                                title="Delete step"
+                            >
+                                <X size={14} />
+                            </button>
                             {step.type_ === "click" && step.screenshot ? (
                                 <>
                                     <div className="aspect-video bg-zinc-950 relative">

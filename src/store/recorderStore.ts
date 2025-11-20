@@ -18,6 +18,7 @@ interface RecorderState {
     steps: Step[];
     setIsRecording: (isRecording: boolean) => void;
     addStep: (step: Step) => void;
+    removeStep: (index: number) => void;
     clearSteps: () => void;
 }
 
@@ -26,5 +27,6 @@ export const useRecorderStore = create<RecorderState>((set) => ({
     steps: [],
     setIsRecording: (isRecording) => set({ isRecording }),
     addStep: (step) => set((state) => ({ steps: [...state.steps, step] })),
+    removeStep: (index) => set((state) => ({ steps: state.steps.filter((_, i) => i !== index) })),
     clearSteps: () => set({ steps: [] }),
 }));
