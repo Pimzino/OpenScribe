@@ -123,15 +123,26 @@ export default function Dashboard({ onGenerate }: DashboardProps) {
                                     </div>
                                 </>
                             ) : (
-                                <div className="p-4 flex flex-col h-full justify-center">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h3 className="font-medium text-sm text-zinc-300">Step {index + 1} (Type)</h3>
-                                        <span className="text-xs text-zinc-500">{new Date(step.timestamp).toLocaleTimeString()}</span>
+                                <>
+                                    {step.screenshot && (
+                                        <div className="aspect-video bg-zinc-950 relative">
+                                            <img
+                                                src={convertFileSrc(step.screenshot)}
+                                                alt={`Step ${index + 1}`}
+                                                className="w-full h-full object-cover"
+                                            />
+                                            <div className="absolute top-2 right-2 bg-black/50 px-2 py-1 rounded text-xs">
+                                                {new Date(step.timestamp).toLocaleTimeString()}
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="p-4">
+                                        <h3 className="font-medium text-sm text-zinc-300 mb-2">Step {index + 1} (Type)</h3>
+                                        <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words">
+                                            "{step.text}"
+                                        </div>
                                     </div>
-                                    <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words">
-                                        "{step.text}"
-                                    </div>
-                                </div>
+                                </>
                             )}
                         </div>
                     ))}
