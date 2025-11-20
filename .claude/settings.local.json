@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(cargo build:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git push:*)",
+      "Bash(cat:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(cargo clean:*)",
+      "Bash(git show:*)"
     ],
     "deny": [],
     "ask": []

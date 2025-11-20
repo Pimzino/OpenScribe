@@ -32,6 +32,8 @@ chrono = "0.4"
 base64 = "0.21"
 image = "0.25"
 imageproc = "0.25"
+rusqlite = { version = "0.31", features = ["bundled"] }
+uuid = { version = "1.8", features = ["v4"] }
 
 # Platform-specific accessibility APIs
 [target.'cfg(target_os = "windows")'.dependencies]

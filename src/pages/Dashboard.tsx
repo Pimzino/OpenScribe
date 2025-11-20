@@ -1,64 +1,32 @@
 import { useEffect } from "react";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { useRecorderStore, Step } from "../store/recorderStore";
-import { Play, Square, FileText, Wand2, Settings, X } from "lucide-react";
-import RecorderOverlay from "../features/recorder/RecorderOverlay";
+import { useRecordingsStore, Recording } from "../store/recordingsStore";
+import { FileText, Plus, List, Settings, Clock, TrendingUp, Layers } from "lucide-react";
 
 interface DashboardProps {
-    onGenerate: () => void;
+    onNewRecording: () => void;
+    onViewRecordings: () => void;
+    onSelectRecording: (id: string) => void;
     onSettings: () => void;
 }
 
-export default function Dashboard({ onGenerate, onSettings }: DashboardProps) {
-    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps } = useRecorderStore();
-
-    const deleteStep = async (index: number) => {
-        const step = steps[index];
-        if (step.screenshot) {
-            try {
-                await invoke("delete_screenshot", { path: step.screenshot });
-            } catch (error) {
-                console.error("Failed to delete screenshot:", error);
-            }
-        }
-        removeStep(index);
-    };
+export default function Dashboard({ onNewRecording, onViewRecordings, onSelectRecording, onSettings }: DashboardProps) {
+    const { statistics, fetchStatistics, loading } = useRecordingsStore();
 
     useEffect(() => {
-        const unlisten = listen<Step>("new-step", (event) => {
-            console.log("New step received:", event.payload);
-            addStep(event.payload);
+        fetchStatistics();
+    }, [fetchStatistics]);
+
+    const formatDate = (timestamp: number) => {
+        return new Date(timestamp).toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
         });
-
-        return () => {
-            unlisten.then((f) => f());
-        };
-    }, [addStep]);
-
-    const startRecording = async () => {
-        try {
-            await invoke("start_recording");
-            setIsRecording(true);
-            clearSteps();
-        } catch (error) {
-            console.error("Failed to start recording:", error);
-        }
-    };
-
-    const stopRecording = async () => {
-        try {
-            await invoke("stop_recording");
-            setIsRecording(false);
-        } catch (error) {
-            console.error("Failed to stop recording:", error);
-        }
     };
 
     return (
-        <div className="flex h-screen bg-zinc-950 text-white relative">
-            <RecorderOverlay />
-
+        <div className="flex h-screen bg-zinc-950 text-white">
             {/* Sidebar */}
             <aside className="w-64 border-r border-zinc-800 p-4">
                 <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
@@ -70,7 +38,14 @@ export default function Dashboard({ onGenerate, onSettings }: DashboardProps) {
 
                 <nav className="space-y-2">
                     <button className="w-full flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors">
-                        <FileText size={16} />
+                        <TrendingUp size={16} />
+                        Dashboard
+                    </button>
+                    <button
+                        onClick={onViewRecordings}
+                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
+                    >
+                        <List size={16} />
                         My Recordings
                     </button>
                     <button
@@ -87,100 +62,100 @@ export default function Dashboard({ onGenerate, onSettings }: DashboardProps) {
             <main className="flex-1 p-8 overflow-auto">
                 <div className="flex justify-between items-center mb-8">
                     <h2 className="text-2xl font-bold">Dashboard</h2>
-
-                    <div className="flex items-center gap-4">
-                        {!isRecording ? (
-                            <button
-                                onClick={startRecording}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
-                            >
-                                <Play size={16} />
-                                Start Recording
-                            </button>
-                        ) : (
-                            <button
-                                onClick={stopRecording}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md font-medium transition-colors animate-pulse"
-                            >
-                                <Square size={16} />
-                                Stop Recording
-                            </button>
-                        )}
-
-                        {steps.length > 0 && !isRecording && (
-                            <button
-                                onClick={onGenerate}
-                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium transition-colors"
-                            >
-                                <Wand2 size={16} />
-                                Generate Docs
-                            </button>
-                        )}
-                    </div>
+                    <button
+                        onClick={onNewRecording}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
+                    >
+                        <Plus size={16} />
+                        New Recording
+                    </button>
                 </div>
 
-                {/* Steps Preview */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {steps.map((step, index) => (
-                        <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
-                            <button
-                                onClick={() => deleteStep(index)}
-                                className="absolute top-2 right-2 z-10 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
-                                title="Delete step"
-                            >
-                                <X size={14} />
-                            </button>
-                            {step.type_ === "click" && step.screenshot ? (
-                                <>
-                                    <div className="aspect-video bg-zinc-950 relative">
-                                        <img
-                                            src={convertFileSrc(step.screenshot)}
-                                            alt={`Step ${index + 1}`}
-                                            className="w-full h-full object-cover"
-                                        />
-                                        <div className="absolute top-2 right-2 bg-black/50 px-2 py-1 rounded text-xs">
-                                            {new Date(step.timestamp).toLocaleTimeString()}
-                                        </div>
+                {loading && !statistics ? (
+                    <div className="flex items-center justify-center h-64">
+                        <div className="text-zinc-500">Loading statistics...</div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Statistics Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center">
+                                        <FileText size={20} className="text-blue-500" />
                                     </div>
-                                    <div className="p-4">
-                                        <h3 className="font-medium text-sm text-zinc-300">Step {index + 1} (Click)</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">
-                                            Clicked at ({Math.round(step.x || 0)}, {Math.round(step.y || 0)})
-                                        </p>
+                                    <span className="text-zinc-400 text-sm">Total Recordings</span>
+                                </div>
+                                <p className="text-3xl font-bold">{statistics?.total_recordings || 0}</p>
+                            </div>
+
+                            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="w-10 h-10 bg-purple-600/20 rounded-lg flex items-center justify-center">
+                                        <Layers size={20} className="text-purple-500" />
                                     </div>
-                                </>
-                            ) : (
-                                <>
-                                    {step.screenshot && (
-                                        <div className="aspect-video bg-zinc-950 relative">
-                                            <img
-                                                src={convertFileSrc(step.screenshot)}
-                                                alt={`Step ${index + 1}`}
-                                                className="w-full h-full object-cover"
-                                            />
-                                            <div className="absolute top-2 right-2 bg-black/50 px-2 py-1 rounded text-xs">
-                                                {new Date(step.timestamp).toLocaleTimeString()}
+                                    <span className="text-zinc-400 text-sm">Total Steps</span>
+                                </div>
+                                <p className="text-3xl font-bold">{statistics?.total_steps || 0}</p>
+                            </div>
+
+                            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center">
+                                        <Clock size={20} className="text-green-500" />
+                                    </div>
+                                    <span className="text-zinc-400 text-sm">This Week</span>
+                                </div>
+                                <p className="text-3xl font-bold">{statistics?.recordings_this_week || 0}</p>
+                            </div>
+                        </div>
+
+                        {/* Recent Recordings */}
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-lg">
+                            <div className="flex justify-between items-center p-4 border-b border-zinc-800">
+                                <h3 className="font-semibold">Recent Recordings</h3>
+                                <button
+                                    onClick={onViewRecordings}
+                                    className="text-sm text-blue-500 hover:text-blue-400"
+                                >
+                                    View all
+                                </button>
+                            </div>
+
+                            {statistics?.recent_recordings && statistics.recent_recordings.length > 0 ? (
+                                <div className="divide-y divide-zinc-800">
+                                    {statistics.recent_recordings.map((recording: Recording) => (
+                                        <button
+                                            key={recording.id}
+                                            onClick={() => onSelectRecording(recording.id)}
+                                            className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/50 transition-colors text-left"
+                                        >
+                                            <div>
+                                                <p className="font-medium">{recording.name}</p>
+                                                <p className="text-sm text-zinc-500">
+                                                    {recording.step_count} steps
+                                                </p>
                                             </div>
-                                        </div>
-                                    )}
-                                    <div className="p-4">
-                                        <h3 className="font-medium text-sm text-zinc-300 mb-2">Step {index + 1} (Type)</h3>
-                                        <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words">
-                                            "{step.text}"
-                                        </div>
-                                    </div>
-                                </>
+                                            <div className="text-sm text-zinc-500">
+                                                {formatDate(recording.updated_at)}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="p-8 text-center text-zinc-500">
+                                    <p>No recordings yet</p>
+                                    <button
+                                        onClick={onNewRecording}
+                                        className="mt-2 text-blue-500 hover:text-blue-400"
+                                    >
+                                        Create your first recording
+                                    </button>
+                                </div>
                             )}
                         </div>
-                    ))}
-
-                    {steps.length === 0 && !isRecording && (
-                        <div className="col-span-full flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500">
-                            <p>No steps recorded yet.</p>
-                            <p className="text-sm">Click "Start Recording" to begin.</p>
-                        </div>
-                    )}
-                </div>
+                    </>
+                )}
             </main>
         </div>
     );

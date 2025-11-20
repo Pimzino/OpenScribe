@@ -28,7 +28,7 @@ let store: Store | null = null;
 
 async function getStore(): Promise<Store> {
     if (!store) {
-        store = await load("settings.json", { autoSave: false });
+        store = await load("settings.json");
     }
     return store;
 }

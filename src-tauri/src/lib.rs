@@ -1,10 +1,15 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod recorder;
 mod accessibility;
+mod database;
 
+use std::sync::Mutex;
 use tauri::{AppHandle, State, Manager, Emitter};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
+use database::{Database, StepInput, Recording, RecordingWithSteps, Statistics};
+
+pub struct DatabaseState(pub Mutex<Database>);
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -145,6 +150,71 @@ fn set_hotkeys(app: AppHandle, state: State<'_, RecordingState>, start: HotkeyBi
     Ok(())
 }
 
+// Database commands
+#[tauri::command]
+fn create_recording(db: State<'_, DatabaseState>, name: String) -> Result<String, String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .create_recording(name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_steps(db: State<'_, DatabaseState>, recording_id: String, steps: Vec<StepInput>) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .save_steps(&recording_id, steps)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_documentation(db: State<'_, DatabaseState>, recording_id: String, documentation: String) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .save_documentation(&recording_id, &documentation)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_recordings(db: State<'_, DatabaseState>) -> Result<Vec<Recording>, String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .list_recordings()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_recording(db: State<'_, DatabaseState>, id: String) -> Result<Option<RecordingWithSteps>, String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .get_recording(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_recording(db: State<'_, DatabaseState>, id: String) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .delete_recording(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_recording_name(db: State<'_, DatabaseState>, id: String, name: String) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .update_recording_name(&id, &name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_statistics(db: State<'_, DatabaseState>) -> Result<Statistics, String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .get_statistics()
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let recording_state = RecordingState::new();
@@ -159,6 +229,12 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(recording_state)
         .setup(move |app| {
+            // Initialize database
+            let app_data_dir = app.path().app_data_dir()
+                .expect("Failed to get app data directory");
+            let db = Database::new(app_data_dir)
+                .expect("Failed to initialize database");
+            app.manage(DatabaseState(Mutex::new(db)));
             // Start the global input listener in a background thread (for recording)
             recorder::start_listener(app.handle().clone(), is_recording_clone);
 
@@ -188,7 +264,21 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, start_recording, stop_recording, delete_screenshot, set_hotkeys])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            start_recording,
+            stop_recording,
+            delete_screenshot,
+            set_hotkeys,
+            create_recording,
+            save_steps,
+            save_documentation,
+            list_recordings,
+            get_recording,
+            delete_recording,
+            update_recording_name,
+            get_statistics
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

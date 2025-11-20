@@ -190,7 +190,7 @@ pub fn start_listener(
 
             // Check if we need to flush text buffer due to timeout
             if let Some(last_time) = last_key_time {
-                if last_time.elapsed() >= text_flush_timeout && !key_buffer.is_empty() {
+                if last_time.elapsed() >= text_flush_timeout && !key_buffer.trim().is_empty() {
                     // Get monitor at last click position (where user is typing)
                     if let Some(mon) = get_monitor_at_point(last_click_pos.0, last_click_pos.1) {
                         if let Ok(image) = mon.capture_image() {
@@ -200,7 +200,7 @@ pub fn start_listener(
                                 image: image::DynamicImage::ImageRgba8(image),
                                 timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
                                 step_type: "type".to_string(),
-                                text: Some(key_buffer.clone()),
+                                text: Some(key_buffer.trim().to_string()),
                                 element_info: None,
                             });
                             key_buffer.clear();
@@ -219,25 +219,35 @@ pub fn start_listener(
                 RecorderEvent::Key { key, text } => {
                     let is_return = key == rdev::Key::Return;
                     let is_tab = key == rdev::Key::Tab;
+                    let is_backspace = key == rdev::Key::Backspace;
+                    let is_delete = key == rdev::Key::Delete;
+                    let is_space = key == rdev::Key::Space;
 
-                    if let Some(t) = text {
+                    // Handle backspace - remove last character
+                    if is_backspace && !key_buffer.is_empty() {
+                        key_buffer.pop();
+                        last_key_time = Some(Instant::now());
+                    }
+                    // Handle delete key similarly
+                    else if is_delete && !key_buffer.is_empty() {
+                        key_buffer.pop();
+                        last_key_time = Some(Instant::now());
+                    }
+                    // Handle space explicitly (event.name may not be reliable)
+                    else if is_space {
+                        key_buffer.push(' ');
+                        last_key_time = Some(Instant::now());
+                    }
+                    else if let Some(t) = text {
                         // Filter out control characters from text representation if needed
                         if t.len() == 1 {
                              key_buffer.push_str(&t);
                              last_key_time = Some(Instant::now());
-                        } else if t == "Space" {
-                            key_buffer.push(' ');
-                            last_key_time = Some(Instant::now());
                         }
                     }
 
-                    if is_return {
-                        key_buffer.push('\n');
-                        last_key_time = Some(Instant::now());
-                    }
-
-                    // Flush on Return or Tab
-                    if (is_return || is_tab) && !key_buffer.is_empty() {
+                    // Flush on Return or Tab - only if buffer has actual content (not just whitespace)
+                    if (is_return || is_tab) && !key_buffer.trim().is_empty() {
                         // Get monitor at last click position (where user is typing)
                         if let Some(mon) = get_monitor_at_point(last_click_pos.0, last_click_pos.1) {
                             if let Ok(image) = mon.capture_image() {
@@ -247,7 +257,7 @@ pub fn start_listener(
                                     image: image::DynamicImage::ImageRgba8(image),
                                     timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
                                     step_type: "type".to_string(),
-                                    text: Some(key_buffer.clone()),
+                                    text: Some(key_buffer.trim().to_string()),
                                     element_info: None,
                                 });
                                 key_buffer.clear();
@@ -279,14 +289,14 @@ pub fn start_listener(
                             let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
 
                             // 1. Flush text if any (using the same screenshot)
-                            if !key_buffer.is_empty() {
+                            if !key_buffer.trim().is_empty() {
                                 let _ = tx_encode.send(CaptureData {
                                     x: None,
                                     y: None,
                                     image: image::DynamicImage::ImageRgba8(image.clone()), // Clone for text step
                                     timestamp,
                                     step_type: "type".to_string(),
-                                    text: Some(key_buffer.clone()),
+                                    text: Some(key_buffer.trim().to_string()),
                                     element_info: None,
                                 });
                                 key_buffer.clear();

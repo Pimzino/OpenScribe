@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useSettingsStore, HotkeyBinding } from "../store/settingsStore";
-import { FileText, ArrowLeft, Save, Eye, EyeOff } from "lucide-react";
+import { FileText, Save, Eye, EyeOff, Settings as SettingsIcon, TrendingUp, List } from "lucide-react";
 
 interface SettingsProps {
     onBack: () => void;
+    onViewRecordings: () => void;
 }
 
-export default function Settings({ onBack }: SettingsProps) {
+export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
     const {
         openaiBaseUrl,
         openaiApiKey,
@@ -131,10 +132,23 @@ export default function Settings({ onBack }: SettingsProps) {
                 <nav className="space-y-2">
                     <button
                         onClick={onBack}
+                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
+                    >
+                        <TrendingUp size={16} />
+                        Dashboard
+                    </button>
+                    <button
+                        onClick={onViewRecordings}
+                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
+                    >
+                        <List size={16} />
+                        My Recordings
+                    </button>
+                    <button
                         className="w-full flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors"
                     >
-                        <ArrowLeft size={16} />
-                        Back to Dashboard
+                        <SettingsIcon size={16} />
+                        Settings
                     </button>
                 </nav>
             </aside>
@@ -145,6 +159,9 @@ export default function Settings({ onBack }: SettingsProps) {
                     <h2 className="text-2xl font-bold mb-8">Settings</h2>
 
                     <div className="space-y-6">
+                        {/* AI Section */}
+                        <h3 className="text-lg font-medium text-zinc-200 mb-4">AI</h3>
+
                         {/* OpenAI Base URL */}
                         <div>
                             <label className="block text-sm font-medium text-zinc-300 mb-2">

@@ -21,7 +21,6 @@ async function cropAroundPoint(
             }
 
             // Calculate crop region
-            const cropSize = radius * 2;
             const startX = Math.max(0, x - radius);
             const startY = Math.max(0, y - radius);
             const endX = Math.min(img.width, x + radius);
@@ -199,8 +198,31 @@ Example: "How to Test Network Connectivity Using Ping"`;
     return data.choices?.[0]?.message?.content?.trim() || "Step-by-Step Guide";
 }
 
-export async function generateDocumentation(steps: Step[]): Promise<string> {
-    const { openaiBaseUrl, openaiApiKey, openaiModel } = useSettingsStore.getState();
+interface AIConfig {
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+}
+
+interface StepLike {
+    type_: string;
+    x?: number;
+    y?: number;
+    text?: string;
+    timestamp: number;
+    screenshot?: string;
+    element_name?: string;
+    element_type?: string;
+    element_value?: string;
+    app_name?: string;
+}
+
+export async function generateDocumentation(steps: StepLike[], config?: AIConfig): Promise<string> {
+    // Use provided config or fall back to store
+    const storeState = useSettingsStore.getState();
+    const openaiApiKey = config?.apiKey || storeState.openaiApiKey;
+    const openaiBaseUrl = config?.baseUrl || storeState.openaiBaseUrl;
+    const openaiModel = config?.model || storeState.openaiModel;
 
     if (!openaiApiKey) {
         throw new Error("OpenAI API key not configured. Please go to Settings to add your API key.");
