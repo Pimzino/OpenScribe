@@ -7,7 +7,13 @@
     "core:default",
     "opener:default",
     "fs:default",
-    "fs:allow-read-file",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "$APPDATA/**" },
+        { "path": "$TEMP/**" }
+      ]
+    },
     "store:default"
   ]
 }

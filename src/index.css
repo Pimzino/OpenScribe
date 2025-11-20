@@ -1,1 +1,370 @@
 @import "tailwindcss";
+
+/* MDXEditor Dark Theme */
+.mdx-editor-dark {
+    --accentBase: theme('colors.blue.500');
+    --accentBgSubtle: theme('colors.zinc.800');
+    --accentBg: theme('colors.zinc.700');
+    --accentBgHover: theme('colors.zinc.600');
+    --accentBgActive: theme('colors.zinc.500');
+    --accentLine: theme('colors.zinc.600');
+    --accentBorder: theme('colors.zinc.500');
+    --accentBorderHover: theme('colors.zinc.400');
+    --accentSolid: theme('colors.blue.500');
+    --accentSolidHover: theme('colors.blue.400');
+    --accentText: theme('colors.blue.400');
+    --accentTextContrast: white;
+
+    --baseBase: theme('colors.zinc.950');
+    --baseBgSubtle: theme('colors.zinc.900');
+    --baseBg: theme('colors.zinc.900');
+    --baseBgHover: theme('colors.zinc.800');
+    --baseBgActive: theme('colors.zinc.700');
+    --baseLine: theme('colors.zinc.700');
+    --baseBorder: theme('colors.zinc.600');
+    --baseBorderHover: theme('colors.zinc.500');
+    --baseSolid: theme('colors.zinc.600');
+    --baseSolidHover: theme('colors.zinc.500');
+    --baseText: theme('colors.zinc.300');
+    --baseTextContrast: white;
+}
+
+.mdx-editor-dark .mdxeditor {
+    background: theme('colors.zinc.900');
+    color: theme('colors.zinc.300');
+}
+
+.mdx-editor-dark [class*="_toolbarRoot_"] {
+    background: theme('colors.zinc.800');
+    border-color: theme('colors.zinc.700');
+}
+
+.mdx-editor-dark [class*="_contentEditable_"] {
+    background: theme('colors.zinc.950');
+}
+
+.mdx-editor-dark .mdxeditor [class*="_editorWrapper_"] {
+    color: white;
+}
+
+.mdx-editor-dark .mdxeditor h1,
+.mdx-editor-dark .mdxeditor h2,
+.mdx-editor-dark .mdxeditor h3,
+.mdx-editor-dark .mdxeditor p,
+.mdx-editor-dark .mdxeditor li {
+    color: white;
+}
+
+.mdx-editor-dark .mdxeditor [contenteditable="true"] {
+    color: white;
+    caret-color: white;
+}
+
+.mdx-editor-dark .mdxeditor img {
+    max-width: 100%;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+}
+
+/* Toolbar buttons and icons */
+.mdx-editor-dark .mdxeditor button,
+.mdx-editor-dark .mdxeditor [role="toolbar"] button {
+    color: white;
+}
+
+.mdx-editor-dark .mdxeditor button svg {
+    color: white;
+    stroke: currentColor;
+}
+
+.mdx-editor-dark .mdxeditor button:hover {
+    background: theme('colors.zinc.700');
+}
+
+.mdx-editor-dark .mdxeditor [data-state="on"] {
+    background: theme('colors.zinc.600');
+}
+
+/* Dropdowns and selects */
+.mdx-editor-dark .mdxeditor select,
+.mdx-editor-dark .mdxeditor [role="combobox"] {
+    background: theme('colors.zinc.800');
+    color: white;
+    border-color: theme('colors.zinc.600');
+}
+
+/* Popup dialogs */
+.mdx-editor-dark [data-radix-popper-content-wrapper] {
+    --tw-bg-opacity: 1;
+}
+
+.mdx-editor-dark [data-radix-popper-content-wrapper] > div,
+.mdx-editor-dark .mdxeditor-popup-container > div,
+.mdx-editor-dark [role="dialog"],
+.mdx-editor-dark [class*="_dialogContent_"],
+.mdx-editor-dark [class*="_dialogForm_"],
+.mdx-editor-dark [class*="_formField_"],
+.mdx-editor-dark form {
+    background: theme('colors.zinc.800') !important;
+    color: white !important;
+    border-color: theme('colors.zinc.600') !important;
+}
+
+.mdx-editor-dark [data-radix-popper-content-wrapper] input,
+.mdx-editor-dark [role="dialog"] input,
+.mdx-editor-dark [class*="_dialogContent_"] input,
+.mdx-editor-dark [class*="_textInput_"] {
+    background: theme('colors.zinc.900') !important;
+    color: white !important;
+    border-color: theme('colors.zinc.600') !important;
+}
+
+.mdx-editor-dark [data-radix-popper-content-wrapper] label,
+.mdx-editor-dark [role="dialog"] label,
+.mdx-editor-dark [class*="_dialogContent_"] label {
+    color: theme('colors.zinc.300') !important;
+}
+
+.mdx-editor-dark [data-radix-popper-content-wrapper] button,
+.mdx-editor-dark [role="dialog"] button,
+.mdx-editor-dark [class*="_dialogContent_"] button {
+    color: white;
+}
+
+/* Image dialog specific */
+.mdx-editor-dark [class*="_imageDialog_"],
+.mdx-editor-dark [class*="_linkDialog_"],
+.mdx-editor-dark [class*="_tableDialog_"] {
+    background: theme('colors.zinc.800') !important;
+}
+
+/* Dialog overlay */
+.mdx-editor-dark [class*="_dialogOverlay_"] {
+    background: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Dialog action buttons */
+.mdx-editor-dark [class*="_primaryButton_"] {
+    background: theme('colors.blue.600') !important;
+    color: white !important;
+}
+
+.mdx-editor-dark [class*="_secondaryButton_"] {
+    background: theme('colors.zinc.600') !important;
+    color: white !important;
+}
+
+/* Global MDXEditor dialog styling (portals render outside component tree) */
+[class*="_dialogContent_"],
+[class*="_multiFieldForm_"],
+[class*="_formField_"] {
+    background: #18181b !important;
+    color: white !important;
+}
+
+[class*="_dialogContent_"] input,
+[class*="_dialogContent_"] [class*="_textInput_"] {
+    background: #09090b !important;
+    color: white !important;
+    border-color: #52525b !important;
+}
+
+[class*="_dialogContent_"] label,
+[class*="_dialogContent_"] span {
+    color: #d4d4d8 !important;
+}
+
+[class*="_dialogContent_"] [class*="_actionButton_"],
+[class*="_primaryButton_"] {
+    background: #2563eb !important;
+    color: white !important;
+}
+
+[class*="_secondaryButton_"],
+[class*="_dialogContent_"] button:not([class*="_primaryButton_"]):not([class*="_actionButton_"]) {
+    background: #52525b !important;
+    color: white !important;
+}
+
+/* Upload image button */
+[class*="_uploadButton_"] {
+    background: #3f3f46 !important;
+    color: white !important;
+    border-color: #52525b !important;
+}
+
+/* Select dropdown menu */
+.mdx-editor-dark [role="listbox"],
+.mdx-editor-dark [role="menu"] {
+    background: theme('colors.zinc.800') !important;
+    border-color: theme('colors.zinc.600') !important;
+}
+
+.mdx-editor-dark [role="option"],
+.mdx-editor-dark [role="menuitem"] {
+    color: white !important;
+}
+
+.mdx-editor-dark [role="option"]:hover,
+.mdx-editor-dark [role="menuitem"]:hover {
+    background: theme('colors.zinc.700') !important;
+}
+
+/* Separator styling */
+.mdx-editor-dark .mdxeditor [class*="_toolbarGroupOfGroups_"] > [class*="_separator_"] {
+    background: theme('colors.zinc.600');
+}
+
+/* Source editor (CodeMirror) */
+.mdx-editor-dark .mdxeditor-source-editor,
+.mdx-editor-dark .mdxeditor-diff-editor,
+.mdx-editor-dark [class*="_sourceEditor_"],
+.mdx-editor-dark [class*="_diffEditor_"] {
+    background: theme('colors.zinc.950') !important;
+}
+
+/* CodeMirror editor styling */
+.mdx-editor-dark .cm-editor {
+    background: theme('colors.zinc.950') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-scroller {
+    background: theme('colors.zinc.950') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-gutters {
+    background: theme('colors.zinc.900') !important;
+    color: theme('colors.zinc.500') !important;
+    border-color: theme('colors.zinc.700') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-content {
+    color: theme('colors.zinc.100') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-line {
+    color: theme('colors.zinc.100') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-activeLine {
+    background: theme('colors.zinc.800') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-activeLineGutter {
+    background: theme('colors.zinc.800') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-selectionBackground {
+    background: theme('colors.blue.900') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-cursor {
+    border-color: white !important;
+}
+
+/* Markdown syntax highlighting in source mode */
+.mdx-editor-dark .cm-editor .cm-header {
+    color: theme('colors.blue.400') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-link,
+.mdx-editor-dark .cm-editor .cm-url {
+    color: theme('colors.cyan.400') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-string {
+    color: theme('colors.green.400') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-comment {
+    color: theme('colors.zinc.500') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-meta {
+    color: theme('colors.purple.400') !important;
+}
+
+.mdx-editor-dark .cm-editor .cm-keyword {
+    color: theme('colors.pink.400') !important;
+}
+
+/* Image paths in source mode */
+.mdx-editor-dark .cm-editor .cm-image,
+.mdx-editor-dark .cm-editor .cm-image-marker {
+    color: theme('colors.orange.400') !important;
+}
+
+/* View mode switcher (rich/diff/source toggle) */
+.mdx-editor-dark [class*="_viewMode_"],
+.mdx-editor-dark [class*="_diffSourceToggle_"] {
+    background: theme('colors.zinc.800') !important;
+    border-color: theme('colors.zinc.600') !important;
+}
+
+.mdx-editor-dark [class*="_viewMode_"] button,
+.mdx-editor-dark [class*="_diffSourceToggle_"] button {
+    background: transparent !important;
+    color: theme('colors.zinc.400') !important;
+}
+
+.mdx-editor-dark [class*="_viewMode_"] button[data-state="on"],
+.mdx-editor-dark [class*="_diffSourceToggle_"] button[data-state="on"],
+.mdx-editor-dark [class*="_viewMode_"] button[aria-pressed="true"],
+.mdx-editor-dark [class*="_diffSourceToggle_"] button[aria-pressed="true"] {
+    background: theme('colors.zinc.600') !important;
+    color: white !important;
+}
+
+/* Image editor controls (delete/edit buttons) */
+.mdx-editor-dark [class*="_imageWrapper_"] [class*="_editImageButton_"],
+.mdx-editor-dark [class*="_imageWrapper_"] button,
+.mdx-editor-dark [class*="_imageResizer_"],
+.mdx-editor-dark [class*="_imageControlWrapperResizing_"],
+.mdx-editor-dark [class*="_imageControls_"] {
+    background: theme('colors.zinc.800') !important;
+    color: white !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.mdx-editor-dark [class*="_imageWrapper_"] [class*="_iconButton_"],
+.mdx-editor-dark [class*="_imageWrapper_"] svg {
+    color: white !important;
+}
+
+/* Remove any white borders on image control containers */
+.mdx-editor-dark [class*="_imageWrapper_"] > div,
+.mdx-editor-dark [class*="_imageWrapper_"] [class*="_button_"] {
+    border: none !important;
+    outline: none !important;
+}
+
+/* Force style image editing UI container and buttons */
+.mdx-editor-dark .mdxeditor [class*="_iconButton_"] {
+    background: theme('colors.zinc.700') !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.mdx-editor-dark .mdxeditor [class*="_editImageToolbar_"],
+.mdx-editor-dark .mdxeditor [class*="_imageToolbar_"] {
+    background: theme('colors.zinc.800') !important;
+    border: none !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+    padding: 4px !important;
+    border-radius: 6px !important;
+    gap: 4px !important;
+}
+
+/* Any remaining white backgrounds in toolbar area */
+.mdx-editor-dark [class*="_toggleGroup_"],
+.mdx-editor-dark [class*="_selectTrigger_"],
+.mdx-editor-dark [class*="_toolbarToggleItem_"] {
+    background: transparent !important;
+}
+
+.mdx-editor-dark [class*="_selectTrigger_"] {
+    background: theme('colors.zinc.800') !important;
+    color: white !important;
+    border-color: theme('colors.zinc.600') !important;
+}

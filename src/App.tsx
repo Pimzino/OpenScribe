@@ -97,7 +97,10 @@ function App() {
     return (
       <NewRecording
         onBack={() => setView("dashboard")}
-        onGenerate={() => setView("editor")}
+        onGenerateWithSave={(id) => {
+          setSelectedRecordingId(id);
+          setView("editor");
+        }}
         onSettings={() => setView("settings")}
         onSaved={(id) => {
           setSelectedRecordingId(id);

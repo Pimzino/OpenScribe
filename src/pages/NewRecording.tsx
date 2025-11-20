@@ -8,17 +8,18 @@ import RecorderOverlay from "../features/recorder/RecorderOverlay";
 
 interface NewRecordingProps {
     onBack: () => void;
-    onGenerate: () => void;
+    onGenerateWithSave: (recordingId: string) => void;
     onSettings: () => void;
     onSaved: (recordingId: string) => void;
 }
 
-export default function NewRecording({ onBack, onGenerate, onSettings, onSaved }: NewRecordingProps) {
+export default function NewRecording({ onBack, onGenerateWithSave, onSettings, onSaved }: NewRecordingProps) {
     const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps } = useRecorderStore();
     const { createRecording, saveSteps } = useRecordingsStore();
     const [recordingName, setRecordingName] = useState("");
     const [showNameDialog, setShowNameDialog] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [generateAfterSave, setGenerateAfterSave] = useState(false);
 
     const deleteStep = async (index: number) => {
         const step = steps[index];
@@ -64,6 +65,13 @@ export default function NewRecording({ onBack, onGenerate, onSettings, onSaved }
 
     const handleSave = () => {
         if (steps.length === 0) return;
+        setGenerateAfterSave(false);
+        setShowNameDialog(true);
+    };
+
+    const handleGenerateDocs = () => {
+        if (steps.length === 0) return;
+        setGenerateAfterSave(true);
         setShowNameDialog(true);
     };
 
@@ -91,11 +99,17 @@ export default function NewRecording({ onBack, onGenerate, onSettings, onSaved }
             clearSteps();
             setShowNameDialog(false);
             setRecordingName("");
-            onSaved(recordingId);
+
+            if (generateAfterSave) {
+                onGenerateWithSave(recordingId);
+            } else {
+                onSaved(recordingId);
+            }
         } catch (error) {
             console.error("Failed to save recording:", error);
         } finally {
             setSaving(false);
+            setGenerateAfterSave(false);
         }
     };
 
@@ -213,7 +227,7 @@ export default function NewRecording({ onBack, onGenerate, onSettings, onSaved }
                                     Save
                                 </button>
                                 <button
-                                    onClick={onGenerate}
+                                    onClick={handleGenerateDocs}
                                     className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium transition-colors"
                                 >
                                     <Wand2 size={16} />

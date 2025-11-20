@@ -280,8 +280,9 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
         markdown += `${description}\n\n`;
 
         if (step.screenshot) {
-            // Use file path for local display
-            markdown += `![Step ${i + 1} Screenshot](${step.screenshot})\n\n`;
+            // Use file path for local display - normalize path for markdown compatibility
+            const normalizedPath = step.screenshot.replace(/\\/g, '/');
+            markdown += `![Step ${i + 1} Screenshot](${normalizedPath})\n\n`;
         }
     }
 

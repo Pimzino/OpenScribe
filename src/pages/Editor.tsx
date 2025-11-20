@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useRecorderStore } from "../store/recorderStore";
 import { useRecordingsStore } from "../store/recordingsStore";
 import { useSettingsStore } from "../store/settingsStore";
@@ -248,6 +249,7 @@ ${markdown}
                     <div className="max-w-3xl mx-auto bg-zinc-900 p-8 rounded-lg border border-zinc-800 shadow-lg">
                         <div className="markdown-content">
                             <ReactMarkdown
+                                urlTransform={(url) => url}
                                 components={{
                                     h1: ({children}) => <h1 className="text-2xl font-bold mb-4 mt-6">{children}</h1>,
                                     h2: ({children}) => <h2 className="text-xl font-semibold mb-3 mt-5">{children}</h2>,
@@ -258,7 +260,7 @@ ${markdown}
                                     li: ({children}) => <li className="mb-1">{children}</li>,
                                     code: ({children}) => <code className="bg-zinc-800 px-1 py-0.5 rounded text-sm">{children}</code>,
                                     pre: ({children}) => <pre className="bg-zinc-800 p-4 rounded mb-4 overflow-x-auto">{children}</pre>,
-                                    img: ({src, alt}) => <img src={src} alt={alt} className="max-w-full rounded my-4" />,
+                                    img: ({src, alt}) => <img src={src ? convertFileSrc(src) : ''} alt={alt} className="max-w-full rounded my-4" />,
                                 }}
                             >
                                 {markdown}

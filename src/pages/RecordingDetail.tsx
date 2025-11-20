@@ -3,8 +3,36 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useRecordingsStore } from "../store/recordingsStore";
 import { generateDocumentation } from "../lib/aiService";
 import { useSettingsStore } from "../store/settingsStore";
-import { FileText, ArrowLeft, Settings, Download, RefreshCw, List, TrendingUp, Copy, Check } from "lucide-react";
+import { FileText, ArrowLeft, Settings, Download, RefreshCw, List, TrendingUp, Copy, Check, Pencil, Eye } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import {
+    MDXEditor,
+    headingsPlugin,
+    listsPlugin,
+    quotePlugin,
+    thematicBreakPlugin,
+    markdownShortcutPlugin,
+    toolbarPlugin,
+    imagePlugin,
+    linkPlugin,
+    linkDialogPlugin,
+    tablePlugin,
+    codeBlockPlugin,
+    diffSourcePlugin,
+    BoldItalicUnderlineToggles,
+    BlockTypeSelect,
+    ListsToggle,
+    UndoRedo,
+    InsertImage,
+    CreateLink,
+    InsertTable,
+    InsertThematicBreak,
+    InsertCodeBlock,
+    CodeToggle,
+    Separator,
+    DiffSourceToggleWrapper
+} from '@mdxeditor/editor';
+import '@mdxeditor/editor/style.css';
 
 interface RecordingDetailProps {
     recordingId: string;
@@ -19,6 +47,8 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
     const [activeTab, setActiveTab] = useState<"steps" | "docs">("docs");
     const [regenerating, setRegenerating] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedContent, setEditedContent] = useState("");
 
     useEffect(() => {
         getRecording(recordingId);
@@ -63,6 +93,26 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
+    };
+
+    const handleStartEdit = () => {
+        setEditedContent(currentRecording?.recording.documentation || "");
+        setIsEditing(true);
+    };
+
+    const handleSaveEdit = async () => {
+        try {
+            await saveDocumentation(recordingId, editedContent);
+            await getRecording(recordingId);
+            setIsEditing(false);
+        } catch (error) {
+            console.error("Failed to save documentation:", error);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setIsEditing(false);
+        setEditedContent("");
     };
 
     const handleExportMarkdown = () => {
@@ -180,39 +230,68 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                     <div className="flex items-center gap-2">
                         {activeTab === "docs" && currentRecording.recording.documentation && (
                             <>
-                                <button
-                                    onClick={handleCopy}
-                                    className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md transition-colors"
-                                    title="Copy markdown"
-                                >
-                                    {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
-                                </button>
-                                <button
-                                    onClick={handleExportMarkdown}
-                                    className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md transition-colors"
-                                    title="Export as Markdown"
-                                >
-                                    <Download size={16} />
-                                    MD
-                                </button>
-                                <button
-                                    onClick={handleExportHtml}
-                                    className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md transition-colors"
-                                    title="Export as HTML"
-                                >
-                                    <Download size={16} />
-                                    HTML
-                                </button>
+                                {isEditing ? (
+                                    <>
+                                        <button
+                                            onClick={handleCancelEdit}
+                                            className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleSaveEdit}
+                                            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md font-medium transition-colors"
+                                        >
+                                            <Check size={16} />
+                                            Save
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={handleStartEdit}
+                                            className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                            title="Edit documentation"
+                                        >
+                                            <Pencil size={16} />
+                                        </button>
+                                        <button
+                                            onClick={handleCopy}
+                                            className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                            title="Copy markdown"
+                                        >
+                                            {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+                                        </button>
+                                        <button
+                                            onClick={handleExportMarkdown}
+                                            className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                            title="Export as Markdown"
+                                        >
+                                            <Download size={16} />
+                                            MD
+                                        </button>
+                                        <button
+                                            onClick={handleExportHtml}
+                                            className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                            title="Export as HTML"
+                                        >
+                                            <Download size={16} />
+                                            HTML
+                                        </button>
+                                    </>
+                                )}
                             </>
                         )}
-                        <button
-                            onClick={handleRegenerate}
-                            disabled={regenerating || !openaiApiKey}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium transition-colors disabled:opacity-50"
-                        >
-                            <RefreshCw size={16} className={regenerating ? "animate-spin" : ""} />
-                            {regenerating ? "Generating..." : "Regenerate"}
-                        </button>
+                        {!isEditing && (
+                            <button
+                                onClick={handleRegenerate}
+                                disabled={regenerating || !openaiApiKey}
+                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium transition-colors disabled:opacity-50"
+                            >
+                                <RefreshCw size={16} className={regenerating ? "animate-spin" : ""} />
+                                {regenerating ? "Generating..." : "Regenerate"}
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -239,24 +318,78 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                 {activeTab === "docs" ? (
                     <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
                         {currentRecording.recording.documentation ? (
-                            <div className="markdown-content">
-                                <ReactMarkdown
-                                    components={{
-                                        h1: ({children}) => <h1 className="text-2xl font-bold mb-4 mt-6">{children}</h1>,
-                                        h2: ({children}) => <h2 className="text-xl font-semibold mb-3 mt-5">{children}</h2>,
-                                        h3: ({children}) => <h3 className="text-lg font-medium mb-2 mt-4">{children}</h3>,
-                                        p: ({children}) => <p className="mb-4 text-zinc-300">{children}</p>,
-                                        ul: ({children}) => <ul className="list-disc pl-6 mb-4">{children}</ul>,
-                                        ol: ({children}) => <ol className="list-decimal pl-6 mb-4">{children}</ol>,
-                                        li: ({children}) => <li className="mb-1">{children}</li>,
-                                        code: ({children}) => <code className="bg-zinc-800 px-1 py-0.5 rounded text-sm">{children}</code>,
-                                        pre: ({children}) => <pre className="bg-zinc-800 p-4 rounded mb-4 overflow-x-auto">{children}</pre>,
-                                        img: ({src, alt}) => <img src={src} alt={alt} className="max-w-full rounded my-4" />,
-                                    }}
-                                >
-                                    {currentRecording.recording.documentation}
-                                </ReactMarkdown>
-                            </div>
+                            isEditing ? (
+                                <div className="mdx-editor-dark">
+                                    <MDXEditor
+                                        markdown={editedContent}
+                                        onChange={(value) => setEditedContent(value)}
+                                        plugins={[
+                                            headingsPlugin(),
+                                            listsPlugin(),
+                                            quotePlugin(),
+                                            thematicBreakPlugin(),
+                                            markdownShortcutPlugin(),
+                                            linkPlugin(),
+                                            linkDialogPlugin(),
+                                            tablePlugin(),
+                                            codeBlockPlugin({ defaultCodeBlockLanguage: 'js' }),
+                                            imagePlugin({
+                                                imagePreviewHandler: async (imageSource) => {
+                                                    // Convert local file paths to Tauri asset URLs
+                                                    if (imageSource.startsWith('C:') || imageSource.startsWith('/')) {
+                                                        return Promise.resolve(convertFileSrc(imageSource));
+                                                    }
+                                                    return Promise.resolve(imageSource);
+                                                }
+                                            }),
+                                            diffSourcePlugin({ viewMode: 'rich-text' }),
+                                            toolbarPlugin({
+                                                toolbarContents: () => (
+                                                    <DiffSourceToggleWrapper>
+                                                        <UndoRedo />
+                                                        <Separator />
+                                                        <BlockTypeSelect />
+                                                        <Separator />
+                                                        <BoldItalicUnderlineToggles />
+                                                        <Separator />
+                                                        <ListsToggle />
+                                                        <Separator />
+                                                        <CreateLink />
+                                                        <InsertImage />
+                                                        <Separator />
+                                                        <InsertTable />
+                                                        <InsertThematicBreak />
+                                                        <Separator />
+                                                        <InsertCodeBlock />
+                                                        <CodeToggle />
+                                                    </DiffSourceToggleWrapper>
+                                                )
+                                            })
+                                        ]}
+                                        contentEditableClassName="prose prose-invert max-w-none min-h-[500px] p-4"
+                                    />
+                                </div>
+                            ) : (
+                                <div className="markdown-content">
+                                    <ReactMarkdown
+                                        urlTransform={(url) => url}
+                                        components={{
+                                            h1: ({children}) => <h1 className="text-2xl font-bold mb-4 mt-6">{children}</h1>,
+                                            h2: ({children}) => <h2 className="text-xl font-semibold mb-3 mt-5">{children}</h2>,
+                                            h3: ({children}) => <h3 className="text-lg font-medium mb-2 mt-4">{children}</h3>,
+                                            p: ({children}) => <p className="mb-4 text-zinc-300">{children}</p>,
+                                            ul: ({children}) => <ul className="list-disc pl-6 mb-4">{children}</ul>,
+                                            ol: ({children}) => <ol className="list-decimal pl-6 mb-4">{children}</ol>,
+                                            li: ({children}) => <li className="mb-1">{children}</li>,
+                                            code: ({children}) => <code className="bg-zinc-800 px-1 py-0.5 rounded text-sm">{children}</code>,
+                                            pre: ({children}) => <pre className="bg-zinc-800 p-4 rounded mb-4 overflow-x-auto">{children}</pre>,
+                                            img: ({src, alt}) => <img src={src ? convertFileSrc(src) : ''} alt={alt || ''} className="max-w-full rounded my-4" />,
+                                        }}
+                                    >
+                                        {currentRecording.recording.documentation}
+                                    </ReactMarkdown>
+                                </div>
+                            )
                         ) : (
                             <div className="text-center py-12 text-zinc-500">
                                 <p>No documentation generated yet</p>
