@@ -2,14 +2,15 @@ import { useEffect } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useRecorderStore, Step } from "../store/recorderStore";
-import { Play, Square, FileText, Wand2 } from "lucide-react";
+import { Play, Square, FileText, Wand2, Settings } from "lucide-react";
 import RecorderOverlay from "../features/recorder/RecorderOverlay";
 
 interface DashboardProps {
     onGenerate: () => void;
+    onSettings: () => void;
 }
 
-export default function Dashboard({ onGenerate }: DashboardProps) {
+export default function Dashboard({ onGenerate, onSettings }: DashboardProps) {
     const { isRecording, setIsRecording, steps, addStep, clearSteps } = useRecorderStore();
 
     useEffect(() => {
@@ -59,6 +60,13 @@ export default function Dashboard({ onGenerate }: DashboardProps) {
                     <button className="w-full flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors">
                         <FileText size={16} />
                         My Recordings
+                    </button>
+                    <button
+                        onClick={onSettings}
+                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
+                    >
+                        <Settings size={16} />
+                        Settings
                     </button>
                 </nav>
             </aside>
