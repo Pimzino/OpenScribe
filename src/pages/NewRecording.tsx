@@ -5,6 +5,7 @@ import { useRecorderStore, Step } from "../store/recorderStore";
 import { useRecordingsStore, StepInput } from "../store/recordingsStore";
 import { Play, Square, FileText, Wand2, Settings, X, Save, ArrowLeft, TrendingUp, List } from "lucide-react";
 import RecorderOverlay from "../features/recorder/RecorderOverlay";
+import Tooltip from "../components/Tooltip";
 
 interface NewRecordingProps {
     onBack: () => void;
@@ -189,50 +190,56 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
             <main className="flex-1 p-8 overflow-auto">
                 <div className="flex justify-between items-center mb-8">
                     <div className="flex items-center gap-4">
-                        <button
-                            onClick={onBack}
-                            className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
-                        >
-                            <ArrowLeft size={20} />
-                        </button>
+                        <Tooltip content="Go back">
+                            <button
+                                onClick={onBack}
+                                className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
+                            >
+                                <ArrowLeft size={18} />
+                            </button>
+                        </Tooltip>
                         <h2 className="text-2xl font-bold">New Recording</h2>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
                         {!isRecording ? (
-                            <button
-                                onClick={startRecording}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
-                            >
-                                <Play size={16} />
-                                Start Recording
-                            </button>
+                            <Tooltip content="Start recording">
+                                <button
+                                    onClick={startRecording}
+                                    className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                >
+                                    <Play size={18} />
+                                </button>
+                            </Tooltip>
                         ) : (
-                            <button
-                                onClick={stopRecording}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md font-medium transition-colors animate-pulse"
-                            >
-                                <Square size={16} />
-                                Stop Recording
-                            </button>
+                            <Tooltip content="Stop recording">
+                                <button
+                                    onClick={stopRecording}
+                                    className="p-2 bg-red-600 hover:bg-red-700 rounded-md transition-colors animate-pulse"
+                                >
+                                    <Square size={18} />
+                                </button>
+                            </Tooltip>
                         )}
 
                         {steps.length > 0 && !isRecording && (
                             <>
-                                <button
-                                    onClick={handleSave}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md font-medium transition-colors"
-                                >
-                                    <Save size={16} />
-                                    Save
-                                </button>
-                                <button
-                                    onClick={handleGenerateDocs}
-                                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium transition-colors"
-                                >
-                                    <Wand2 size={16} />
-                                    Generate Docs
-                                </button>
+                                <Tooltip content="Save recording">
+                                    <button
+                                        onClick={handleSave}
+                                        className="p-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                                    >
+                                        <Save size={18} />
+                                    </button>
+                                </Tooltip>
+                                <Tooltip content="Generate documentation">
+                                    <button
+                                        onClick={handleGenerateDocs}
+                                        className="p-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
+                                    >
+                                        <Wand2 size={18} />
+                                    </button>
+                                </Tooltip>
                             </>
                         )}
                     </div>
@@ -242,13 +249,14 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {steps.map((step, index) => (
                         <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
-                            <button
-                                onClick={() => deleteStep(index)}
-                                className="absolute top-2 right-2 z-10 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
-                                title="Delete step"
-                            >
-                                <X size={14} />
-                            </button>
+                            <Tooltip content="Delete step">
+                                <button
+                                    onClick={() => deleteStep(index)}
+                                    className="absolute top-2 right-2 z-10 p-1 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </Tooltip>
                             {step.type_ === "click" && step.screenshot ? (
                                 <>
                                     <div className="aspect-video bg-zinc-950 relative">

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useRecordingsStore, Recording } from "../store/recordingsStore";
 import { FileText, Plus, List, Settings, Clock, TrendingUp, Layers } from "lucide-react";
+import Tooltip from "../components/Tooltip";
 
 interface DashboardProps {
     onNewRecording: () => void;
@@ -62,13 +63,14 @@ export default function Dashboard({ onNewRecording, onViewRecordings, onSelectRe
             <main className="flex-1 p-8 overflow-auto">
                 <div className="flex justify-between items-center mb-8">
                     <h2 className="text-2xl font-bold">Dashboard</h2>
-                    <button
-                        onClick={onNewRecording}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
-                    >
-                        <Plus size={16} />
-                        New Recording
-                    </button>
+                    <Tooltip content="New recording">
+                        <button
+                            onClick={onNewRecording}
+                            className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    </Tooltip>
                 </div>
 
                 {loading && !statistics ? (

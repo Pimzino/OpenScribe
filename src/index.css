@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* MDXEditor Dark Theme */
 .mdx-editor-dark {
@@ -98,8 +99,8 @@
     --tw-bg-opacity: 1;
 }
 
-.mdx-editor-dark [data-radix-popper-content-wrapper] > div,
-.mdx-editor-dark .mdxeditor-popup-container > div,
+.mdx-editor-dark [data-radix-popper-content-wrapper]>div,
+.mdx-editor-dark .mdxeditor-popup-container>div,
 .mdx-editor-dark [role="dialog"],
 .mdx-editor-dark [class*="_dialogContent_"],
 .mdx-editor-dark [class*="_dialogForm_"],
@@ -211,7 +212,7 @@
 }
 
 /* Separator styling */
-.mdx-editor-dark .mdxeditor [class*="_toolbarGroupOfGroups_"] > [class*="_separator_"] {
+.mdx-editor-dark .mdxeditor [class*="_toolbarGroupOfGroups_"]>[class*="_separator_"] {
     background: theme('colors.zinc.600');
 }
 
@@ -333,7 +334,7 @@
 }
 
 /* Remove any white borders on image control containers */
-.mdx-editor-dark [class*="_imageWrapper_"] > div,
+.mdx-editor-dark [class*="_imageWrapper_"]>div,
 .mdx-editor-dark [class*="_imageWrapper_"] [class*="_button_"] {
     border: none !important;
     outline: none !important;
@@ -367,4 +368,45 @@
     background: theme('colors.zinc.800') !important;
     color: white !important;
     border-color: theme('colors.zinc.600') !important;
+}
+
+/* Print Styles */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .print-content,
+    .print-content * {
+        visibility: visible;
+    }
+
+    .print-content {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white;
+        color: black;
+        padding: 2rem;
+    }
+
+    /* Reset text colors for print */
+    .print-content h1,
+    .print-content h2,
+    .print-content h3,
+    .print-content p,
+    .print-content li,
+    .print-content code {
+        color: black !important;
+    }
+
+    .print-content code {
+        border: 1px solid #ddd;
+    }
+
+    /* Hide scrollbars and other UI elements */
+    ::-webkit-scrollbar {
+        display: none;
+    }
 }

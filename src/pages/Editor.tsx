@@ -4,7 +4,9 @@ import { useRecorderStore } from "../store/recorderStore";
 import { useRecordingsStore } from "../store/recordingsStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { generateDocumentation } from "../lib/aiService";
-import { ArrowLeft, Copy, Check, Download, Save, Edit3 } from "lucide-react";
+import { ArrowLeft, Save, Edit3, X } from "lucide-react";
+import ExportDropdown from "../components/ExportDropdown";
+import Tooltip from "../components/Tooltip";
 import ReactMarkdown from "react-markdown";
 
 interface EditorProps {
@@ -20,7 +22,6 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editedMarkdown, setEditedMarkdown] = useState("");
 
@@ -74,12 +75,6 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
         generate();
     }, [recordingId, steps, getRecording, saveDocumentation, openaiApiKey, openaiBaseUrl, openaiModel]);
 
-    const copyToClipboard = async () => {
-        await navigator.clipboard.writeText(markdown);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
-
     const handleEdit = () => {
         setEditedMarkdown(markdown);
         setIsEditing(true);
@@ -105,116 +100,66 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
         setEditedMarkdown("");
     };
 
-    const handleExportMarkdown = () => {
-        const blob = new Blob([markdown], { type: 'text/markdown' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `documentation.md`;
-        a.click();
-        URL.revokeObjectURL(url);
-    };
 
-    const handleExportHtml = () => {
-        const html = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Documentation</title>
-    <style>
-        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
-        img { max-width: 100%; height: auto; }
-        pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; border-radius: 4px; }
-        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 2px; }
-        h1, h2, h3 { margin-top: 1.5em; }
-    </style>
-</head>
-<body>
-${markdown}
-</body>
-</html>`;
-
-        const blob = new Blob([html], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `documentation.html`;
-        a.click();
-        URL.revokeObjectURL(url);
-    };
 
     return (
-        <div className="flex h-screen bg-zinc-950 text-white flex-col">
-            <header className="border-b border-zinc-800 p-4 flex items-center justify-between bg-zinc-900">
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={onBack}
-                        className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
-                    >
-                        <ArrowLeft size={20} />
-                    </button>
-                    <h1 className="text-lg font-bold">
-                        {isEditing ? "Edit Documentation" : "Generated Documentation"}
-                    </h1>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    {!loading && !error && !isEditing && (
-                        <>
-                            <button
-                                onClick={handleEdit}
-                                className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md text-sm transition-colors"
-                                title="Edit"
-                            >
-                                <Edit3 size={16} />
-                            </button>
-                            <button
-                                onClick={copyToClipboard}
-                                className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md text-sm transition-colors"
-                                title="Copy"
-                            >
-                                {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
-                            </button>
-                            <button
-                                onClick={handleExportMarkdown}
-                                className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md text-sm transition-colors"
-                                title="Export Markdown"
-                            >
-                                <Download size={16} />
-                                MD
-                            </button>
-                            <button
-                                onClick={handleExportHtml}
-                                className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 rounded-md text-sm transition-colors"
-                                title="Export HTML"
-                            >
-                                <Download size={16} />
-                                HTML
-                            </button>
-                        </>
-                    )}
-                    {isEditing && (
-                        <>
-                            <button
-                                onClick={handleCancelEdit}
-                                className="px-4 py-2 hover:bg-zinc-800 rounded-md text-sm transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={saving}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
-                            >
-                                <Save size={16} />
-                                {saving ? "Saving..." : "Save"}
-                            </button>
-                        </>
-                    )}
-                </div>
-            </header>
-
+        <div className="flex h-screen bg-zinc-950 text-white">
             <main className="flex-1 p-8 overflow-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-4">
+                        <Tooltip content="Go back">
+                            <button
+                                onClick={onBack}
+                                className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
+                            >
+                                <ArrowLeft size={18} />
+                            </button>
+                        </Tooltip>
+                        <h2 className="text-2xl font-bold">
+                            {isEditing ? "Edit Documentation" : "Generated Documentation"}
+                        </h2>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {!loading && !error && !isEditing && (
+                            <>
+                                <Tooltip content="Edit">
+                                    <button
+                                        onClick={handleEdit}
+                                        className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-md transition-colors"
+                                    >
+                                        <Edit3 size={18} />
+                                    </button>
+                                </Tooltip>
+                                <ExportDropdown
+                                    markdown={markdown}
+                                    fileName="documentation"
+                                />
+                            </>
+                        )}
+                        {isEditing && (
+                            <>
+                                <Tooltip content="Cancel">
+                                    <button
+                                        onClick={handleCancelEdit}
+                                        className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </Tooltip>
+                                <Tooltip content="Save changes">
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={saving}
+                                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-50"
+                                    >
+                                        <Save size={18} />
+                                    </button>
+                                </Tooltip>
+                            </>
+                        )}
+                    </div>
+                </div>
                 {loading ? (
                     <div className="flex flex-col items-center justify-center h-full text-zinc-500 gap-4">
                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -246,21 +191,21 @@ ${markdown}
                         />
                     </div>
                 ) : (
-                    <div className="max-w-3xl mx-auto bg-zinc-900 p-8 rounded-lg border border-zinc-800 shadow-lg">
+                    <div className="max-w-3xl mx-auto bg-zinc-900 p-8 rounded-lg border border-zinc-800 shadow-lg print-content">
                         <div className="markdown-content">
                             <ReactMarkdown
                                 urlTransform={(url) => url}
                                 components={{
-                                    h1: ({children}) => <h1 className="text-2xl font-bold mb-4 mt-6">{children}</h1>,
-                                    h2: ({children}) => <h2 className="text-xl font-semibold mb-3 mt-5">{children}</h2>,
-                                    h3: ({children}) => <h3 className="text-lg font-medium mb-2 mt-4">{children}</h3>,
-                                    p: ({children}) => <p className="mb-4 text-zinc-300">{children}</p>,
-                                    ul: ({children}) => <ul className="list-disc pl-6 mb-4">{children}</ul>,
-                                    ol: ({children}) => <ol className="list-decimal pl-6 mb-4">{children}</ol>,
-                                    li: ({children}) => <li className="mb-1">{children}</li>,
-                                    code: ({children}) => <code className="bg-zinc-800 px-1 py-0.5 rounded text-sm">{children}</code>,
-                                    pre: ({children}) => <pre className="bg-zinc-800 p-4 rounded mb-4 overflow-x-auto">{children}</pre>,
-                                    img: ({src, alt}) => <img src={src ? convertFileSrc(src) : ''} alt={alt} className="max-w-full rounded my-4" />,
+                                    h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6">{children}</h1>,
+                                    h2: ({ children }) => <h2 className="text-xl font-semibold mb-3 mt-5">{children}</h2>,
+                                    h3: ({ children }) => <h3 className="text-lg font-medium mb-2 mt-4">{children}</h3>,
+                                    p: ({ children }) => <p className="mb-4 text-zinc-300">{children}</p>,
+                                    ul: ({ children }) => <ul className="list-disc pl-6 mb-4">{children}</ul>,
+                                    ol: ({ children }) => <ol className="list-decimal pl-6 mb-4">{children}</ol>,
+                                    li: ({ children }) => <li className="mb-1">{children}</li>,
+                                    code: ({ children }) => <code className="bg-zinc-800 px-1 py-0.5 rounded text-sm">{children}</code>,
+                                    pre: ({ children }) => <pre className="bg-zinc-800 p-4 rounded mb-4 overflow-x-auto">{children}</pre>,
+                                    img: ({ src, alt }) => <img src={src ? convertFileSrc(src) : ''} alt={alt} className="max-w-full rounded my-4" />,
                                 }}
                             >
                                 {markdown}

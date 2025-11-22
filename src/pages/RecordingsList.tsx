@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRecordingsStore, Recording } from "../store/recordingsStore";
 import { FileText, Plus, List, Settings, Trash2, Search, TrendingUp } from "lucide-react";
+import Tooltip from "../components/Tooltip";
 
 interface RecordingsListProps {
     onBack: () => void;
@@ -100,13 +101,14 @@ export default function RecordingsList({ onBack, onSelectRecording, onSettings, 
             <main className="flex-1 p-8 overflow-auto">
                 <div className="flex justify-between items-center mb-8">
                     <h2 className="text-2xl font-bold">My Recordings</h2>
-                    <button
-                        onClick={onNewRecording}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
-                    >
-                        <Plus size={16} />
-                        New Recording
-                    </button>
+                    <Tooltip content="New recording">
+                        <button
+                            onClick={onNewRecording}
+                            className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                        >
+                            <Plus size={18} />
+                        </button>
+                    </Tooltip>
                 </div>
 
                 {/* Search */}
@@ -154,15 +156,17 @@ export default function RecordingsList({ onBack, onSelectRecording, onSettings, 
                                             Has docs
                                         </span>
                                     )}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setDeleteConfirm(recording.id);
-                                        }}
-                                        className="p-2 hover:bg-zinc-700 rounded-md transition-colors text-zinc-400 hover:text-red-500"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
+                                    <Tooltip content="Delete recording">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDeleteConfirm(recording.id);
+                                            }}
+                                            className="p-2 hover:bg-zinc-700 rounded-md transition-colors text-zinc-400 hover:text-red-500"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </Tooltip>
                                 </div>
                             </div>
                         ))}
