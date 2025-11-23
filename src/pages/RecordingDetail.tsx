@@ -205,7 +205,7 @@ export default function RecordingDetail() {
                                     disabled={regenerating || !openaiApiKey}
                                     className="p-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors disabled:opacity-50"
                                 >
-                                    {regenerating ? <Spinner size="sm" /> : <Wand2 size={18} />}
+                                    {regenerating ? <Spinner size="sm" className="!border-white !border-t-transparent" /> : <Wand2 size={18} />}
                                 </button>
                             </Tooltip>
                         )}
