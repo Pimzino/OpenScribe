@@ -1,28 +1,30 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useRecorderStore, Step } from "../store/recorderStore";
 import { useRecordingsStore, StepInput } from "../store/recordingsStore";
-import { Play, Square, FileText, Wand2, Settings, X, Save, ArrowLeft, TrendingUp, List } from "lucide-react";
+import { useSettingsStore } from "../store/settingsStore";
+import { Play, Square, Wand2, X, Save, ArrowLeft } from "lucide-react";
 import RecorderOverlay from "../features/recorder/RecorderOverlay";
+import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
+import Sidebar from "../components/Sidebar";
 
-interface NewRecordingProps {
-    onBack: () => void;
-    onGenerateWithSave: (recordingId: string) => void;
-    onSettings: () => void;
-    onSaved: (recordingId: string) => void;
-}
-
-export default function NewRecording({ onBack, onGenerateWithSave, onSettings, onSaved }: NewRecordingProps) {
+export default function NewRecording() {
+    const navigate = useNavigate();
     const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps } = useRecorderStore();
-    const { createRecording, saveSteps } = useRecordingsStore();
+    const { createRecording, saveStepsWithPath } = useRecordingsStore();
+    const { screenshotPath } = useSettingsStore();
     const [recordingName, setRecordingName] = useState("");
     const [showNameDialog, setShowNameDialog] = useState(false);
     const [saving, setSaving] = useState(false);
     const [generateAfterSave, setGenerateAfterSave] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
 
     const deleteStep = async (index: number) => {
+        setDeletingIndex(index);
         const step = steps[index];
         if (step.screenshot) {
             try {
@@ -32,11 +34,11 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
             }
         }
         removeStep(index);
+        setDeletingIndex(null);
     };
 
     useEffect(() => {
         const unlisten = listen<Step>("new-step", (event) => {
-            console.log("New step received:", event.payload);
             addStep(event.payload);
         });
 
@@ -80,8 +82,10 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
         if (!recordingName.trim()) return;
 
         setSaving(true);
+        setSaveError(null);
         try {
-            const recordingId = await createRecording(recordingName.trim());
+            const name = recordingName.trim();
+            const recordingId = await createRecording(name);
 
             const stepInputs: StepInput[] = steps.map(step => ({
                 type_: step.type_,
@@ -96,18 +100,19 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
                 app_name: step.app_name,
             }));
 
-            await saveSteps(recordingId, stepInputs);
+            await saveStepsWithPath(recordingId, name, stepInputs, screenshotPath || undefined);
             clearSteps();
             setShowNameDialog(false);
             setRecordingName("");
 
             if (generateAfterSave) {
-                onGenerateWithSave(recordingId);
+                navigate(`/editor/${recordingId}`);
             } else {
-                onSaved(recordingId);
+                navigate(`/recordings/${recordingId}`);
             }
         } catch (error) {
-            console.error("Failed to save recording:", error);
+            const errorMessage = error instanceof Error ? error.message : "Failed to save recording";
+            setSaveError(errorMessage);
         } finally {
             setSaving(false);
             setGenerateAfterSave(false);
@@ -136,6 +141,11 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
                                 }
                             }}
                         />
+                        {saveError && (
+                            <div className="mb-4 p-3 bg-red-900/50 border border-red-800 rounded-md text-sm text-red-400">
+                                {saveError}
+                            </div>
+                        )}
                         <div className="flex justify-end gap-2">
                             <button
                                 onClick={() => setShowNameDialog(false)}
@@ -155,36 +165,13 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
                 </div>
             )}
 
-            {/* Sidebar */}
-            <aside className="w-64 border-r border-zinc-800 p-4">
-                <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <FileText size={18} />
-                    </div>
-                    OpenScribe
-                </h1>
-
-                <nav className="space-y-2">
-                    <button
-                        onClick={onBack}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
-                    >
-                        <TrendingUp size={16} />
-                        Dashboard
-                    </button>
-                    <button className="w-full flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors">
-                        <List size={16} />
-                        My Recordings
-                    </button>
-                    <button
-                        onClick={onSettings}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
-                    >
-                        <Settings size={16} />
-                        Settings
-                    </button>
-                </nav>
-            </aside>
+            <Sidebar
+                activePage="new-recording"
+                onNavigate={(page) => {
+                    if (page === "dashboard" || page === "recordings") navigate('/');
+                    else if (page === "settings") navigate('/settings');
+                }}
+            />
 
             {/* Main Content */}
             <main className="flex-1 p-8 overflow-auto">
@@ -192,7 +179,7 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
                             <button
-                                onClick={onBack}
+                                onClick={() => navigate('/')}
                                 className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
                             >
                                 <ArrowLeft size={18} />
@@ -252,9 +239,10 @@ export default function NewRecording({ onBack, onGenerateWithSave, onSettings, o
                             <Tooltip content="Delete step">
                                 <button
                                     onClick={() => deleteStep(index)}
-                                    className="absolute top-2 right-2 z-10 p-1 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
+                                    disabled={deletingIndex === index}
+                                    className="absolute top-2 right-2 z-10 p-1 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <X size={14} />
+                                    {deletingIndex === index ? <Spinner size="sm" /> : <X size={14} />}
                                 </button>
                             </Tooltip>
                             {step.type_ === "click" && step.screenshot ? (

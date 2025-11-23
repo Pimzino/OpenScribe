@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Download, FileText, FileCode, FileType, Check } from "lucide-react";
 import { exportToPdf, exportToHtml, exportToWord, exportToMarkdown, copyToClipboard } from "../lib/export";
 import Tooltip from "./Tooltip";
+import Spinner from "./Spinner";
 
 interface ExportDropdownProps {
     markdown: string;
@@ -13,6 +14,7 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [copied, setCopied] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [isCopying, setIsCopying] = useState(false);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -25,10 +27,15 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
     }, []);
 
     const handleCopy = async () => {
-        await copyToClipboard(markdown);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        setIsOpen(false);
+        setIsCopying(true);
+        try {
+            await copyToClipboard(markdown);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            setIsOpen(false);
+        } finally {
+            setIsCopying(false);
+        }
     };
 
     const handleExportMarkdown = () => {
@@ -92,36 +99,41 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
                 <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-50 py-1">
                     <button
                         onClick={handleCopy}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+                        disabled={isCopying || isExporting}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {copied ? <Check size={16} className="text-green-500" /> : <FileText size={16} />}
+                        {isCopying ? <Spinner size="sm" /> : copied ? <Check size={16} className="text-green-500" /> : <FileText size={16} />}
                         Copy to Markdown
                     </button>
                     <div className="h-px bg-zinc-800 my-1" />
                     <button
                         onClick={handleExportPdf}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+                        disabled={isExporting || isCopying}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileType size={16} />
                         Export to PDF
                     </button>
                     <button
                         onClick={handleExportMarkdown}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+                        disabled={isExporting || isCopying}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileCode size={16} />
                         Export to Markdown
                     </button>
                     <button
                         onClick={handleExportHtml}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+                        disabled={isExporting || isCopying}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileCode size={16} />
                         Export to HTML
                     </button>
                     <button
                         onClick={handleExportWord}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+                        disabled={isExporting || isCopying}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileText size={16} />
                         Export to Word

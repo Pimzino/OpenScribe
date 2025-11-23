@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -11,11 +12,8 @@ import Settings from "./pages/Settings";
 import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
 
-type View = "dashboard" | "new-recording" | "recordings" | "recording-detail" | "editor" | "settings";
-
 function App() {
-  const [view, setView] = useState<View>("dashboard");
-  const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
+  const navigate = useNavigate();
   const { isRecording, setIsRecording, clearSteps } = useRecorderStore();
   const { startRecordingHotkey, stopRecordingHotkey, loadSettings, isLoaded } = useSettingsStore();
 
@@ -25,6 +23,14 @@ function App() {
       loadSettings();
     }
   }, [isLoaded, loadSettings]);
+
+  // Close splash screen when app is ready
+  useEffect(() => {
+    const closeSplash = async () => {
+      await invoke("close_splashscreen");
+    };
+    closeSplash();
+  }, []);
 
   // Update backend hotkeys when settings change
   useEffect(() => {
@@ -44,7 +50,7 @@ function App() {
           await invoke("start_recording");
           setIsRecording(true);
           clearSteps();
-          setView("new-recording");
+          navigate("/new-recording");
           await getCurrentWindow().setFocus();
         } catch (error) {
           console.error("Failed to start recording:", error);
@@ -68,80 +74,17 @@ function App() {
       unlistenStart.then((f) => f());
       unlistenStop.then((f) => f());
     };
-  }, [isRecording, setIsRecording, clearSteps]);
-
-  const navigateToRecording = (id: string) => {
-    setSelectedRecordingId(id);
-    setView("recording-detail");
-  };
-
-  if (view === "editor") {
-    return (
-      <Editor
-        onBack={() => setView(selectedRecordingId ? "recording-detail" : "new-recording")}
-        recordingId={selectedRecordingId}
-      />
-    );
-  }
-
-  if (view === "settings") {
-    return (
-      <Settings
-        onBack={() => setView("dashboard")}
-        onViewRecordings={() => setView("recordings")}
-      />
-    );
-  }
-
-  if (view === "new-recording") {
-    return (
-      <NewRecording
-        onBack={() => setView("dashboard")}
-        onGenerateWithSave={(id) => {
-          setSelectedRecordingId(id);
-          setView("editor");
-        }}
-        onSettings={() => setView("settings")}
-        onSaved={(id) => {
-          setSelectedRecordingId(id);
-          setView("recording-detail");
-        }}
-      />
-    );
-  }
-
-  if (view === "recordings") {
-    return (
-      <RecordingsList
-        onBack={() => setView("dashboard")}
-        onSelectRecording={navigateToRecording}
-        onSettings={() => setView("settings")}
-        onNewRecording={() => setView("new-recording")}
-      />
-    );
-  }
-
-  if (view === "recording-detail") {
-    return (
-      <RecordingDetail
-        recordingId={selectedRecordingId!}
-        onBack={() => {
-          setSelectedRecordingId(null);
-          setView("recordings");
-        }}
-        onEdit={() => setView("editor")}
-        onSettings={() => setView("settings")}
-      />
-    );
-  }
+  }, [isRecording, setIsRecording, clearSteps, navigate]);
 
   return (
-    <Dashboard
-      onNewRecording={() => setView("new-recording")}
-      onViewRecordings={() => setView("recordings")}
-      onSelectRecording={navigateToRecording}
-      onSettings={() => setView("settings")}
-    />
+    <Routes>
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/new-recording" element={<NewRecording />} />
+      <Route path="/recordings" element={<RecordingsList />} />
+      <Route path="/recordings/:id" element={<RecordingDetail />} />
+      <Route path="/editor/:id?" element={<Editor />} />
+      <Route path="/settings" element={<Settings />} />
+    </Routes>
   );
 }
 

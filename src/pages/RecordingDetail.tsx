@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useRecordingsStore } from "../store/recordingsStore";
 import { generateDocumentation } from "../lib/aiService";
 import { useSettingsStore } from "../store/settingsStore";
-import { FileText, ArrowLeft, Settings, Wand2, List, TrendingUp, Check, Pencil, X } from "lucide-react";
+import { ArrowLeft, Wand2, Check, Pencil, X } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import Tooltip from "../components/Tooltip";
-import ReactMarkdown from "react-markdown";
+import Sidebar from "../components/Sidebar";
+import MarkdownViewer from "../components/MarkdownViewer";
+import Spinner from "../components/Spinner";
+import { mapStepsForAI } from "../lib/stepMapper";
 import {
     MDXEditor,
     headingsPlugin,
@@ -36,42 +40,30 @@ import {
 } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
 
-interface RecordingDetailProps {
-    recordingId: string;
-    onBack: () => void;
-    onEdit: () => void;
-    onSettings: () => void;
-}
-
-export default function RecordingDetail({ recordingId, onBack, onSettings }: RecordingDetailProps) {
+export default function RecordingDetail() {
+    const navigate = useNavigate();
+    const { id } = useParams<{ id: string }>();
     const { currentRecording, getRecording, saveDocumentation, loading } = useRecordingsStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel } = useSettingsStore();
     const [activeTab, setActiveTab] = useState<"steps" | "docs">("docs");
     const [regenerating, setRegenerating] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editedContent, setEditedContent] = useState("");
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        getRecording(recordingId);
-    }, [recordingId, getRecording]);
+        if (id) {
+            getRecording(id);
+        }
+    }, [id, getRecording]);
 
     const handleRegenerate = async () => {
-        if (!currentRecording || !openaiApiKey) return;
+        if (!currentRecording || !openaiApiKey || !id) return;
 
         setRegenerating(true);
+        setError(null);
         try {
-            const steps = currentRecording.steps.map(step => ({
-                type_: step.type_,
-                x: step.x,
-                y: step.y,
-                text: step.text,
-                timestamp: step.timestamp,
-                screenshot: step.screenshot_path,
-                element_name: step.element_name,
-                element_type: step.element_type,
-                element_value: step.element_value,
-                app_name: step.app_name,
-            }));
+            const steps = mapStepsForAI(currentRecording.steps);
 
             const markdown = await generateDocumentation(steps, {
                 apiKey: openaiApiKey,
@@ -79,10 +71,11 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                 model: openaiModel,
             });
 
-            await saveDocumentation(recordingId, markdown);
-            await getRecording(recordingId);
+            await saveDocumentation(id, markdown);
+            await getRecording(id);
         } catch (error) {
-            console.error("Failed to regenerate documentation:", error);
+            const errorMessage = error instanceof Error ? error.message : "Failed to regenerate documentation";
+            setError(errorMessage);
         } finally {
             setRegenerating(false);
         }
@@ -94,12 +87,15 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
     };
 
     const handleSaveEdit = async () => {
+        if (!id) return;
+        setError(null);
         try {
-            await saveDocumentation(recordingId, editedContent);
-            await getRecording(recordingId);
+            await saveDocumentation(id, editedContent);
+            await getRecording(id);
             setIsEditing(false);
         } catch (error) {
-            console.error("Failed to save documentation:", error);
+            const errorMessage = error instanceof Error ? error.message : "Failed to save documentation";
+            setError(errorMessage);
         }
     };
 
@@ -108,7 +104,19 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
         setEditedContent("");
     };
 
+    const handleNavigate = (page: "dashboard" | "recordings" | "settings") => {
+        if (page === "dashboard") navigate('/');
+        else if (page === "recordings") navigate('/recordings');
+        else if (page === "settings") navigate('/settings');
+    };
 
+    if (!id) {
+        return (
+            <div className="flex h-screen bg-zinc-950 text-white items-center justify-center">
+                <div className="text-zinc-500">Invalid recording ID</div>
+            </div>
+        );
+    }
 
     if (loading && !currentRecording) {
         return (
@@ -128,39 +136,7 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
 
     return (
         <div className="flex h-screen bg-zinc-950 text-white">
-            {/* Sidebar */}
-            <aside className="w-64 border-r border-zinc-800 p-4">
-                <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <FileText size={18} />
-                    </div>
-                    OpenScribe
-                </h1>
-
-                <nav className="space-y-2">
-                    <button
-                        onClick={() => onBack()}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
-                    >
-                        <TrendingUp size={16} />
-                        Dashboard
-                    </button>
-                    <button
-                        onClick={onBack}
-                        className="w-full flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors"
-                    >
-                        <List size={16} />
-                        My Recordings
-                    </button>
-                    <button
-                        onClick={onSettings}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
-                    >
-                        <Settings size={16} />
-                        Settings
-                    </button>
-                </nav>
-            </aside>
+            <Sidebar activePage="recording-detail" onNavigate={handleNavigate} />
 
             {/* Main Content */}
             <main className="flex-1 p-8 overflow-auto">
@@ -168,7 +144,7 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
                             <button
-                                onClick={onBack}
+                                onClick={() => navigate('/recordings')}
                                 className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
                             >
                                 <ArrowLeft size={18} />
@@ -229,7 +205,7 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                                     disabled={regenerating || !openaiApiKey}
                                     className="p-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors disabled:opacity-50"
                                 >
-                                    <Wand2 size={18} className={regenerating ? "animate-pulse" : ""} />
+                                    {regenerating ? <Spinner size="sm" /> : <Wand2 size={18} />}
                                 </button>
                             </Tooltip>
                         )}
@@ -254,6 +230,19 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                     </button>
                 </div>
 
+                {/* Error Display */}
+                {error && (
+                    <div className="mb-6 p-4 bg-red-900/50 border border-red-800 rounded-lg">
+                        <p className="text-sm text-red-400">{error}</p>
+                        <button
+                            onClick={() => setError(null)}
+                            className="mt-2 text-xs text-red-300 hover:text-red-200"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                )}
+
                 {activeTab === "docs" ? (
                     <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 print-content">
                         {currentRecording.recording.documentation ? (
@@ -275,8 +264,10 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                                             imagePlugin({
                                                 imagePreviewHandler: async (imageSource) => {
                                                     // Convert local file paths to Tauri asset URLs
-                                                    if (imageSource.startsWith('C:') || imageSource.startsWith('/')) {
-                                                        return Promise.resolve(convertFileSrc(imageSource));
+                                                    // Decode URI components first (e.g., %20 -> space)
+                                                    const decodedSource = decodeURIComponent(imageSource);
+                                                    if (decodedSource.startsWith('C:') || decodedSource.startsWith('/')) {
+                                                        return Promise.resolve(convertFileSrc(decodedSource));
                                                     }
                                                     return Promise.resolve(imageSource);
                                                 }
@@ -309,25 +300,7 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                                     />
                                 </div>
                             ) : (
-                                <div className="markdown-content">
-                                    <ReactMarkdown
-                                        urlTransform={(url) => url}
-                                        components={{
-                                            h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6">{children}</h1>,
-                                            h2: ({ children }) => <h2 className="text-xl font-semibold mb-3 mt-5">{children}</h2>,
-                                            h3: ({ children }) => <h3 className="text-lg font-medium mb-2 mt-4">{children}</h3>,
-                                            p: ({ children }) => <p className="mb-4 text-zinc-300">{children}</p>,
-                                            ul: ({ children }) => <ul className="list-disc pl-6 mb-4">{children}</ul>,
-                                            ol: ({ children }) => <ol className="list-decimal pl-6 mb-4">{children}</ol>,
-                                            li: ({ children }) => <li className="mb-1">{children}</li>,
-                                            code: ({ children }) => <code className="bg-zinc-800 px-1 py-0.5 rounded text-sm">{children}</code>,
-                                            pre: ({ children }) => <pre className="bg-zinc-800 p-4 rounded mb-4 overflow-x-auto">{children}</pre>,
-                                            img: ({ src, alt }) => <img src={src ? convertFileSrc(src) : ''} alt={alt || ''} className="max-w-full rounded my-4" />,
-                                        }}
-                                    >
-                                        {currentRecording.recording.documentation}
-                                    </ReactMarkdown>
-                                </div>
+                                <MarkdownViewer content={currentRecording.recording.documentation} className="markdown-content" />
                             )
                         ) : (
                             <div className="text-center py-12 text-zinc-500">
@@ -335,9 +308,10 @@ export default function RecordingDetail({ recordingId, onBack, onSettings }: Rec
                                 <button
                                     onClick={handleRegenerate}
                                     disabled={regenerating || !openaiApiKey}
-                                    className="mt-4 text-purple-500 hover:text-purple-400 disabled:opacity-50"
+                                    className="mt-4 text-purple-500 hover:text-purple-400 disabled:opacity-50 flex items-center gap-2 mx-auto"
                                 >
-                                    Generate documentation
+                                    {regenerating && <Spinner size="sm" />}
+                                    {regenerating ? "Generating..." : "Generate documentation"}
                                 </button>
                                 {!openaiApiKey && (
                                     <p className="mt-2 text-sm text-red-500">

@@ -23,7 +23,7 @@ export async function exportToWord(markdown: string, fileName: string): Promise<
 
         if (node.type === 'heading') {
             const text = node.children.map((c: any) => c.value).join('');
-            let headingLevel = HeadingLevel.HEADING_1;
+            let headingLevel: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1;
             if (node.depth === 2) headingLevel = HeadingLevel.HEADING_2;
             if (node.depth === 3) headingLevel = HeadingLevel.HEADING_3;
 

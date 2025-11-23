@@ -1,4 +1,4 @@
-use rusqlite::{Connection, params, Result};
+use rusqlite::{Connection, params, Result, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::fs;
@@ -129,6 +129,62 @@ impl Database {
         dir
     }
 
+    pub fn get_default_screenshot_path(&self) -> PathBuf {
+        self.data_dir.join("screenshots")
+    }
+
+    /// Sanitize a string to be safe for use as a directory name
+    fn sanitize_dirname(name: &str) -> String {
+        // Characters invalid on Windows
+        let invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+
+        // Windows reserved names
+        let reserved_names = [
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        ];
+
+        let mut sanitized: String = name
+            .chars()
+            .map(|c| {
+                if invalid_chars.contains(&c) || c.is_control() || c == ' ' {
+                    '_'
+                } else {
+                    c
+                }
+            })
+            .collect();
+
+        // Collapse multiple underscores
+        while sanitized.contains("__") {
+            sanitized = sanitized.replace("__", "_");
+        }
+
+        // Trim leading/trailing dots and spaces
+        sanitized = sanitized.trim_matches(|c| c == '.' || c == ' ').to_string();
+
+        // Check for reserved names
+        let upper = sanitized.to_uppercase();
+        let base_name = upper.split('.').next().unwrap_or("");
+        if reserved_names.contains(&base_name) {
+            sanitized = format!("_{}", sanitized);
+        }
+
+        // Truncate to 255 characters
+        if sanitized.len() > 255 {
+            sanitized.truncate(255);
+            sanitized = sanitized.trim_end_matches(|c| c == '.' || c == ' ').to_string();
+        }
+
+        // Fallback if empty
+        if sanitized.is_empty() {
+            sanitized = "untitled".to_string();
+        }
+
+        sanitized
+    }
+
     pub fn create_recording(&self, name: String) -> Result<String> {
         let id = Uuid::new_v4().to_string();
         let now = chrono::Utc::now().timestamp_millis();
@@ -143,6 +199,78 @@ impl Database {
 
     pub fn save_steps(&self, recording_id: &str, steps: Vec<StepInput>) -> Result<()> {
         let screenshots_dir = self.screenshots_dir();
+
+        for (index, step) in steps.into_iter().enumerate() {
+            let step_id = Uuid::new_v4().to_string();
+
+            // Copy screenshot to persistent storage if exists
+            let persistent_screenshot = if let Some(temp_path) = &step.screenshot {
+                let temp_path = PathBuf::from(temp_path);
+                if temp_path.exists() {
+                    let filename = format!("{}_{}.jpg", recording_id, step_id);
+                    let dest_path = screenshots_dir.join(&filename);
+                    if fs::copy(&temp_path, &dest_path).is_ok() {
+                        // Delete temp file after successful copy
+                        let _ = fs::remove_file(&temp_path);
+                        Some(dest_path.to_string_lossy().to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            self.conn.execute(
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                params![
+                    step_id,
+                    recording_id,
+                    step.type_,
+                    step.x,
+                    step.y,
+                    step.text,
+                    step.timestamp,
+                    persistent_screenshot,
+                    step.element_name,
+                    step.element_type,
+                    step.element_value,
+                    step.app_name,
+                    index as i32
+                ],
+            )?;
+        }
+
+        // Update recording timestamp
+        let now = chrono::Utc::now().timestamp_millis();
+        self.conn.execute(
+            "UPDATE recordings SET updated_at = ?1 WHERE id = ?2",
+            params![now, recording_id],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn save_steps_with_path(
+        &self,
+        recording_id: &str,
+        recording_name: &str,
+        steps: Vec<StepInput>,
+        custom_screenshot_path: Option<&str>
+    ) -> Result<()> {
+        // Determine base screenshots directory
+        let base_dir = match custom_screenshot_path {
+            Some(path) if !path.is_empty() => PathBuf::from(path),
+            _ => self.screenshots_dir(),
+        };
+
+        // Create recording-specific subfolder with sanitized name
+        let sanitized_name = Self::sanitize_dirname(recording_name);
+        let screenshots_dir = base_dir.join(&sanitized_name);
+        let _ = fs::create_dir_all(&screenshots_dir);
 
         for (index, step) in steps.into_iter().enumerate() {
             let step_id = Uuid::new_v4().to_string();
@@ -245,7 +373,7 @@ impl Database {
                 documentation: row.get(4)?,
                 step_count: row.get(5)?,
             })
-        }).ok();
+        }).optional()?;
 
         match recording {
             Some(rec) => {
@@ -292,9 +420,24 @@ impl Database {
             row.get(0)
         })?.filter_map(|r| r.ok()).collect();
 
+        // Collect unique parent directories
+        let mut dirs_to_check: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+
         // Delete screenshot files
         for path in paths {
-            let _ = fs::remove_file(path);
+            let path_buf = PathBuf::from(&path);
+            if let Some(parent) = path_buf.parent() {
+                dirs_to_check.insert(parent.to_path_buf());
+            }
+            let _ = fs::remove_file(&path);
+        }
+
+        // Try to remove empty directories
+        for dir in dirs_to_check {
+            // Only remove if empty and not the default screenshots directory
+            if dir != self.screenshots_dir() {
+                let _ = fs::remove_dir(&dir); // Only succeeds if empty
+            }
         }
 
         // Delete from database
@@ -358,33 +501,5 @@ impl Database {
             recordings_this_week,
             recent_recordings,
         })
-    }
-
-    pub fn get_steps_for_recording(&self, recording_id: &str) -> Result<Vec<Step>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, recording_id, type_, x, y, text, timestamp, screenshot_path,
-                    element_name, element_type, element_value, app_name, order_index
-             FROM steps WHERE recording_id = ?1 ORDER BY order_index"
-        )?;
-
-        let steps = stmt.query_map(params![recording_id], |row| {
-            Ok(Step {
-                id: row.get(0)?,
-                recording_id: row.get(1)?,
-                type_: row.get(2)?,
-                x: row.get(3)?,
-                y: row.get(4)?,
-                text: row.get(5)?,
-                timestamp: row.get(6)?,
-                screenshot_path: row.get(7)?,
-                element_name: row.get(8)?,
-                element_type: row.get(9)?,
-                element_value: row.get(10)?,
-                app_name: row.get(11)?,
-                order_index: row.get(12)?,
-            })
-        })?.collect::<Result<Vec<_>>>()?;
-
-        Ok(steps)
     }
 }

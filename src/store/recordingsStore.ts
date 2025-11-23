@@ -63,6 +63,7 @@ interface RecordingsState {
     fetchStatistics: () => Promise<void>;
     createRecording: (name: string) => Promise<string>;
     saveSteps: (recordingId: string, steps: StepInput[]) => Promise<void>;
+    saveStepsWithPath: (recordingId: string, recordingName: string, steps: StepInput[], screenshotPath?: string) => Promise<void>;
     saveDocumentation: (recordingId: string, documentation: string) => Promise<void>;
     getRecording: (id: string) => Promise<RecordingWithSteps | null>;
     deleteRecording: (id: string) => Promise<void>;
@@ -115,6 +116,23 @@ export const useRecordingsStore = create<RecordingsState>((set, get) => ({
         set({ loading: true, error: null });
         try {
             await invoke('save_steps', { recordingId, steps });
+            await get().fetchRecordings();
+            set({ loading: false });
+        } catch (error) {
+            set({ error: String(error), loading: false });
+            throw error;
+        }
+    },
+
+    saveStepsWithPath: async (recordingId: string, recordingName: string, steps: StepInput[], screenshotPath?: string) => {
+        set({ loading: true, error: null });
+        try {
+            await invoke('save_steps_with_path', {
+                recordingId,
+                recordingName,
+                steps,
+                screenshotPath: screenshotPath || null
+            });
             await get().fetchRecordings();
             set({ loading: false });
         } catch (error) {

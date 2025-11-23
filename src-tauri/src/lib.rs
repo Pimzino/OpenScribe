@@ -4,7 +4,8 @@ mod accessibility;
 mod database;
 
 use std::sync::Mutex;
-use tauri::{AppHandle, State, Manager, Emitter};
+use std::path::PathBuf;
+use tauri::{AppHandle, State, Manager, Emitter, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
 use database::{Database, StepInput, Recording, RecordingWithSteps, Statistics};
@@ -12,8 +13,11 @@ use database::{Database, StepInput, Recording, RecordingWithSteps, Statistics};
 pub struct DatabaseState(pub Mutex<Database>);
 
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+async fn close_splashscreen(window: WebviewWindow) {
+    if let Some(splashscreen) = window.get_webview_window("splashscreen") {
+        splashscreen.close().unwrap();
+    }
+    window.get_webview_window("main").unwrap().show().unwrap();
 }
 
 #[tauri::command]
@@ -21,7 +25,6 @@ fn start_recording(state: State<'_, RecordingState>, _app: AppHandle) {
     let mut is_recording = state.is_recording.lock().unwrap();
     if !*is_recording {
         *is_recording = true;
-        println!("Recording started");
     }
 }
 
@@ -29,7 +32,6 @@ fn start_recording(state: State<'_, RecordingState>, _app: AppHandle) {
 fn stop_recording(state: State<'_, RecordingState>) {
     let mut is_recording = state.is_recording.lock().unwrap();
     *is_recording = false;
-    println!("Recording stopped");
 }
 
 #[tauri::command]
@@ -215,6 +217,72 @@ fn get_statistics(db: State<'_, DatabaseState>) -> Result<Statistics, String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_default_screenshot_path(db: State<'_, DatabaseState>) -> Result<String, String> {
+    let path = db.0.lock()
+        .map_err(|e| e.to_string())?
+        .get_default_screenshot_path();
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn validate_screenshot_path(path: String) -> Result<bool, String> {
+    let path = PathBuf::from(&path);
+
+    // Check if path exists and is a directory
+    if !path.exists() {
+        // Try to create it
+        if let Err(e) = std::fs::create_dir_all(&path) {
+            return Err(format!("Cannot create directory: {}", e));
+        }
+    } else if !path.is_dir() {
+        return Err("Path is not a directory".to_string());
+    }
+
+    // Check if writable by creating a temp file
+    let test_file = path.join(".openscribe_write_test");
+    match std::fs::write(&test_file, "test") {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&test_file);
+            Ok(true)
+        }
+        Err(e) => Err(format!("Directory is not writable: {}", e))
+    }
+}
+
+#[tauri::command]
+fn register_asset_scope(app: AppHandle, path: String) -> Result<(), String> {
+    let path = PathBuf::from(&path);
+    
+    if path.as_os_str().is_empty() {
+        return Ok(());
+    }
+    
+    // Ensure directory exists
+    if !path.exists() {
+        let _ = std::fs::create_dir_all(&path);
+    }
+    
+    // Add the directory and all subdirectories to the asset protocol scope
+    app.asset_protocol_scope()
+        .allow_directory(&path, true)
+        .map_err(|e| format!("Failed to register asset scope: {}", e))
+}
+
+#[tauri::command]
+fn save_steps_with_path(
+    db: State<'_, DatabaseState>,
+    recording_id: String,
+    recording_name: String,
+    steps: Vec<StepInput>,
+    screenshot_path: Option<String>
+) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .save_steps_with_path(&recording_id, &recording_name, steps, screenshot_path.as_deref())
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let recording_state = RecordingState::new();
@@ -227,6 +295,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(recording_state)
         .setup(move |app| {
             // Initialize database
@@ -247,7 +316,6 @@ pub fn run() {
             if let Some(shortcut) = binding_to_shortcut(&start_binding) {
                 let _ = global_shortcut.on_shortcut(shortcut, |_app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
-                        println!("Start hotkey pressed!");
                         let _ = _app.emit("hotkey-start", ());
                     }
                 });
@@ -256,7 +324,6 @@ pub fn run() {
             if let Some(shortcut) = binding_to_shortcut(&stop_binding) {
                 let _ = global_shortcut.on_shortcut(shortcut, |_app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
-                        println!("Stop hotkey pressed!");
                         let _ = _app.emit("hotkey-stop", ());
                     }
                 });
@@ -265,19 +332,23 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
+            close_splashscreen,
             start_recording,
             stop_recording,
             delete_screenshot,
             set_hotkeys,
             create_recording,
             save_steps,
+            save_steps_with_path,
             save_documentation,
             list_recordings,
             get_recording,
             delete_recording,
             update_recording_name,
-            get_statistics
+            get_statistics,
+            get_default_screenshot_path,
+            validate_screenshot_path,
+            register_asset_scope
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -232,7 +232,7 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
         throw new Error("No steps to generate documentation from.");
     }
 
-    console.log("Generating documentation for", steps.length, "steps");
+
 
     // Convert all screenshots to base64 first
     const stepsWithBase64 = await Promise.all(
@@ -280,9 +280,11 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
         markdown += `${description}\n\n`;
 
         if (step.screenshot) {
-            // Use file path for local display - normalize path for markdown compatibility
+            // Use file path for local display - normalize path and encode for markdown compatibility
             const normalizedPath = step.screenshot.replace(/\\/g, '/');
-            markdown += `![Step ${i + 1} Screenshot](${normalizedPath})\n\n`;
+            // Encode spaces and special characters for markdown URL compatibility
+            const encodedPath = normalizedPath.replace(/ /g, '%20');
+            markdown += `![Step ${i + 1} Screenshot](${encodedPath})\n\n`;
         }
     }
 

@@ -1,33 +1,91 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSettingsStore, HotkeyBinding } from "../store/settingsStore";
-import { FileText, Save, Eye, EyeOff, Settings as SettingsIcon, TrendingUp, List } from "lucide-react";
+import { Save, Eye, EyeOff, FolderOpen, RotateCcw } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
+import Sidebar from "../components/Sidebar";
+import Spinner from "../components/Spinner";
 
-interface SettingsProps {
-    onBack: () => void;
-    onViewRecordings: () => void;
-}
-
-export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
+export default function Settings() {
+    const navigate = useNavigate();
     const {
         openaiBaseUrl,
         openaiApiKey,
         openaiModel,
+        screenshotPath,
         startRecordingHotkey,
         stopRecordingHotkey,
         setOpenaiBaseUrl,
         setOpenaiApiKey,
         setOpenaiModel,
+        setScreenshotPath,
         setStartRecordingHotkey,
         setStopRecordingHotkey,
         saveSettings,
         loadSettings,
         isLoaded,
+        getDefaultScreenshotPath,
     } = useSettingsStore();
 
     const [showApiKey, setShowApiKey] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [capturingHotkey, setCapturingHotkey] = useState<"start" | "stop" | null>(null);
+    const [pathError, setPathError] = useState<string | null>(null);
+    const [validatingPath, setValidatingPath] = useState(false);
+    const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+
+    const validateApiKey = (key: string): string | null => {
+        if (!key) return null;
+        if (!key.startsWith("sk-")) return "API key must start with 'sk-'";
+        if (key.length < 20) return "API key must be at least 20 characters";
+        return null;
+    };
+
+    const areHotkeysEqual = (a: HotkeyBinding, b: HotkeyBinding): boolean => {
+        return a.ctrl === b.ctrl && a.shift === b.shift && a.alt === b.alt && a.key === b.key;
+    };
+
+    const handleBrowseFolder = async () => {
+        try {
+            const selected = await open({
+                directory: true,
+                multiple: false,
+                title: "Select Screenshot Storage Location",
+            });
+            if (selected && typeof selected === "string") {
+                setScreenshotPath(selected);
+                validatePath(selected);
+            }
+        } catch (error) {
+            console.error("Failed to open folder dialog:", error);
+        }
+    };
+
+    const handleResetPath = async () => {
+        const defaultPath = await getDefaultScreenshotPath();
+        if (defaultPath) {
+            setScreenshotPath(defaultPath);
+            setPathError(null);
+        }
+    };
+
+    const validatePath = async (path: string) => {
+        if (!path) {
+            setPathError(null);
+            return;
+        }
+        setValidatingPath(true);
+        try {
+            await invoke("validate_screenshot_path", { path });
+            setPathError(null);
+        } catch (error) {
+            setPathError(error as string);
+        } finally {
+            setValidatingPath(false);
+        }
+    };
 
     const formatHotkey = (hotkey: HotkeyBinding): string => {
         const parts: string[] = [];
@@ -98,6 +156,7 @@ export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
 
     const startWarning = getHotkeyWarning(startRecordingHotkey);
     const stopWarning = getHotkeyWarning(stopRecordingHotkey);
+    const hotkeysMatch = areHotkeysEqual(startRecordingHotkey, stopRecordingHotkey);
 
     useEffect(() => {
         if (!isLoaded) {
@@ -118,40 +177,14 @@ export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
         }
     };
 
+    const handleNavigate = (page: "dashboard" | "recordings" | "settings") => {
+        if (page === "dashboard") navigate("/");
+        else if (page === "recordings") navigate("/recordings");
+    };
+
     return (
         <div className="flex h-screen bg-zinc-950 text-white">
-            {/* Sidebar */}
-            <aside className="w-64 border-r border-zinc-800 p-4">
-                <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <FileText size={18} />
-                    </div>
-                    OpenScribe
-                </h1>
-
-                <nav className="space-y-2">
-                    <button
-                        onClick={onBack}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
-                    >
-                        <TrendingUp size={16} />
-                        Dashboard
-                    </button>
-                    <button
-                        onClick={onViewRecordings}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
-                    >
-                        <List size={16} />
-                        My Recordings
-                    </button>
-                    <button
-                        className="w-full flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors"
-                    >
-                        <SettingsIcon size={16} />
-                        Settings
-                    </button>
-                </nav>
-            </aside>
+            <Sidebar activePage="settings" onNavigate={handleNavigate} />
 
             {/* Main Content */}
             <main className="flex-1 p-8 overflow-auto">
@@ -159,8 +192,61 @@ export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
                     <h2 className="text-2xl font-bold mb-8">Settings</h2>
 
                     <div className="space-y-6">
+                        {/* Storage Section */}
+                        <div>
+                            <h3 className="text-lg font-medium text-zinc-200 mb-4">Storage</h3>
+
+                            {/* Screenshot Path */}
+                            <div>
+                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                    Screenshot Storage Location
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={screenshotPath}
+                                        onChange={(e) => {
+                                            setScreenshotPath(e.target.value);
+                                            validatePath(e.target.value);
+                                        }}
+                                        placeholder="Select a folder..."
+                                        className={`flex-1 px-4 py-2 bg-zinc-900 border rounded-md text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                                            pathError
+                                                ? "border-red-600 focus:border-red-500"
+                                                : "border-zinc-800 focus:border-blue-600"
+                                        }`}
+                                    />
+                                    <button
+                                        onClick={handleBrowseFolder}
+                                        className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors"
+                                        title="Browse for folder"
+                                    >
+                                        <FolderOpen size={16} />
+                                    </button>
+                                    <button
+                                        onClick={handleResetPath}
+                                        className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors"
+                                        title="Reset to default"
+                                    >
+                                        <RotateCcw size={16} />
+                                    </button>
+                                </div>
+                                {pathError && (
+                                    <p className="mt-1 text-xs text-red-500">{pathError}</p>
+                                )}
+                                {validatingPath && (
+                                    <p className="mt-1 text-xs text-zinc-500">Validating path...</p>
+                                )}
+                                <p className="mt-1 text-xs text-zinc-500">
+                                    Screenshots will be saved in subfolders named after each recording
+                                </p>
+                            </div>
+                        </div>
+
                         {/* AI Section */}
-                        <h3 className="text-lg font-medium text-zinc-200 mb-4">AI</h3>
+                        <div className="border-t border-zinc-800 pt-6">
+                            <h3 className="text-lg font-medium text-zinc-200 mb-4">AI</h3>
+                        </div>
 
                         {/* OpenAI Base URL */}
                         <div>
@@ -205,9 +291,16 @@ export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
                                 <input
                                     type={showApiKey ? "text" : "password"}
                                     value={openaiApiKey}
-                                    onChange={(e) => setOpenaiApiKey(e.target.value)}
+                                    onChange={(e) => {
+                                        setOpenaiApiKey(e.target.value);
+                                        setApiKeyError(validateApiKey(e.target.value));
+                                    }}
                                     placeholder="sk-..."
-                                    className="w-full px-4 py-2 pr-10 bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-600 transition-colors"
+                                    className={`w-full px-4 py-2 pr-10 bg-zinc-900 border rounded-md text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                                        apiKeyError
+                                            ? "border-red-600 focus:border-red-500"
+                                            : "border-zinc-800 focus:border-blue-600"
+                                    }`}
                                 />
                                 <button
                                     type="button"
@@ -217,6 +310,9 @@ export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
                                     {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
                             </div>
+                            {apiKeyError && (
+                                <p className="mt-1 text-xs text-red-500">{apiKeyError}</p>
+                            )}
                             <p className="mt-1 text-xs text-zinc-500">
                                 Your API key is stored securely on your device
                             </p>
@@ -271,6 +367,11 @@ export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
                                     <p className="mt-1 text-xs text-yellow-500">{stopWarning}</p>
                                 )}
                             </div>
+                            {hotkeysMatch && (
+                                <p className="mt-2 text-xs text-red-500">
+                                    Start and stop hotkeys cannot be the same
+                                </p>
+                            )}
                             <p className="mt-2 text-xs text-zinc-500">
                                 Click on a field and press your desired key combination
                             </p>
@@ -280,14 +381,14 @@ export default function Settings({ onBack, onViewRecordings }: SettingsProps) {
                         <div className="pt-4">
                             <button
                                 onClick={handleSave}
-                                disabled={saving}
+                                disabled={saving || !!apiKeyError || hotkeysMatch}
                                 className={`flex items-center gap-2 px-6 py-2 rounded-md font-medium transition-colors ${
                                     saved
                                         ? "bg-green-600 hover:bg-green-700"
                                         : "bg-blue-600 hover:bg-blue-700"
-                                } ${saving ? "opacity-50 cursor-not-allowed" : ""}`}
+                                } ${saving || !!apiKeyError || hotkeysMatch ? "opacity-50 cursor-not-allowed" : ""}`}
                             >
-                                <Save size={16} />
+                                {saving ? <Spinner size="sm" /> : <Save size={16} />}
                                 {saving ? "Saving..." : saved ? "Saved!" : "Save Settings"}
                             </button>
                         </div>

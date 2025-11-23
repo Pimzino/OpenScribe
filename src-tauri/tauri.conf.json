@@ -12,9 +12,22 @@
   "app": {
     "windows": [
       {
-        "title": "openscribe",
+        "title": "OpenScribe",
+        "label": "main",
         "width": 1024,
-        "height": 768
+        "height": 768,
+        "visible": false
+      },
+      {
+        "title": "OpenScribe",
+        "label": "splashscreen",
+        "width": 400,
+        "height": 300,
+        "decorations": false,
+        "resizable": false,
+        "transparent": false,
+        "center": true,
+        "url": "/splashscreen.html"
       }
     ],
     "security": {

@@ -17,8 +17,8 @@ static SCREENSHOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[derive(Clone, serde::Serialize)]
 struct Step {
     type_: String,
-    x: Option<f64>,
-    y: Option<f64>,
+    x: Option<i32>,
+    y: Option<i32>,
     text: Option<String>,
     timestamp: u64,
     screenshot: Option<String>, // File path to screenshot
@@ -68,8 +68,8 @@ enum RecorderEvent {
 }
 
 struct CaptureData {
-    x: Option<f64>,
-    y: Option<f64>,
+    x: Option<i32>,
+    y: Option<i32>,
     image: image::DynamicImage,
     timestamp: u64,
     step_type: String,
@@ -112,8 +112,8 @@ pub fn start_listener(
             // Draw click highlight if this is a click step
             if data.step_type == "click" {
                 if let (Some(x), Some(y)) = (data.x, data.y) {
-                    let cx = x as i32;
-                    let cy = y as i32;
+                    let cx = x;
+                    let cy = y;
 
                     // Colors for highlight
                     let outer_color = Rgb([255u8, 69u8, 0u8]); // Orange-red
@@ -305,8 +305,8 @@ pub fn start_listener(
 
                             // 2. Emit Click Step with element info
                             let _ = tx_encode.send(CaptureData {
-                                x: Some(x),
-                                y: Some(y),
+                                x: Some(x.round() as i32),
+                                y: Some(y.round() as i32),
                                 image: image::DynamicImage::ImageRgba8(image), // Move for click step
                                 timestamp,
                                 step_type: "click".to_string(),
@@ -340,7 +340,7 @@ pub fn start_listener(
                 _ => {}
             }
         }) {
-            println!("Error: {:?}", error)
+            eprintln!("Input listener error: {:?}", error);
         }
     });
 }

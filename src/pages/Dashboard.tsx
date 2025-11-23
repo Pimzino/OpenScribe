@@ -1,16 +1,12 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useRecordingsStore, Recording } from "../store/recordingsStore";
-import { FileText, Plus, List, Settings, Clock, TrendingUp, Layers } from "lucide-react";
+import { FileText, Plus, Clock, Layers } from "lucide-react";
 import Tooltip from "../components/Tooltip";
+import Sidebar from "../components/Sidebar";
 
-interface DashboardProps {
-    onNewRecording: () => void;
-    onViewRecordings: () => void;
-    onSelectRecording: (id: string) => void;
-    onSettings: () => void;
-}
-
-export default function Dashboard({ onNewRecording, onViewRecordings, onSelectRecording, onSettings }: DashboardProps) {
+export default function Dashboard() {
+    const navigate = useNavigate();
     const { statistics, fetchStatistics, loading } = useRecordingsStore();
 
     useEffect(() => {
@@ -26,38 +22,14 @@ export default function Dashboard({ onNewRecording, onViewRecordings, onSelectRe
         });
     };
 
+    const handleNavigate = (page: "dashboard" | "recordings" | "settings") => {
+        if (page === "recordings") navigate('/recordings');
+        else if (page === "settings") navigate('/settings');
+    };
+
     return (
         <div className="flex h-screen bg-zinc-950 text-white">
-            {/* Sidebar */}
-            <aside className="w-64 border-r border-zinc-800 p-4">
-                <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <FileText size={18} />
-                    </div>
-                    OpenScribe
-                </h1>
-
-                <nav className="space-y-2">
-                    <button className="w-full flex items-center gap-3 px-4 py-2 bg-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors">
-                        <TrendingUp size={16} />
-                        Dashboard
-                    </button>
-                    <button
-                        onClick={onViewRecordings}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
-                    >
-                        <List size={16} />
-                        My Recordings
-                    </button>
-                    <button
-                        onClick={onSettings}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
-                    >
-                        <Settings size={16} />
-                        Settings
-                    </button>
-                </nav>
-            </aside>
+            <Sidebar activePage="dashboard" onNavigate={handleNavigate} />
 
             {/* Main Content */}
             <main className="flex-1 p-8 overflow-auto">
@@ -65,7 +37,7 @@ export default function Dashboard({ onNewRecording, onViewRecordings, onSelectRe
                     <h2 className="text-2xl font-bold">Dashboard</h2>
                     <Tooltip content="New recording">
                         <button
-                            onClick={onNewRecording}
+                            onClick={() => navigate('/new-recording')}
                             className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
                         >
                             <Plus size={18} />
@@ -117,7 +89,7 @@ export default function Dashboard({ onNewRecording, onViewRecordings, onSelectRe
                             <div className="flex justify-between items-center p-4 border-b border-zinc-800">
                                 <h3 className="font-semibold">Recent Recordings</h3>
                                 <button
-                                    onClick={onViewRecordings}
+                                    onClick={() => navigate('/recordings')}
                                     className="text-sm text-blue-500 hover:text-blue-400"
                                 >
                                     View all
@@ -129,7 +101,7 @@ export default function Dashboard({ onNewRecording, onViewRecordings, onSelectRe
                                     {statistics.recent_recordings.map((recording: Recording) => (
                                         <button
                                             key={recording.id}
-                                            onClick={() => onSelectRecording(recording.id)}
+                                            onClick={() => navigate(`/recordings/${recording.id}`)}
                                             className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/50 transition-colors text-left"
                                         >
                                             <div>
@@ -148,7 +120,7 @@ export default function Dashboard({ onNewRecording, onViewRecordings, onSelectRe
                                 <div className="p-8 text-center text-zinc-500">
                                     <p>No recordings yet</p>
                                     <button
-                                        onClick={onNewRecording}
+                                        onClick={() => navigate('/new-recording')}
                                         className="mt-2 text-blue-500 hover:text-blue-400"
                                     >
                                         Create your first recording

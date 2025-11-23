@@ -2,7 +2,6 @@ import { readFile } from "@tauri-apps/plugin-fs";
 
 // Helper to read file as Uint8Array
 export async function getFileBuffer(path: string): Promise<Uint8Array | null> {
-    console.log(`Attempting to read file: ${path}`);
     try {
         let cleanPath = path;
 
@@ -22,17 +21,13 @@ export async function getFileBuffer(path: string): Promise<Uint8Array | null> {
             }
         }
 
-        console.log(`Cleaned path: ${cleanPath}`);
-
         if (cleanPath.startsWith('http')) {
             const response = await fetch(cleanPath);
             const buffer = await response.arrayBuffer();
-            console.log(`Fetched http file, size: ${buffer.byteLength}`);
             return new Uint8Array(buffer);
         }
 
         const data = await readFile(cleanPath);
-        console.log(`Read local file, size: ${data.length}`);
         return data;
     } catch (error) {
         console.error(`Failed to read file: ${path}`, error);

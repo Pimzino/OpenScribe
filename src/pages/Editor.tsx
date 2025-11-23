@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { useNavigate, useParams } from "react-router-dom";
 import { useRecorderStore } from "../store/recorderStore";
 import { useRecordingsStore } from "../store/recordingsStore";
 import { useSettingsStore } from "../store/settingsStore";
@@ -7,14 +7,13 @@ import { generateDocumentation } from "../lib/aiService";
 import { ArrowLeft, Save, Edit3, X } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import Tooltip from "../components/Tooltip";
-import ReactMarkdown from "react-markdown";
+import MarkdownViewer from "../components/MarkdownViewer";
+import Spinner from "../components/Spinner";
+import { mapStepsForAI } from "../lib/stepMapper";
 
-interface EditorProps {
-    onBack: () => void;
-    recordingId?: string | null;
-}
-
-export default function Editor({ onBack, recordingId }: EditorProps) {
+export default function Editor() {
+    const navigate = useNavigate();
+    const { id: recordingId } = useParams<{ id: string }>();
     const { steps } = useRecorderStore();
     const { getRecording, saveDocumentation, currentRecording } = useRecordingsStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel } = useSettingsStore();
@@ -25,6 +24,14 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [editedMarkdown, setEditedMarkdown] = useState("");
 
+    const handleBack = () => {
+        if (window.history.length > 1) {
+            navigate(-1);
+        } else {
+            navigate('/');
+        }
+    };
+
     useEffect(() => {
         const generate = async () => {
             try {
@@ -34,18 +41,7 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
                 if (recordingId) {
                     const recording = await getRecording(recordingId);
                     if (recording) {
-                        const dbSteps = recording.steps.map(step => ({
-                            type_: step.type_,
-                            x: step.x,
-                            y: step.y,
-                            text: step.text,
-                            timestamp: step.timestamp,
-                            screenshot: step.screenshot_path,
-                            element_name: step.element_name,
-                            element_type: step.element_type,
-                            element_value: step.element_value,
-                            app_name: step.app_name,
-                        }));
+                        const dbSteps = mapStepsForAI(recording.steps);
 
                         const docs = await generateDocumentation(dbSteps, {
                             apiKey: openaiApiKey,
@@ -82,6 +78,7 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
 
     const handleSave = async () => {
         setSaving(true);
+        setError(null);
         try {
             setMarkdown(editedMarkdown);
             if (recordingId) {
@@ -89,7 +86,7 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
             }
             setIsEditing(false);
         } catch (err) {
-            console.error("Failed to save:", err);
+            setError(err instanceof Error ? err.message : "Failed to save documentation");
         } finally {
             setSaving(false);
         }
@@ -109,7 +106,7 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
                             <button
-                                onClick={onBack}
+                                onClick={handleBack}
                                 className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
                             >
                                 <ArrowLeft size={18} />
@@ -162,7 +159,7 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
                 </div>
                 {loading ? (
                     <div className="flex flex-col items-center justify-center h-full text-zinc-500 gap-4">
-                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        <Spinner size="lg" />
                         <p>Generating documentation with AI...</p>
                         <p className="text-xs">
                             Processing {recordingId ? currentRecording?.steps.length || 0 : steps.length} steps...
@@ -175,7 +172,7 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
                             <p className="text-sm text-zinc-300">{error}</p>
                         </div>
                         <button
-                            onClick={onBack}
+                            onClick={handleBack}
                             className="text-sm text-zinc-400 hover:text-white transition-colors"
                         >
                             Go back and try again
@@ -192,25 +189,7 @@ export default function Editor({ onBack, recordingId }: EditorProps) {
                     </div>
                 ) : (
                     <div className="max-w-3xl mx-auto bg-zinc-900 p-8 rounded-lg border border-zinc-800 shadow-lg print-content">
-                        <div className="markdown-content">
-                            <ReactMarkdown
-                                urlTransform={(url) => url}
-                                components={{
-                                    h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6">{children}</h1>,
-                                    h2: ({ children }) => <h2 className="text-xl font-semibold mb-3 mt-5">{children}</h2>,
-                                    h3: ({ children }) => <h3 className="text-lg font-medium mb-2 mt-4">{children}</h3>,
-                                    p: ({ children }) => <p className="mb-4 text-zinc-300">{children}</p>,
-                                    ul: ({ children }) => <ul className="list-disc pl-6 mb-4">{children}</ul>,
-                                    ol: ({ children }) => <ol className="list-decimal pl-6 mb-4">{children}</ol>,
-                                    li: ({ children }) => <li className="mb-1">{children}</li>,
-                                    code: ({ children }) => <code className="bg-zinc-800 px-1 py-0.5 rounded text-sm">{children}</code>,
-                                    pre: ({ children }) => <pre className="bg-zinc-800 p-4 rounded mb-4 overflow-x-auto">{children}</pre>,
-                                    img: ({ src, alt }) => <img src={src ? convertFileSrc(src) : ''} alt={alt} className="max-w-full rounded my-4" />,
-                                }}
-                            >
-                                {markdown}
-                            </ReactMarkdown>
-                        </div>
+                        <MarkdownViewer content={markdown} className="markdown-content" />
                     </div>
                 )}
             </main>

@@ -11,9 +11,11 @@
       "identifier": "fs:allow-read-file",
       "allow": [
         { "path": "$APPDATA/**" },
-        { "path": "$TEMP/**" }
+        { "path": "$TEMP/**" },
+        { "path": "**" }
       ]
     },
-    "store:default"
+    "store:default",
+    "dialog:default"
   ]
 }
