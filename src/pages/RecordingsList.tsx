@@ -123,11 +123,6 @@ export default function RecordingsList() {
                                     </div>
                                 </button>
                                 <div className="flex items-center gap-2">
-                                    {recording.documentation && (
-                                        <span className="px-2 py-1 bg-green-600/20 text-green-500 text-xs rounded">
-                                            Has docs
-                                        </span>
-                                    )}
                                     <Tooltip content="Delete recording">
                                         <button
                                             onClick={(e) => {

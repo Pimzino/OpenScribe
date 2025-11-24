@@ -16,6 +16,7 @@ interface SettingsState {
     screenshotPath: string;
     startRecordingHotkey: HotkeyBinding;
     stopRecordingHotkey: HotkeyBinding;
+    captureHotkey: HotkeyBinding;
     isLoaded: boolean;
     setOpenaiBaseUrl: (url: string) => void;
     setOpenaiApiKey: (key: string) => void;
@@ -23,6 +24,7 @@ interface SettingsState {
     setScreenshotPath: (path: string) => void;
     setStartRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setStopRecordingHotkey: (hotkey: HotkeyBinding) => void;
+    setCaptureHotkey: (hotkey: HotkeyBinding) => void;
     loadSettings: () => Promise<void>;
     saveSettings: () => Promise<void>;
     getDefaultScreenshotPath: () => Promise<string>;
@@ -39,6 +41,7 @@ async function getStore(): Promise<Store> {
 
 const defaultStartHotkey: HotkeyBinding = { ctrl: true, shift: false, alt: true, key: "KeyR" };
 const defaultStopHotkey: HotkeyBinding = { ctrl: true, shift: false, alt: true, key: "KeyS" };
+const defaultCaptureHotkey: HotkeyBinding = { ctrl: true, shift: false, alt: true, key: "KeyC" };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     openaiBaseUrl: "https://api.openai.com/v1",
@@ -47,6 +50,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     screenshotPath: "",
     startRecordingHotkey: defaultStartHotkey,
     stopRecordingHotkey: defaultStopHotkey,
+    captureHotkey: defaultCaptureHotkey,
     isLoaded: false,
 
     setOpenaiBaseUrl: (url) => set({ openaiBaseUrl: url }),
@@ -55,6 +59,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     setScreenshotPath: (path) => set({ screenshotPath: path }),
     setStartRecordingHotkey: (hotkey) => set({ startRecordingHotkey: hotkey }),
     setStopRecordingHotkey: (hotkey) => set({ stopRecordingHotkey: hotkey }),
+    setCaptureHotkey: (hotkey) => set({ captureHotkey: hotkey }),
 
     getDefaultScreenshotPath: async () => {
         try {
@@ -74,6 +79,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             const screenshotPath = await store.get<string>("screenshotPath");
             const startHotkey = await store.get<HotkeyBinding>("startRecordingHotkey");
             const stopHotkey = await store.get<HotkeyBinding>("stopRecordingHotkey");
+            const captureHotkey = await store.get<HotkeyBinding>("captureHotkey");
 
             // Get default screenshot path if not set
             let finalScreenshotPath = screenshotPath || "";
@@ -101,6 +107,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 screenshotPath: finalScreenshotPath,
                 startRecordingHotkey: startHotkey || defaultStartHotkey,
                 stopRecordingHotkey: stopHotkey || defaultStopHotkey,
+                captureHotkey: captureHotkey || defaultCaptureHotkey,
                 isLoaded: true,
             });
         } catch (error) {
@@ -112,7 +119,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     saveSettings: async () => {
         try {
             const store = await getStore();
-            const { openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, startRecordingHotkey, stopRecordingHotkey } = get();
+            const { openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
 
             await store.set("openaiBaseUrl", openaiBaseUrl);
             await store.set("openaiApiKey", openaiApiKey);
@@ -120,6 +127,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             await store.set("screenshotPath", screenshotPath);
             await store.set("startRecordingHotkey", startRecordingHotkey);
             await store.set("stopRecordingHotkey", stopRecordingHotkey);
+            await store.set("captureHotkey", captureHotkey);
             await store.save();
 
             // Register the new screenshot path with asset protocol scope

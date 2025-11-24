@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { FileText, TrendingUp, List, Settings, Info } from "lucide-react";
+import { FileText, TrendingUp, List, Settings, Info, Coffee } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import AboutModal from "./AboutModal";
 
 type Page = "dashboard" | "recordings" | "settings" | "new-recording" | "recording-detail";
@@ -55,6 +56,15 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                 </nav>
 
                 <div className="border-t border-zinc-800 pt-4 mt-4">
+                    <button
+                        onClick={() => {
+                            openUrl("https://buymeacoffee.com/Pimzino").catch(console.error);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium bg-amber-500 hover:bg-amber-400 transition-colors text-zinc-900 mb-2"
+                    >
+                        <Coffee size={16} />
+                        Buy me a coffee
+                    </button>
                     <button
                         onClick={() => setShowAbout(true)}
                         className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"

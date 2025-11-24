@@ -3,7 +3,7 @@ use std::time::{SystemTime, Instant, Duration};
 use std::fs;
 use std::io::BufWriter;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Listener};
 use rdev::{listen, EventType, Button};
 use xcap::Monitor;
 use image::codecs::jpeg::JpegEncoder;
@@ -40,6 +40,7 @@ pub struct RecordingState {
     pub is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
     pub start_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
     pub stop_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
+    pub capture_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
 }
 
 impl RecordingState {
@@ -58,6 +59,12 @@ impl RecordingState {
                 alt: true,
                 key: "KeyS".to_string(),
             })),
+            capture_hotkey: std::sync::Arc::new(std::sync::Mutex::new(HotkeyBinding {
+                ctrl: true,
+                shift: false,
+                alt: true,
+                key: "KeyC".to_string(),
+            })),
         }
     }
 }
@@ -65,6 +72,7 @@ impl RecordingState {
 enum RecorderEvent {
     Click { x: f64, y: f64 },
     Key { key: rdev::Key, text: Option<String> },
+    Capture,
 }
 
 struct CaptureData {
@@ -99,6 +107,15 @@ pub fn start_listener(
     let (tx_encode, rx_encode) = mpsc::channel::<CaptureData>();
 
     let app_clone = app.clone();
+
+    // Listen for capture hotkey event from global shortcut
+    let tx_capture = tx_event.clone();
+    let is_recording_for_capture = is_recording.clone();
+    app.listen("hotkey-capture", move |_| {
+        if *is_recording_for_capture.lock().unwrap() {
+            let _ = tx_capture.send(RecorderEvent::Capture);
+        }
+    });
 
     // Thread 3: Encoder/Emitter (Write to temp files - much faster than base64)
     thread::spawn(move || {
@@ -312,6 +329,41 @@ pub fn start_listener(
                                 step_type: "click".to_string(),
                                 text: None,
                                 element_info,
+                            });
+                        }
+                    }
+                }
+                RecorderEvent::Capture => {
+                    // Manual capture - take screenshot of current screen
+                    // Use last click position to determine which monitor
+                    if let Some(mon) = get_monitor_at_point(last_click_pos.0, last_click_pos.1) {
+                        if let Ok(image) = mon.capture_image() {
+                            let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+
+                            // Flush any pending text first
+                            if !key_buffer.trim().is_empty() {
+                                let _ = tx_encode.send(CaptureData {
+                                    x: None,
+                                    y: None,
+                                    image: image::DynamicImage::ImageRgba8(image.clone()),
+                                    timestamp,
+                                    step_type: "type".to_string(),
+                                    text: Some(key_buffer.trim().to_string()),
+                                    element_info: None,
+                                });
+                                key_buffer.clear();
+                                last_key_time = None;
+                            }
+
+                            // Emit capture step
+                            let _ = tx_encode.send(CaptureData {
+                                x: None,
+                                y: None,
+                                image: image::DynamicImage::ImageRgba8(image),
+                                timestamp,
+                                step_type: "capture".to_string(),
+                                text: None,
+                                element_info: None,
                             });
                         }
                     }

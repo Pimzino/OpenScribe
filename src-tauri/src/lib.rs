@@ -113,18 +113,22 @@ fn binding_to_shortcut(binding: &HotkeyBinding) -> Option<Shortcut> {
 }
 
 #[tauri::command]
-fn set_hotkeys(app: AppHandle, state: State<'_, RecordingState>, start: HotkeyBinding, stop: HotkeyBinding) -> Result<(), String> {
+fn set_hotkeys(app: AppHandle, state: State<'_, RecordingState>, start: HotkeyBinding, stop: HotkeyBinding, capture: Option<HotkeyBinding>) -> Result<(), String> {
     let global_shortcut = app.global_shortcut();
 
     // Get old shortcuts to unregister
     let old_start = state.start_hotkey.lock().unwrap().clone();
     let old_stop = state.stop_hotkey.lock().unwrap().clone();
+    let old_capture = state.capture_hotkey.lock().unwrap().clone();
 
     // Unregister old shortcuts
     if let Some(shortcut) = binding_to_shortcut(&old_start) {
         let _ = global_shortcut.unregister(shortcut);
     }
     if let Some(shortcut) = binding_to_shortcut(&old_stop) {
+        let _ = global_shortcut.unregister(shortcut);
+    }
+    if let Some(shortcut) = binding_to_shortcut(&old_capture) {
         let _ = global_shortcut.unregister(shortcut);
     }
 
@@ -145,9 +149,20 @@ fn set_hotkeys(app: AppHandle, state: State<'_, RecordingState>, start: HotkeyBi
         }).map_err(|e| e.to_string())?;
     }
 
+    // Register capture hotkey if provided
+    let capture_binding = capture.unwrap_or_else(|| old_capture.clone());
+    if let Some(shortcut) = binding_to_shortcut(&capture_binding) {
+        global_shortcut.on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                let _ = _app.emit("hotkey-capture", ());
+            }
+        }).map_err(|e| e.to_string())?;
+    }
+
     // Update state
     *state.start_hotkey.lock().unwrap() = start;
     *state.stop_hotkey.lock().unwrap() = stop;
+    *state.capture_hotkey.lock().unwrap() = capture_binding;
 
     Ok(())
 }
@@ -253,16 +268,16 @@ fn validate_screenshot_path(path: String) -> Result<bool, String> {
 #[tauri::command]
 fn register_asset_scope(app: AppHandle, path: String) -> Result<(), String> {
     let path = PathBuf::from(&path);
-    
+
     if path.as_os_str().is_empty() {
         return Ok(());
     }
-    
+
     // Ensure directory exists
     if !path.exists() {
         let _ = std::fs::create_dir_all(&path);
     }
-    
+
     // Add the directory and all subdirectories to the asset protocol scope
     app.asset_protocol_scope()
         .allow_directory(&path, true)
@@ -289,6 +304,7 @@ pub fn run() {
     let is_recording_clone = recording_state.is_recording.clone();
     let start_hotkey_clone = recording_state.start_hotkey.clone();
     let stop_hotkey_clone = recording_state.stop_hotkey.clone();
+    let capture_hotkey_clone = recording_state.capture_hotkey.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -312,6 +328,7 @@ pub fn run() {
 
             let start_binding = start_hotkey_clone.lock().unwrap().clone();
             let stop_binding = stop_hotkey_clone.lock().unwrap().clone();
+            let capture_binding = capture_hotkey_clone.lock().unwrap().clone();
 
             if let Some(shortcut) = binding_to_shortcut(&start_binding) {
                 let _ = global_shortcut.on_shortcut(shortcut, |_app, _shortcut, event| {
@@ -325,6 +342,14 @@ pub fn run() {
                 let _ = global_shortcut.on_shortcut(shortcut, |_app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
                         let _ = _app.emit("hotkey-stop", ());
+                    }
+                });
+            }
+
+            if let Some(shortcut) = binding_to_shortcut(&capture_binding) {
+                let _ = global_shortcut.on_shortcut(shortcut, |_app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let _ = _app.emit("hotkey-capture", ());
                     }
                 });
             }

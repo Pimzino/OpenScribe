@@ -29,6 +29,7 @@ pub struct Step {
     pub element_value: Option<String>,
     pub app_name: Option<String>,
     pub order_index: i32,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,6 +44,7 @@ pub struct StepInput {
     pub element_type: Option<String>,
     pub element_value: Option<String>,
     pub app_name: Option<String>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -119,6 +121,18 @@ impl Database {
             "CREATE INDEX IF NOT EXISTS idx_steps_recording_id ON steps(recording_id)",
             [],
         )?;
+
+        // Migration: Add description column if it doesn't exist
+        let has_description: bool = self.conn
+            .prepare("SELECT description FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_description {
+            self.conn.execute(
+                "ALTER TABLE steps ADD COLUMN description TEXT",
+                [],
+            )?;
+        }
 
         Ok(())
     }
@@ -224,8 +238,8 @@ impl Database {
             };
 
             self.conn.execute(
-                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![
                     step_id,
                     recording_id,
@@ -239,7 +253,8 @@ impl Database {
                     step.element_type,
                     step.element_value,
                     step.app_name,
-                    index as i32
+                    index as i32,
+                    step.description
                 ],
             )?;
         }
@@ -296,8 +311,8 @@ impl Database {
             };
 
             self.conn.execute(
-                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![
                     step_id,
                     recording_id,
@@ -311,7 +326,8 @@ impl Database {
                     step.element_type,
                     step.element_value,
                     step.app_name,
-                    index as i32
+                    index as i32,
+                    step.description
                 ],
             )?;
         }
@@ -379,7 +395,7 @@ impl Database {
             Some(rec) => {
                 let mut stmt = self.conn.prepare(
                     "SELECT id, recording_id, type_, x, y, text, timestamp, screenshot_path,
-                            element_name, element_type, element_value, app_name, order_index
+                            element_name, element_type, element_value, app_name, order_index, description
                      FROM steps WHERE recording_id = ?1 ORDER BY order_index"
                 )?;
 
@@ -398,6 +414,7 @@ impl Database {
                         element_value: row.get(10)?,
                         app_name: row.get(11)?,
                         order_index: row.get(12)?,
+                        description: row.get(13)?,
                     })
                 })?.collect::<Result<Vec<_>>>()?;
 

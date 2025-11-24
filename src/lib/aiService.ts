@@ -85,11 +85,18 @@ For CLICK actions:
 For TYPE actions:
 - Reference the exact text the user typed
 
+For CAPTURE actions:
+- These are manual screenshots taken to show results or output
+- Describe what is visible on the screen (e.g., command output, results, confirmation messages)
+- Focus on explaining what the user should observe or verify
+
 Guidelines:
 - Write in imperative mood (e.g., "Click the Submit button", "Type 'hello' in the search field")
-- Be specific about the UI element
+- For capture steps, describe observations (e.g., "Observe the ping results showing 4 successful replies")
+- Be specific about the UI element or output
 - Keep to 1-2 sentences
-- No step numbers, markdown, or bullet points`;
+- No step numbers, markdown, or bullet points
+- If a user description is provided, incorporate it into your response`;
 
     let actionDescription: string;
     if (step.type_ === 'click') {
@@ -104,8 +111,16 @@ Guidelines:
         } else {
             actionDescription = `User clicked at coordinates (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`;
         }
-    } else {
+    } else if (step.type_ === 'type') {
         actionDescription = `User typed exactly: "${step.text}"`;
+    } else {
+        // capture type
+        actionDescription = `User took a manual screenshot to capture the current screen state/output`;
+    }
+
+    // Add user description if provided
+    if (step.description) {
+        actionDescription += `\n\nUser note: "${step.description}"`;
     }
 
     // Build context from previous steps
@@ -215,6 +230,7 @@ interface StepLike {
     element_type?: string;
     element_value?: string;
     app_name?: string;
+    description?: string;
 }
 
 export async function generateDocumentation(steps: StepLike[], config?: AIConfig): Promise<string> {
@@ -248,10 +264,12 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
         const { step, screenshotBase64 } = stepsWithBase64[i];
 
         // For click steps, crop image around the click point
+        // For capture and type steps, use full image
         let imageToSend = screenshotBase64;
         if (step.type_ === 'click' && step.x && step.y && screenshotBase64) {
             imageToSend = await cropAroundPoint(screenshotBase64, step.x, step.y, 300);
         }
+        // For capture steps, use full image to show complete output/results
 
         const description = await generateStepDescription(
             step,

@@ -16,12 +16,14 @@ export default function Settings() {
         screenshotPath,
         startRecordingHotkey,
         stopRecordingHotkey,
+        captureHotkey,
         setOpenaiBaseUrl,
         setOpenaiApiKey,
         setOpenaiModel,
         setScreenshotPath,
         setStartRecordingHotkey,
         setStopRecordingHotkey,
+        setCaptureHotkey,
         saveSettings,
         loadSettings,
         isLoaded,
@@ -31,7 +33,7 @@ export default function Settings() {
     const [showApiKey, setShowApiKey] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [capturingHotkey, setCapturingHotkey] = useState<"start" | "stop" | null>(null);
+    const [capturingHotkey, setCapturingHotkey] = useState<"start" | "stop" | "capture" | null>(null);
     const [pathError, setPathError] = useState<string | null>(null);
     const [validatingPath, setValidatingPath] = useState(false);
     const [apiKeyError, setApiKeyError] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export default function Settings() {
         return parts.join(" + ");
     };
 
-    const handleHotkeyCapture = (e: React.KeyboardEvent, type: "start" | "stop") => {
+    const handleHotkeyCapture = (e: React.KeyboardEvent, type: "start" | "stop" | "capture") => {
         e.preventDefault();
         if (e.key === "Escape") {
             setCapturingHotkey(null);
@@ -116,8 +118,10 @@ export default function Settings() {
         };
         if (type === "start") {
             setStartRecordingHotkey(hotkey);
-        } else {
+        } else if (type === "stop") {
             setStopRecordingHotkey(hotkey);
+        } else {
+            setCaptureHotkey(hotkey);
         }
         setCapturingHotkey(null);
     };
@@ -156,7 +160,10 @@ export default function Settings() {
 
     const startWarning = getHotkeyWarning(startRecordingHotkey);
     const stopWarning = getHotkeyWarning(stopRecordingHotkey);
-    const hotkeysMatch = areHotkeysEqual(startRecordingHotkey, stopRecordingHotkey);
+    const captureWarning = getHotkeyWarning(captureHotkey);
+    const hotkeysMatch = areHotkeysEqual(startRecordingHotkey, stopRecordingHotkey) ||
+        areHotkeysEqual(startRecordingHotkey, captureHotkey) ||
+        areHotkeysEqual(stopRecordingHotkey, captureHotkey);
 
     useEffect(() => {
         if (!isLoaded) {
@@ -346,7 +353,7 @@ export default function Settings() {
                             </div>
 
                             {/* Stop Recording Hotkey */}
-                            <div>
+                            <div className="mb-4">
                                 <label className="block text-sm font-medium text-zinc-300 mb-2">
                                     Stop Recording
                                 </label>
@@ -367,9 +374,35 @@ export default function Settings() {
                                     <p className="mt-1 text-xs text-yellow-500">{stopWarning}</p>
                                 )}
                             </div>
+
+                            {/* Manual Capture Hotkey */}
+                            <div>
+                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                    Manual Capture (Screenshot)
+                                </label>
+                                <button
+                                    onClick={() => setCapturingHotkey("capture")}
+                                    onKeyDown={(e) => capturingHotkey === "capture" && handleHotkeyCapture(e, "capture")}
+                                    className={`w-full px-4 py-2 bg-zinc-900 border rounded-md text-left font-mono text-sm transition-colors ${
+                                        capturingHotkey === "capture"
+                                            ? "border-blue-600 text-blue-400"
+                                            : captureWarning
+                                            ? "border-yellow-600 text-white hover:border-yellow-500"
+                                            : "border-zinc-800 text-white hover:border-zinc-700"
+                                    }`}
+                                >
+                                    {capturingHotkey === "capture" ? "Press keys..." : formatHotkey(captureHotkey)}
+                                </button>
+                                {captureWarning && (
+                                    <p className="mt-1 text-xs text-yellow-500">{captureWarning}</p>
+                                )}
+                                <p className="mt-1 text-xs text-zinc-500">
+                                    Use during recording to capture results/outputs
+                                </p>
+                            </div>
                             {hotkeysMatch && (
                                 <p className="mt-2 text-xs text-red-500">
-                                    Start and stop hotkeys cannot be the same
+                                    Hotkeys cannot be the same
                                 </p>
                             )}
                             <p className="mt-2 text-xs text-zinc-500">

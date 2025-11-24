@@ -24,6 +24,7 @@ export interface Step {
     element_value?: string;
     app_name?: string;
     order_index: number;
+    description?: string;
 }
 
 export interface RecordingWithSteps {
@@ -49,6 +50,7 @@ export interface StepInput {
     element_type?: string;
     element_value?: string;
     app_name?: string;
+    description?: string;
 }
 
 interface RecordingsState {

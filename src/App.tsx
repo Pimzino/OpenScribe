@@ -51,7 +51,8 @@ function App() {
           setIsRecording(true);
           clearSteps();
           navigate("/new-recording");
-          await getCurrentWindow().setFocus();
+          // Minimize window to keep it out of the way during recording
+          await getCurrentWindow().minimize();
         } catch (error) {
           console.error("Failed to start recording:", error);
         }
@@ -63,6 +64,8 @@ function App() {
         try {
           await invoke("stop_recording");
           setIsRecording(false);
+          // Restore window when recording stops
+          await getCurrentWindow().unminimize();
           await getCurrentWindow().setFocus();
         } catch (error) {
           console.error("Failed to stop recording:", error);

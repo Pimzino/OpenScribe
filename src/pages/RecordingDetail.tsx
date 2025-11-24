@@ -339,15 +339,27 @@ export default function RecordingDetail() {
                                 )}
                                 <div className="p-4">
                                     <h3 className="font-medium text-sm text-zinc-300">
-                                        Step {index + 1} ({step.type_ === "click" ? "Click" : "Type"})
+                                        Step {index + 1} ({step.type_ === "click" ? "Click" : step.type_ === "type" ? "Type" : "Capture"})
                                     </h3>
-                                    {step.type_ === "click" ? (
+                                    {step.type_ === "click" && (
                                         <p className="text-xs text-zinc-500 mt-1">
                                             Clicked at ({step.x}, {step.y})
                                         </p>
-                                    ) : (
+                                    )}
+                                    {step.type_ === "type" && step.text && (
                                         <div className="mt-2 bg-zinc-950 p-2 rounded border border-zinc-800 font-mono text-xs text-blue-400 break-words">
                                             "{step.text}"
+                                        </div>
+                                    )}
+                                    {step.type_ === "capture" && (
+                                        <p className="text-xs text-zinc-500 mt-1">
+                                            Manual screenshot capture
+                                        </p>
+                                    )}
+                                    {step.description && (
+                                        <div className="mt-2 bg-zinc-950 p-2 rounded border border-zinc-700 text-xs text-zinc-400">
+                                            <span className="text-zinc-500 font-medium">Description: </span>
+                                            {step.description}
                                         </div>
                                     )}
                                 </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { useRecorderStore, Step } from "../store/recorderStore";
 import { useRecordingsStore, StepInput } from "../store/recordingsStore";
@@ -13,7 +14,7 @@ import Sidebar from "../components/Sidebar";
 
 export default function NewRecording() {
     const navigate = useNavigate();
-    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps } = useRecorderStore();
+    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps, updateStepDescription } = useRecorderStore();
     const { createRecording, saveStepsWithPath } = useRecordingsStore();
     const { screenshotPath } = useSettingsStore();
     const [recordingName, setRecordingName] = useState("");
@@ -61,6 +62,9 @@ export default function NewRecording() {
         try {
             await invoke("stop_recording");
             setIsRecording(false);
+            // Restore window when recording stops
+            await getCurrentWindow().unminimize();
+            await getCurrentWindow().setFocus();
         } catch (error) {
             console.error("Failed to stop recording:", error);
         }
@@ -98,6 +102,7 @@ export default function NewRecording() {
                 element_type: step.element_type,
                 element_value: step.element_value,
                 app_name: step.app_name,
+                description: step.description,
             }));
 
             await saveStepsWithPath(recordingId, name, stepInputs, screenshotPath || undefined);
@@ -245,47 +250,45 @@ export default function NewRecording() {
                                     {deletingIndex === index ? <Spinner size="sm" /> : <X size={14} />}
                                 </button>
                             </Tooltip>
-                            {step.type_ === "click" && step.screenshot ? (
-                                <>
-                                    <div className="aspect-video bg-zinc-950 relative">
-                                        <img
-                                            src={convertFileSrc(step.screenshot)}
-                                            alt={`Step ${index + 1}`}
-                                            className="w-full h-full object-cover"
-                                        />
-                                        <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
-                                            {new Date(step.timestamp).toLocaleTimeString()}
-                                        </div>
+                            {step.screenshot && (
+                                <div className="aspect-video bg-zinc-950 relative">
+                                    <img
+                                        src={convertFileSrc(step.screenshot)}
+                                        alt={`Step ${index + 1}`}
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
+                                        {new Date(step.timestamp).toLocaleTimeString()}
                                     </div>
-                                    <div className="p-4">
-                                        <h3 className="font-medium text-sm text-zinc-300">Step {index + 1} (Click)</h3>
-                                        <p className="text-xs text-zinc-500 mt-1">
-                                            Clicked at ({Math.round(step.x || 0)}, {Math.round(step.y || 0)})
-                                        </p>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    {step.screenshot && (
-                                        <div className="aspect-video bg-zinc-950 relative">
-                                            <img
-                                                src={convertFileSrc(step.screenshot)}
-                                                alt={`Step ${index + 1}`}
-                                                className="w-full h-full object-cover"
-                                            />
-                                            <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
-                                                {new Date(step.timestamp).toLocaleTimeString()}
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="p-4">
-                                        <h3 className="font-medium text-sm text-zinc-300 mb-2">Step {index + 1} (Type)</h3>
-                                        <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words">
-                                            "{step.text}"
-                                        </div>
-                                    </div>
-                                </>
+                                </div>
                             )}
+                            <div className="p-4">
+                                <h3 className="font-medium text-sm text-zinc-300 mb-2">
+                                    Step {index + 1} ({step.type_ === "click" ? "Click" : step.type_ === "type" ? "Type" : "Capture"})
+                                </h3>
+                                {step.type_ === "click" && (
+                                    <p className="text-xs text-zinc-500 mb-2">
+                                        Clicked at ({Math.round(step.x || 0)}, {Math.round(step.y || 0)})
+                                    </p>
+                                )}
+                                {step.type_ === "type" && step.text && (
+                                    <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words mb-2">
+                                        "{step.text}"
+                                    </div>
+                                )}
+                                {step.type_ === "capture" && (
+                                    <p className="text-xs text-zinc-500 mb-2">
+                                        Manual screenshot capture
+                                    </p>
+                                )}
+                                <textarea
+                                    value={step.description || ""}
+                                    onChange={(e) => updateStepDescription(index, e.target.value)}
+                                    placeholder="Add description for AI (optional)..."
+                                    className="w-full px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none"
+                                    rows={2}
+                                />
+                            </div>
                         </div>
                     ))}
 

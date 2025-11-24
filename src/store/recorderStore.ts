@@ -11,6 +11,7 @@ export interface Step {
     element_type?: string;
     element_value?: string;
     app_name?: string;
+    description?: string;
 }
 
 interface RecorderState {
@@ -20,6 +21,7 @@ interface RecorderState {
     addStep: (step: Step) => void;
     removeStep: (index: number) => void;
     clearSteps: () => void;
+    updateStepDescription: (index: number, description: string) => void;
 }
 
 export const useRecorderStore = create<RecorderState>((set) => ({
@@ -29,4 +31,9 @@ export const useRecorderStore = create<RecorderState>((set) => ({
     addStep: (step) => set((state) => ({ steps: [...state.steps, step] })),
     removeStep: (index) => set((state) => ({ steps: state.steps.filter((_, i) => i !== index) })),
     clearSteps: () => set({ steps: [] }),
+    updateStepDescription: (index, description) => set((state) => ({
+        steps: state.steps.map((step, i) =>
+            i === index ? { ...step, description } : step
+        )
+    })),
 }));
