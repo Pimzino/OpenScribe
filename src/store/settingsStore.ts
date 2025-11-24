@@ -46,7 +46,7 @@ const defaultCaptureHotkey: HotkeyBinding = { ctrl: true, shift: false, alt: tru
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     openaiBaseUrl: "https://api.openai.com/v1",
     openaiApiKey: "",
-    openaiModel: "gpt-4o",
+    openaiModel: "",
     screenshotPath: "",
     startRecordingHotkey: defaultStartHotkey,
     stopRecordingHotkey: defaultStopHotkey,
@@ -103,7 +103,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             set({
                 openaiBaseUrl: baseUrl || "https://api.openai.com/v1",
                 openaiApiKey: apiKey || "",
-                openaiModel: model || "gpt-4o",
+                openaiModel: model || "",
                 screenshotPath: finalScreenshotPath,
                 startRecordingHotkey: startHotkey || defaultStartHotkey,
                 stopRecordingHotkey: stopHotkey || defaultStopHotkey,

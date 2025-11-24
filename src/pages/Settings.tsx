@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "../components/Sidebar";
 import Spinner from "../components/Spinner";
+import Tooltip from "../components/Tooltip";
 
 export default function Settings() {
     const navigate = useNavigate();
@@ -223,20 +224,22 @@ export default function Settings() {
                                                 : "border-zinc-800 focus:border-blue-600"
                                         }`}
                                     />
-                                    <button
-                                        onClick={handleBrowseFolder}
-                                        className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors"
-                                        title="Browse for folder"
-                                    >
-                                        <FolderOpen size={16} />
-                                    </button>
-                                    <button
-                                        onClick={handleResetPath}
-                                        className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors"
-                                        title="Reset to default"
-                                    >
-                                        <RotateCcw size={16} />
-                                    </button>
+                                    <Tooltip content="Browse for folder" position="top">
+                                        <button
+                                            onClick={handleBrowseFolder}
+                                            className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors"
+                                        >
+                                            <FolderOpen size={16} />
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip content="Reset to default" position="top">
+                                        <button
+                                            onClick={handleResetPath}
+                                            className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors"
+                                        >
+                                            <RotateCcw size={16} />
+                                        </button>
+                                    </Tooltip>
                                 </div>
                                 {pathError && (
                                     <p className="mt-1 text-xs text-red-500">{pathError}</p>
@@ -281,11 +284,11 @@ export default function Settings() {
                                 type="text"
                                 value={openaiModel}
                                 onChange={(e) => setOpenaiModel(e.target.value)}
-                                placeholder="gpt-4o"
+                                placeholder=""
                                 className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-600 transition-colors"
                             />
                             <p className="mt-1 text-xs text-zinc-500">
-                                Model to use for generation (e.g., gpt-4o, gpt-4-turbo, claude-3-opus)
+                                Model to use for generation
                             </p>
                         </div>
 
@@ -396,9 +399,6 @@ export default function Settings() {
                                 {captureWarning && (
                                     <p className="mt-1 text-xs text-yellow-500">{captureWarning}</p>
                                 )}
-                                <p className="mt-1 text-xs text-zinc-500">
-                                    Use during recording to capture results/outputs
-                                </p>
                             </div>
                             {hotkeysMatch && (
                                 <p className="mt-2 text-xs text-red-500">

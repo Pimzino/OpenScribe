@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRecorderStore } from "../../store/recorderStore";
 import { Square } from "lucide-react";
+import Tooltip from "../../components/Tooltip";
 
 export default function RecorderOverlay() {
     const { isRecording, setIsRecording } = useRecorderStore();
@@ -30,13 +31,14 @@ export default function RecorderOverlay() {
                 <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
                 <span className="text-white font-medium text-sm">Recording...</span>
             </div>
-            <button
-                onClick={stopRecording}
-                className="p-2 bg-red-600 hover:bg-red-700 rounded-md text-white transition-colors"
-                title="Stop Recording"
-            >
-                <Square size={16} />
-            </button>
+            <Tooltip content="Stop Recording">
+                <button
+                    onClick={stopRecording}
+                    className="p-2 bg-red-600 hover:bg-red-700 rounded-md text-white transition-colors"
+                >
+                    <Square size={16} />
+                </button>
+            </Tooltip>
         </div>
     );
 }
