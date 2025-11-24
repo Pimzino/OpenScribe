@@ -469,8 +469,8 @@ impl Database {
         // Try to remove empty directories
         for dir in dirs_to_check {
             // Only remove if empty and not the default screenshots directory
-            if dir != self.screenshots_dir() {
-                let _ = fs::remove_dir(&dir); // Only succeeds if empty
+            if dir != self.screenshots_dir() && dir.exists() {
+                let _ = fs::remove_dir_all(&dir);
             }
         }
 

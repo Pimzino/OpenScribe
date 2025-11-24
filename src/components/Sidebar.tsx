@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileText, TrendingUp, List, Settings, Info, Coffee } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { getVersion } from "@tauri-apps/api/app";
 import AboutModal from "./AboutModal";
 
 type Page = "dashboard" | "recordings" | "settings" | "new-recording" | "recording-detail";
@@ -12,6 +13,11 @@ interface SidebarProps {
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
     const [showAbout, setShowAbout] = useState(false);
+    const [version, setVersion] = useState("");
+
+    useEffect(() => {
+        getVersion().then(setVersion).catch(console.error);
+    }, []);
 
     return (
         <>
@@ -72,7 +78,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                         <Info size={16} />
                         About
                     </button>
-                    <p className="text-xs text-zinc-600 text-center mt-2">v0.1.0</p>
+                    <p className="text-xs text-zinc-600 text-center mt-2">v{version}</p>
                 </div>
             </aside>
 
