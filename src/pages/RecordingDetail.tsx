@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { useRecordingsStore } from "../store/recordingsStore";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
+import { useRecordingsStore, Step as DBStep } from "../store/recordingsStore";
 import { generateDocumentation } from "../lib/aiService";
 import { useSettingsStore } from "../store/settingsStore";
-import { ArrowLeft, Wand2, Check, Pencil, X } from "lucide-react";
+import { ArrowLeft, Wand2, Check, Pencil, X, Save, XCircle, Play, Square, MapPin } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
@@ -47,8 +49,8 @@ import ImageCropper from "../components/ImageCropper";
 export default function RecordingDetail() {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
-    const { currentRecording, getRecording, saveDocumentation, reorderRecordingSteps, loading } = useRecordingsStore();
-    const { openaiApiKey, openaiBaseUrl, openaiModel } = useSettingsStore();
+    const { currentRecording, getRecording, saveDocumentation, loading } = useRecordingsStore();
+    const { openaiApiKey, openaiBaseUrl, openaiModel, screenshotPath } = useSettingsStore();
     const [activeTab, setActiveTab] = useState<"steps" | "docs">("docs");
     const [regenerating, setRegenerating] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -56,6 +58,16 @@ export default function RecordingDetail() {
     const [error, setError] = useState<string | null>(null);
     const [croppingStepId, setCroppingStepId] = useState<string | null>(null);
     const [cropTimestamps, setCropTimestamps] = useState<Record<string, number>>({});
+
+    // New state for delete & record more functionality
+    const [localSteps, setLocalSteps] = useState<DBStep[]>([]);
+    const [deletedStepIds, setDeletedStepIds] = useState<Set<string>>(new Set());
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [insertPosition, setInsertPosition] = useState<number | null>(null);
+    const [isRecordingMore, setIsRecordingMore] = useState(false);
+    const [isSelectingPosition, setIsSelectingPosition] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [deletingStepId, setDeletingStepId] = useState<string | null>(null);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -69,6 +81,46 @@ export default function RecordingDetail() {
             getRecording(id);
         }
     }, [id, getRecording]);
+
+    // Initialize local steps when recording loads
+    useEffect(() => {
+        if (currentRecording?.steps) {
+            setLocalSteps(currentRecording.steps);
+            setDeletedStepIds(new Set());
+            setHasUnsavedChanges(false);
+            setInsertPosition(null);
+        }
+    }, [currentRecording?.recording.id]);
+
+    // Listen for new-step events when recording more steps
+    useEffect(() => {
+        if (!isRecordingMore) return;
+
+        const unlisten = listen<any>("new-step", (event) => {
+            const newStep = event.payload;
+
+            // Insert at selected position
+            setLocalSteps(prev => {
+                const newSteps = [...prev];
+                const insertIdx = insertPosition !== null ? insertPosition : prev.length;
+                newSteps.splice(insertIdx, 0, {
+                    ...newStep,
+                    id: `temp-${Date.now()}-${Math.random()}`, // Temporary ID
+                    screenshot_path: newStep.screenshot // Map screenshot to screenshot_path
+                });
+                return newSteps;
+            });
+
+            // Increment insert position so next step goes after
+            if (insertPosition !== null) {
+                setInsertPosition(prev => prev! + 1);
+            }
+
+            setHasUnsavedChanges(true);
+        });
+
+        return () => { unlisten.then(f => f()); };
+    }, [isRecordingMore, insertPosition]);
 
     const handleRegenerate = async () => {
         if (!currentRecording || !openaiApiKey || !id) return;
@@ -118,6 +170,11 @@ export default function RecordingDetail() {
     };
 
     const handleNavigate = (page: "dashboard" | "recordings" | "settings") => {
+        if (hasUnsavedChanges) {
+            const confirmed = window.confirm("You have unsaved changes. Do you want to discard them?");
+            if (!confirmed) return;
+        }
+
         if (page === "dashboard") navigate('/');
         else if (page === "recordings") navigate('/recordings');
         else if (page === "settings") navigate('/settings');
@@ -126,28 +183,151 @@ export default function RecordingDetail() {
     const handleDragEnd = async (event: DragEndEvent) => {
         const { active, over } = event;
 
-        if (!over || !currentRecording || !id || active.id === over.id) return;
+        if (!over || !id || active.id === over.id) return;
 
-        const steps = currentRecording.steps;
-        const oldIndex = steps.findIndex(s => s.id === active.id);
-        const newIndex = steps.findIndex(s => s.id === over.id);
+        const oldIndex = localSteps.findIndex(s => s.id === active.id);
+        const newIndex = localSteps.findIndex(s => s.id === over.id);
 
         if (oldIndex !== -1 && newIndex !== -1) {
-            try {
-                // Reorder steps array
-                const reorderedSteps = [...steps];
-                const [removed] = reorderedSteps.splice(oldIndex, 1);
-                reorderedSteps.splice(newIndex, 0, removed);
+            // Reorder in local state
+            const reorderedSteps = [...localSteps];
+            const [removed] = reorderedSteps.splice(oldIndex, 1);
+            reorderedSteps.splice(newIndex, 0, removed);
+            setLocalSteps(reorderedSteps);
+            setHasUnsavedChanges(true);
+        }
+    };
 
-                // Extract step IDs in new order
-                const stepIds = reorderedSteps.map(s => s.id);
+    const handleDeleteStep = (stepId: string) => {
+        setDeletingStepId(stepId);
+        setLocalSteps(prev => prev.filter(s => s.id !== stepId));
+        setDeletedStepIds(prev => new Set(prev).add(stepId));
+        setHasUnsavedChanges(true);
+        setTimeout(() => setDeletingStepId(null), 100);
+    };
 
-                // Update in backend
-                await reorderRecordingSteps(id, stepIds);
-            } catch (error) {
-                console.error("Failed to reorder steps:", error);
-                setError(error instanceof Error ? error.message : "Failed to reorder steps");
+    const handleSelectInsertPosition = (index: number) => {
+        setInsertPosition(index);
+    };
+
+    const togglePositionSelection = () => {
+        setIsSelectingPosition(prev => !prev);
+        if (isSelectingPosition) {
+            setInsertPosition(null);
+        }
+    };
+
+    const startRecordingMore = async () => {
+        if (insertPosition === null) {
+            setError("Please select where to insert new steps first");
+            return;
+        }
+
+        try {
+            await invoke("start_recording");
+            setIsRecordingMore(true);
+            setIsSelectingPosition(false);
+            // Minimize window
+            await getCurrentWindow().minimize();
+        } catch (error) {
+            console.error("Failed to start recording:", error);
+            setError(error instanceof Error ? error.message : "Failed to start recording");
+        }
+    };
+
+    const stopRecordingMore = async () => {
+        try {
+            await invoke("stop_recording");
+            setIsRecordingMore(false);
+            // Restore window
+            await getCurrentWindow().unminimize();
+            await getCurrentWindow().setFocus();
+        } catch (error) {
+            console.error("Failed to stop recording:", error);
+            setError(error instanceof Error ? error.message : "Failed to stop recording");
+        }
+    };
+
+    const handleSaveChanges = async () => {
+        if (!id || !hasUnsavedChanges) return;
+
+        setSaving(true);
+        setError(null);
+
+        try {
+            // 1. Delete removed steps
+            for (const stepId of deletedStepIds) {
+                await invoke("delete_step", { stepId });
             }
+
+            // 2. Get recording name for screenshot path
+            const recording = currentRecording?.recording;
+            if (!recording) throw new Error("Recording not found");
+
+            // 3. Prepare new steps for saving
+            const stepsToSave = localSteps
+                .filter(step => step.id.startsWith('temp-'))
+                .map(step => ({
+                    type_: step.type_,
+                    x: step.x,
+                    y: step.y,
+                    text: step.text,
+                    timestamp: step.timestamp,
+                    screenshot: step.screenshot_path,
+                    element_name: step.element_name,
+                    element_type: step.element_type,
+                    element_value: step.element_value,
+                    app_name: step.app_name,
+                    description: step.description,
+                    is_cropped: step.is_cropped,
+                }));
+
+            // 4. Save new steps
+            if (stepsToSave.length > 0) {
+                await invoke("save_steps_with_path", {
+                    recordingId: id,
+                    recordingName: recording.name,
+                    steps: stepsToSave,
+                    screenshotPath: screenshotPath || null
+                });
+            }
+
+            // 5. Reorder all steps based on localSteps order (only existing steps)
+            const existingStepIds = localSteps
+                .filter(s => !s.id.startsWith('temp-'))
+                .map(s => s.id);
+
+            if (existingStepIds.length > 0) {
+                await invoke("reorder_steps", {
+                    recordingId: id,
+                    stepIds: existingStepIds
+                });
+            }
+
+            // 6. Refresh recording
+            await getRecording(id);
+
+            // 7. Reset state
+            setDeletedStepIds(new Set());
+            setHasUnsavedChanges(false);
+            setInsertPosition(null);
+            setIsSelectingPosition(false);
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Failed to save changes";
+            setError(errorMessage);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDiscardChanges = () => {
+        if (currentRecording?.steps) {
+            setLocalSteps(currentRecording.steps);
+            setDeletedStepIds(new Set());
+            setHasUnsavedChanges(false);
+            setInsertPosition(null);
+            setIsSelectingPosition(false);
         }
     };
 
@@ -243,7 +423,13 @@ export default function RecordingDetail() {
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
                             <button
-                                onClick={() => navigate('/recordings')}
+                                onClick={() => {
+                                    if (hasUnsavedChanges) {
+                                        const confirmed = window.confirm("You have unsaved changes. Do you want to discard them?");
+                                        if (!confirmed) return;
+                                    }
+                                    navigate('/recordings');
+                                }}
                                 className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
                             >
                                 <ArrowLeft size={18} />
@@ -258,6 +444,71 @@ export default function RecordingDetail() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {activeTab === "steps" && (
+                            <>
+                                {hasUnsavedChanges && (
+                                    <>
+                                        <Tooltip content="Discard changes">
+                                            <button
+                                                onClick={handleDiscardChanges}
+                                                className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-md transition-colors"
+                                            >
+                                                <XCircle size={18} />
+                                            </button>
+                                        </Tooltip>
+                                        <Tooltip content="Save changes">
+                                            <button
+                                                onClick={handleSaveChanges}
+                                                disabled={saving}
+                                                className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
+                                            >
+                                                {saving ? <Spinner size="sm" /> : <Save size={18} />}
+                                                <span className="text-sm font-medium">Save Changes</span>
+                                            </button>
+                                        </Tooltip>
+                                    </>
+                                )}
+                                {!isRecordingMore && !hasUnsavedChanges && (
+                                    <Tooltip content={isSelectingPosition ? "Cancel position selection" : "Select where to insert new steps"}>
+                                        <button
+                                            onClick={togglePositionSelection}
+                                            className={`px-3 py-2 rounded-md transition-colors flex items-center gap-2 ${
+                                                isSelectingPosition
+                                                    ? 'bg-zinc-800 hover:bg-zinc-700'
+                                                    : 'bg-blue-600 hover:bg-blue-700'
+                                            }`}
+                                        >
+                                            <MapPin size={18} />
+                                            <span className="text-sm font-medium">
+                                                {isSelectingPosition ? 'Cancel' : 'Select Position'}
+                                            </span>
+                                        </button>
+                                    </Tooltip>
+                                )}
+                                {insertPosition !== null && !isRecordingMore && (
+                                    <Tooltip content="Start recording more steps">
+                                        <button
+                                            onClick={startRecordingMore}
+                                            className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors flex items-center gap-2"
+                                        >
+                                            <Play size={18} />
+                                            <span className="text-sm font-medium">Record More</span>
+                                        </button>
+                                    </Tooltip>
+                                )}
+                                {isRecordingMore && (
+                                    <Tooltip content="Stop recording">
+                                        <button
+                                            onClick={stopRecordingMore}
+                                            className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-md transition-colors flex items-center gap-2 animate-pulse"
+                                        >
+                                            <Square size={18} />
+                                            <span className="text-sm font-medium">Stop Recording</span>
+                                        </button>
+                                    </Tooltip>
+                                )}
+                            </>
+                        )}
                         {activeTab === "docs" && currentRecording.recording.documentation && (
                             <>
                                 {isEditing ? (
@@ -427,21 +678,56 @@ export default function RecordingDetail() {
                         onDragEnd={handleDragEnd}
                     >
                         <SortableContext
-                            items={currentRecording.steps.map(s => s.id)}
+                            items={localSteps.map(s => s.id)}
                             strategy={rectSortingStrategy}
                         >
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {currentRecording.steps.map((step, index) => (
-                                    <DraggableStepCard
-                                        key={step.id}
-                                        id={step.id}
-                                        step={step}
-                                        index={index}
-                                        onCrop={() => setCroppingStepId(step.id)}
-                                        onUpdateDescription={(desc) => handleUpdateDescription(step.id, desc)}
-                                        cropTimestamp={cropTimestamps[step.id]}
-                                    />
+                                {localSteps.map((step, index) => (
+                                    <div key={step.id} className="relative">
+                                        {isSelectingPosition && (
+                                            <button
+                                                onClick={() => handleSelectInsertPosition(index)}
+                                                className={`absolute -top-3 left-0 right-0 h-6 flex items-center justify-center z-20 transition-all ${
+                                                    insertPosition === index
+                                                        ? 'bg-green-500/20 border-2 border-green-500'
+                                                        : 'bg-zinc-800/50 border border-zinc-700 hover:bg-zinc-700/50'
+                                                }`}
+                                            >
+                                                <MapPin size={14} className={insertPosition === index ? 'text-green-500' : 'text-zinc-400'} />
+                                                {insertPosition === index && (
+                                                    <span className="ml-1 text-xs text-green-500 font-medium">Insert Here</span>
+                                                )}
+                                            </button>
+                                        )}
+                                        <DraggableStepCard
+                                            id={step.id}
+                                            step={step}
+                                            index={index}
+                                            onDelete={() => handleDeleteStep(step.id)}
+                                            onCrop={() => setCroppingStepId(step.id)}
+                                            onUpdateDescription={(desc) => handleUpdateDescription(step.id, desc)}
+                                            isDeleting={deletingStepId === step.id}
+                                            cropTimestamp={cropTimestamps[step.id]}
+                                        />
+                                    </div>
                                 ))}
+                                {isSelectingPosition && (
+                                    <button
+                                        onClick={() => handleSelectInsertPosition(localSteps.length)}
+                                        className={`h-32 flex items-center justify-center rounded-lg transition-all ${
+                                            insertPosition === localSteps.length
+                                                ? 'bg-green-500/20 border-2 border-green-500'
+                                                : 'bg-zinc-800/50 border-2 border-dashed border-zinc-700 hover:bg-zinc-700/50'
+                                        }`}
+                                    >
+                                        <div className="text-center">
+                                            <MapPin size={24} className={insertPosition === localSteps.length ? 'text-green-500 mx-auto' : 'text-zinc-400 mx-auto'} />
+                                            <span className={`text-sm ${insertPosition === localSteps.length ? 'text-green-500 font-medium' : 'text-zinc-400'}`}>
+                                                {insertPosition === localSteps.length ? 'Insert Here' : 'Insert at End'}
+                                            </span>
+                                        </div>
+                                    </button>
+                                )}
                             </div>
                         </SortableContext>
                     </DndContext>

@@ -552,13 +552,13 @@ impl Database {
                 params![index as i32, step_id, recording_id],
             )?;
         }
-        
+
         let now = chrono::Utc::now().timestamp_millis();
         self.conn.execute(
             "UPDATE recordings SET updated_at = ?1 WHERE id = ?2",
             params![now, recording_id],
         )?;
-        
+
         Ok(())
     }
 
@@ -567,6 +567,30 @@ impl Database {
             "UPDATE steps SET description = ?1 WHERE id = ?2",
             params![description, step_id],
         )?;
+        Ok(())
+    }
+
+    pub fn delete_step(&self, step_id: &str) -> Result<()> {
+        // Get screenshot path before deleting
+        let screenshot_path: Option<String> = self.conn
+            .query_row(
+                "SELECT screenshot_path FROM steps WHERE id = ?1",
+                params![step_id],
+                |row| row.get(0)
+            )
+            .optional()?;
+
+        // Delete screenshot file if exists
+        if let Some(path) = screenshot_path {
+            let _ = fs::remove_file(path);
+        }
+
+        // Delete from database
+        self.conn.execute(
+            "DELETE FROM steps WHERE id = ?1",
+            params![step_id],
+        )?;
+
         Ok(())
     }
 }

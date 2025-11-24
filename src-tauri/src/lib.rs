@@ -327,6 +327,14 @@ fn update_step_description(db: State<'_, DatabaseState>, step_id: String, descri
 }
 
 #[tauri::command]
+fn delete_step(db: State<'_, DatabaseState>, step_id: String) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .delete_step(&step_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn save_steps_with_path(
     db: State<'_, DatabaseState>,
     recording_id: String,
@@ -419,7 +427,8 @@ pub fn run() {
             save_cropped_image,
             update_step_screenshot,
             reorder_steps,
-            update_step_description
+            update_step_description,
+            delete_step
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
