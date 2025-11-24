@@ -30,6 +30,7 @@ pub struct Step {
     pub app_name: Option<String>,
     pub order_index: i32,
     pub description: Option<String>,
+    pub is_cropped: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -45,6 +46,7 @@ pub struct StepInput {
     pub element_value: Option<String>,
     pub app_name: Option<String>,
     pub description: Option<String>,
+    pub is_cropped: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -130,6 +132,18 @@ impl Database {
         if !has_description {
             self.conn.execute(
                 "ALTER TABLE steps ADD COLUMN description TEXT",
+                [],
+            )?;
+        }
+
+        // Migration: Add is_cropped column if it doesn't exist
+        let has_is_cropped: bool = self.conn
+            .prepare("SELECT is_cropped FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_is_cropped {
+            self.conn.execute(
+                "ALTER TABLE steps ADD COLUMN is_cropped INTEGER DEFAULT 0",
                 [],
             )?;
         }
@@ -238,8 +252,8 @@ impl Database {
             };
 
             self.conn.execute(
-                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 params![
                     step_id,
                     recording_id,
@@ -254,7 +268,8 @@ impl Database {
                     step.element_value,
                     step.app_name,
                     index as i32,
-                    step.description
+                    step.description,
+                    step.is_cropped.unwrap_or(false) as i32
                 ],
             )?;
         }
@@ -311,8 +326,8 @@ impl Database {
             };
 
             self.conn.execute(
-                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 params![
                     step_id,
                     recording_id,
@@ -327,7 +342,8 @@ impl Database {
                     step.element_value,
                     step.app_name,
                     index as i32,
-                    step.description
+                    step.description,
+                    step.is_cropped.unwrap_or(false) as i32
                 ],
             )?;
         }
@@ -395,7 +411,7 @@ impl Database {
             Some(rec) => {
                 let mut stmt = self.conn.prepare(
                     "SELECT id, recording_id, type_, x, y, text, timestamp, screenshot_path,
-                            element_name, element_type, element_value, app_name, order_index, description
+                            element_name, element_type, element_value, app_name, order_index, description, is_cropped
                      FROM steps WHERE recording_id = ?1 ORDER BY order_index"
                 )?;
 
@@ -415,6 +431,7 @@ impl Database {
                         app_name: row.get(11)?,
                         order_index: row.get(12)?,
                         description: row.get(13)?,
+                        is_cropped: row.get::<_, Option<i32>>(14)?.map(|v| v != 0),
                     })
                 })?.collect::<Result<Vec<_>>>()?;
 
@@ -518,5 +535,13 @@ impl Database {
             recordings_this_week,
             recent_recordings,
         })
+    }
+
+    pub fn update_step_screenshot(&self, step_id: &str, screenshot_path: &str, is_cropped: bool) -> Result<()> {
+        self.conn.execute(
+            "UPDATE steps SET screenshot_path = ?1, is_cropped = ?2 WHERE id = ?3",
+            params![screenshot_path, is_cropped as i32, step_id],
+        )?;
+        Ok(())
     }
 }

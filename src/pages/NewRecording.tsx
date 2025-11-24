@@ -6,15 +6,16 @@ import { listen } from "@tauri-apps/api/event";
 import { useRecorderStore, Step } from "../store/recorderStore";
 import { useRecordingsStore, StepInput } from "../store/recordingsStore";
 import { useSettingsStore } from "../store/settingsStore";
-import { Play, Square, Wand2, X, Save, ArrowLeft } from "lucide-react";
+import { Play, Square, Wand2, X, Save, ArrowLeft, Crop } from "lucide-react";
 import RecorderOverlay from "../features/recorder/RecorderOverlay";
 import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
+import ImageCropper from "../components/ImageCropper";
 
 export default function NewRecording() {
     const navigate = useNavigate();
-    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps, updateStepDescription } = useRecorderStore();
+    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps, updateStepDescription, updateStepScreenshot } = useRecorderStore();
     const { createRecording, saveStepsWithPath } = useRecordingsStore();
     const { screenshotPath } = useSettingsStore();
     const [recordingName, setRecordingName] = useState("");
@@ -23,6 +24,8 @@ export default function NewRecording() {
     const [generateAfterSave, setGenerateAfterSave] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+    const [croppingIndex, setCroppingIndex] = useState<number | null>(null);
+    const [cropTimestamps, setCropTimestamps] = useState<Record<number, number>>({});
 
     const deleteStep = async (index: number) => {
         setDeletingIndex(index);
@@ -82,6 +85,31 @@ export default function NewRecording() {
         setShowNameDialog(true);
     };
 
+    const handleCropSave = async (croppedImageBase64: string) => {
+        if (croppingIndex === null) return;
+
+        const step = steps[croppingIndex];
+        if (!step.screenshot) return;
+
+        try {
+            // Save cropped image to the same path (overwrite)
+            await invoke("save_cropped_image", {
+                path: step.screenshot,
+                base64Data: croppedImageBase64
+            });
+
+            // Update step to mark as cropped
+            updateStepScreenshot(croppingIndex, step.screenshot, true);
+
+            // Update timestamp to force image reload (cache busting)
+            setCropTimestamps(prev => ({ ...prev, [croppingIndex]: Date.now() }));
+        } catch (error) {
+            console.error("Failed to save cropped image:", error);
+        }
+
+        setCroppingIndex(null);
+    };
+
     const saveRecording = async () => {
         if (!recordingName.trim()) return;
 
@@ -103,6 +131,7 @@ export default function NewRecording() {
                 element_value: step.element_value,
                 app_name: step.app_name,
                 description: step.description,
+                is_cropped: step.is_cropped,
             }));
 
             await saveStepsWithPath(recordingId, name, stepInputs, screenshotPath || undefined);
@@ -127,6 +156,15 @@ export default function NewRecording() {
     return (
         <div className="flex h-screen bg-zinc-950 text-white relative">
             <RecorderOverlay />
+
+            {/* Image Cropper Modal */}
+            {croppingIndex !== null && steps[croppingIndex]?.screenshot && (
+                <ImageCropper
+                    imageSrc={convertFileSrc(steps[croppingIndex].screenshot!)}
+                    onSave={handleCropSave}
+                    onCancel={() => setCroppingIndex(null)}
+                />
+            )}
 
             {/* Name Dialog */}
             {showNameDialog && (
@@ -241,25 +279,42 @@ export default function NewRecording() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {steps.map((step, index) => (
                         <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
-                            <Tooltip content="Delete step">
-                                <button
-                                    onClick={() => deleteStep(index)}
-                                    disabled={deletingIndex === index}
-                                    className="absolute top-2 right-2 z-10 p-1 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {deletingIndex === index ? <Spinner size="sm" /> : <X size={14} />}
-                                </button>
-                            </Tooltip>
+                            <div className="absolute top-2 right-2 z-10 flex gap-1">
+                                {step.screenshot && (
+                                    <Tooltip content="Crop screenshot">
+                                        <button
+                                            onClick={() => setCroppingIndex(index)}
+                                            className="p-1 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                                        >
+                                            <Crop size={14} />
+                                        </button>
+                                    </Tooltip>
+                                )}
+                                <Tooltip content="Delete step">
+                                    <button
+                                        onClick={() => deleteStep(index)}
+                                        disabled={deletingIndex === index}
+                                        className="p-1 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {deletingIndex === index ? <Spinner size="sm" /> : <X size={14} />}
+                                    </button>
+                                </Tooltip>
+                            </div>
                             {step.screenshot && (
                                 <div className="aspect-video bg-zinc-950 relative">
                                     <img
-                                        src={convertFileSrc(step.screenshot)}
+                                        src={convertFileSrc(step.screenshot) + (cropTimestamps[index] ? `?t=${cropTimestamps[index]}` : '')}
                                         alt={`Step ${index + 1}`}
                                         className="w-full h-full object-cover"
                                     />
                                     <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
                                         {new Date(step.timestamp).toLocaleTimeString()}
                                     </div>
+                                    {step.is_cropped && (
+                                        <div className="absolute bottom-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs">
+                                            Cropped
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             <div className="p-4">

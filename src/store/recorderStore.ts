@@ -12,6 +12,7 @@ export interface Step {
     element_value?: string;
     app_name?: string;
     description?: string;
+    is_cropped?: boolean;
 }
 
 interface RecorderState {
@@ -22,6 +23,7 @@ interface RecorderState {
     removeStep: (index: number) => void;
     clearSteps: () => void;
     updateStepDescription: (index: number, description: string) => void;
+    updateStepScreenshot: (index: number, screenshot: string, is_cropped: boolean) => void;
 }
 
 export const useRecorderStore = create<RecorderState>((set) => ({
@@ -34,6 +36,11 @@ export const useRecorderStore = create<RecorderState>((set) => ({
     updateStepDescription: (index, description) => set((state) => ({
         steps: state.steps.map((step, i) =>
             i === index ? { ...step, description } : step
+        )
+    })),
+    updateStepScreenshot: (index, screenshot, is_cropped) => set((state) => ({
+        steps: state.steps.map((step, i) =>
+            i === index ? { ...step, screenshot, is_cropped } : step
         )
     })),
 }));

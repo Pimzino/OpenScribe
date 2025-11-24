@@ -25,6 +25,7 @@ export interface Step {
     app_name?: string;
     order_index: number;
     description?: string;
+    is_cropped?: boolean;
 }
 
 export interface RecordingWithSteps {
@@ -51,6 +52,7 @@ export interface StepInput {
     element_value?: string;
     app_name?: string;
     description?: string;
+    is_cropped?: boolean;
 }
 
 interface RecordingsState {

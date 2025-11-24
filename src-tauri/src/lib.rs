@@ -5,6 +5,7 @@ mod database;
 
 use std::sync::Mutex;
 use std::path::PathBuf;
+use std::io::Write;
 use tauri::{AppHandle, State, Manager, Emitter, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
@@ -285,6 +286,31 @@ fn register_asset_scope(app: AppHandle, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn save_cropped_image(path: String, base64_data: String) -> Result<String, String> {
+    // Decode base64 to bytes
+    use base64::{Engine as _, engine::general_purpose};
+    let image_data = general_purpose::STANDARD
+        .decode(&base64_data)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    // Write to file
+    let mut file = std::fs::File::create(&path)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+    file.write_all(&image_data)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    Ok(path)
+}
+
+#[tauri::command]
+fn update_step_screenshot(db: State<'_, DatabaseState>, step_id: String, screenshot_path: String, is_cropped: bool) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .update_step_screenshot(&step_id, &screenshot_path, is_cropped)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn save_steps_with_path(
     db: State<'_, DatabaseState>,
     recording_id: String,
@@ -373,7 +399,9 @@ pub fn run() {
             get_statistics,
             get_default_screenshot_path,
             validate_screenshot_path,
-            register_asset_scope
+            register_asset_scope,
+            save_cropped_image,
+            update_step_screenshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

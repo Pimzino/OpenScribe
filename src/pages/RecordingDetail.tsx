@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useRecordingsStore } from "../store/recordingsStore";
 import { generateDocumentation } from "../lib/aiService";
 import { useSettingsStore } from "../store/settingsStore";
-import { ArrowLeft, Wand2, Check, Pencil, X } from "lucide-react";
+import { ArrowLeft, Wand2, Check, Pencil, X, Crop } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
@@ -39,6 +39,7 @@ import {
     DiffSourceToggleWrapper
 } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
+import ImageCropper from "../components/ImageCropper";
 
 export default function RecordingDetail() {
     const navigate = useNavigate();
@@ -50,6 +51,8 @@ export default function RecordingDetail() {
     const [isEditing, setIsEditing] = useState(false);
     const [editedContent, setEditedContent] = useState("");
     const [error, setError] = useState<string | null>(null);
+    const [croppingStepId, setCroppingStepId] = useState<string | null>(null);
+    const [cropTimestamps, setCropTimestamps] = useState<Record<string, number>>({});
 
     useEffect(() => {
         if (id) {
@@ -110,6 +113,43 @@ export default function RecordingDetail() {
         else if (page === "settings") navigate('/settings');
     };
 
+    const handleCropSave = async (croppedImageBase64: string) => {
+        if (!croppingStepId || !currentRecording) return;
+
+        const step = currentRecording.steps.find(s => s.id === croppingStepId);
+        if (!step?.screenshot_path) return;
+
+        try {
+            // Save cropped image to the same path (overwrite)
+            await invoke("save_cropped_image", {
+                path: step.screenshot_path,
+                base64Data: croppedImageBase64
+            });
+
+            // Update step in database to mark as cropped
+            await invoke("update_step_screenshot", {
+                stepId: croppingStepId,
+                screenshotPath: step.screenshot_path,
+                isCropped: true
+            });
+
+            // Update timestamp to force image reload (cache busting)
+            setCropTimestamps(prev => ({ ...prev, [croppingStepId]: Date.now() }));
+
+            // Refresh recording data
+            if (id) {
+                await getRecording(id);
+            }
+        } catch (error) {
+            console.error("Failed to save cropped image:", error);
+            setError(error instanceof Error ? error.message : "Failed to save cropped image");
+        }
+
+        setCroppingStepId(null);
+    };
+
+    const croppingStep = croppingStepId ? currentRecording?.steps.find(s => s.id === croppingStepId) : null;
+
     if (!id) {
         return (
             <div className="flex h-screen bg-zinc-950 text-white items-center justify-center">
@@ -137,6 +177,15 @@ export default function RecordingDetail() {
     return (
         <div className="flex h-screen bg-zinc-950 text-white">
             <Sidebar activePage="recording-detail" onNavigate={handleNavigate} />
+
+            {/* Image Cropper Modal */}
+            {croppingStep?.screenshot_path && (
+                <ImageCropper
+                    imageSrc={convertFileSrc(croppingStep.screenshot_path)}
+                    onSave={handleCropSave}
+                    onCancel={() => setCroppingStepId(null)}
+                />
+            )}
 
             {/* Main Content */}
             <main className="flex-1 p-8 overflow-auto">
@@ -324,17 +373,34 @@ export default function RecordingDetail() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {currentRecording.steps.map((step, index) => (
-                            <div key={step.id} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+                            <div key={step.id} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
+                                {step.screenshot_path && (
+                                    <div className="absolute top-2 right-2 z-10">
+                                        <Tooltip content="Crop screenshot">
+                                            <button
+                                                onClick={() => setCroppingStepId(step.id)}
+                                                className="p-1 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                                            >
+                                                <Crop size={14} />
+                                            </button>
+                                        </Tooltip>
+                                    </div>
+                                )}
                                 {step.screenshot_path && (
                                     <div className="aspect-video bg-zinc-950 relative">
                                         <img
-                                            src={convertFileSrc(step.screenshot_path)}
+                                            src={convertFileSrc(step.screenshot_path) + (cropTimestamps[step.id] ? `?t=${cropTimestamps[step.id]}` : '')}
                                             alt={`Step ${index + 1}`}
                                             className="w-full h-full object-cover"
                                         />
                                         <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
                                             {new Date(step.timestamp).toLocaleTimeString()}
                                         </div>
+                                        {step.is_cropped && (
+                                            <div className="absolute bottom-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs">
+                                                Cropped
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 <div className="p-4">

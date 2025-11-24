@@ -231,6 +231,7 @@ interface StepLike {
     element_value?: string;
     app_name?: string;
     description?: string;
+    is_cropped?: boolean;
 }
 
 export async function generateDocumentation(steps: StepLike[], config?: AIConfig): Promise<string> {
@@ -263,13 +264,13 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
     for (let i = 0; i < stepsWithBase64.length; i++) {
         const { step, screenshotBase64 } = stepsWithBase64[i];
 
-        // For click steps, crop image around the click point
-        // For capture and type steps, use full image
+        // For click steps that haven't been manually cropped, crop image around the click point
+        // For manually cropped steps, capture steps, and type steps, use the image as-is
         let imageToSend = screenshotBase64;
-        if (step.type_ === 'click' && step.x && step.y && screenshotBase64) {
+        if (step.type_ === 'click' && step.x && step.y && screenshotBase64 && !step.is_cropped) {
             imageToSend = await cropAroundPoint(screenshotBase64, step.x, step.y, 300);
         }
-        // For capture steps, use full image to show complete output/results
+        // For capture steps and manually cropped steps, use full/cropped image as-is
 
         const description = await generateStepDescription(
             step,
