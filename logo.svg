@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Document stack - back page -->
+  <rect x="148" y="72" width="240" height="320" rx="8" fill="#94a3b8"/>
+
+  <!-- Document stack - middle page -->
+  <rect x="132" y="88" width="240" height="320" rx="8" fill="#cbd5e1"/>
+
+  <!-- Document stack - front page -->
+  <rect x="116" y="104" width="240" height="320" rx="8" fill="white"/>
+
+  <!-- Content lines on front document -->
+  <rect x="148" y="152" width="120" height="8" rx="4" fill="#3b82f6"/>
+  <rect x="148" y="180" width="176" height="6" rx="3" fill="#e2e8f0"/>
+  <rect x="148" y="200" width="160" height="6" rx="3" fill="#e2e8f0"/>
+  <rect x="148" y="220" width="168" height="6" rx="3" fill="#e2e8f0"/>
+
+  <rect x="148" y="256" width="100" height="8" rx="4" fill="#3b82f6"/>
+  <rect x="148" y="284" width="176" height="6" rx="3" fill="#e2e8f0"/>
+  <rect x="148" y="304" width="144" height="6" rx="3" fill="#e2e8f0"/>
+  <rect x="148" y="324" width="160" height="6" rx="3" fill="#e2e8f0"/>
+
+  <!-- Pen element - simplified and properly positioned -->
+  <g transform="rotate(35 340 300)">
+    <!-- Pen body -->
+    <rect x="328" y="160" width="24" height="180" rx="4" fill="#1e293b"/>
+
+    <!-- Pen tip -->
+    <polygon points="328,340 340,380 352,340" fill="#1e293b"/>
+
+    <!-- Pen band -->
+    <rect x="328" y="200" width="24" height="12" rx="2" fill="#3b82f6"/>
+  </g>
+</svg>
