@@ -24,6 +24,7 @@ interface RecorderState {
     clearSteps: () => void;
     updateStepDescription: (index: number, description: string) => void;
     updateStepScreenshot: (index: number, screenshot: string, is_cropped: boolean) => void;
+    reorderSteps: (sourceIndex: number, destinationIndex: number) => void;
 }
 
 export const useRecorderStore = create<RecorderState>((set) => ({
@@ -43,4 +44,10 @@ export const useRecorderStore = create<RecorderState>((set) => ({
             i === index ? { ...step, screenshot, is_cropped } : step
         )
     })),
+    reorderSteps: (sourceIndex, destinationIndex) => set((state) => {
+        const newSteps = [...state.steps];
+        const [removed] = newSteps.splice(sourceIndex, 1);
+        newSteps.splice(destinationIndex, 0, removed);
+        return { steps: newSteps };
+    }),
 }));

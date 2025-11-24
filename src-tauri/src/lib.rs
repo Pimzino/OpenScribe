@@ -311,6 +311,22 @@ fn update_step_screenshot(db: State<'_, DatabaseState>, step_id: String, screens
 }
 
 #[tauri::command]
+fn reorder_steps(db: State<'_, DatabaseState>, recording_id: String, step_ids: Vec<String>) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .reorder_steps(&recording_id, step_ids)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_step_description(db: State<'_, DatabaseState>, step_id: String, description: String) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .update_step_description(&step_id, &description)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn save_steps_with_path(
     db: State<'_, DatabaseState>,
     recording_id: String,
@@ -401,7 +417,9 @@ pub fn run() {
             validate_screenshot_path,
             register_asset_scope,
             save_cropped_image,
-            update_step_screenshot
+            update_step_screenshot,
+            reorder_steps,
+            update_step_description
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,13 +4,16 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useRecordingsStore } from "../store/recordingsStore";
 import { generateDocumentation } from "../lib/aiService";
 import { useSettingsStore } from "../store/settingsStore";
-import { ArrowLeft, Wand2, Check, Pencil, X, Crop } from "lucide-react";
+import { ArrowLeft, Wand2, Check, Pencil, X } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
 import MarkdownViewer from "../components/MarkdownViewer";
 import Spinner from "../components/Spinner";
 import { mapStepsForAI } from "../lib/stepMapper";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from "@dnd-kit/sortable";
+import DraggableStepCard from "../components/DraggableStepCard";
 import {
     MDXEditor,
     headingsPlugin,
@@ -44,7 +47,7 @@ import ImageCropper from "../components/ImageCropper";
 export default function RecordingDetail() {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
-    const { currentRecording, getRecording, saveDocumentation, loading } = useRecordingsStore();
+    const { currentRecording, getRecording, saveDocumentation, reorderRecordingSteps, loading } = useRecordingsStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel } = useSettingsStore();
     const [activeTab, setActiveTab] = useState<"steps" | "docs">("docs");
     const [regenerating, setRegenerating] = useState(false);
@@ -53,6 +56,13 @@ export default function RecordingDetail() {
     const [error, setError] = useState<string | null>(null);
     const [croppingStepId, setCroppingStepId] = useState<string | null>(null);
     const [cropTimestamps, setCropTimestamps] = useState<Record<string, number>>({});
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     useEffect(() => {
         if (id) {
@@ -111,6 +121,46 @@ export default function RecordingDetail() {
         if (page === "dashboard") navigate('/');
         else if (page === "recordings") navigate('/recordings');
         else if (page === "settings") navigate('/settings');
+    };
+
+    const handleDragEnd = async (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (!over || !currentRecording || !id || active.id === over.id) return;
+
+        const steps = currentRecording.steps;
+        const oldIndex = steps.findIndex(s => s.id === active.id);
+        const newIndex = steps.findIndex(s => s.id === over.id);
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+            try {
+                // Reorder steps array
+                const reorderedSteps = [...steps];
+                const [removed] = reorderedSteps.splice(oldIndex, 1);
+                reorderedSteps.splice(newIndex, 0, removed);
+
+                // Extract step IDs in new order
+                const stepIds = reorderedSteps.map(s => s.id);
+
+                // Update in backend
+                await reorderRecordingSteps(id, stepIds);
+            } catch (error) {
+                console.error("Failed to reorder steps:", error);
+                setError(error instanceof Error ? error.message : "Failed to reorder steps");
+            }
+        }
+    };
+
+    const handleUpdateDescription = async (stepId: string, description: string) => {
+        if (!id) return;
+        try {
+            await invoke("update_step_description", { stepId, description });
+            // Optionally refresh to ensure consistency
+            await getRecording(id);
+        } catch (error) {
+            console.error("Failed to update step description:", error);
+            setError(error instanceof Error ? error.message : "Failed to update step description");
+        }
     };
 
     const handleCropSave = async (croppedImageBase64: string) => {
@@ -371,67 +421,30 @@ export default function RecordingDetail() {
                         )}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {currentRecording.steps.map((step, index) => (
-                            <div key={step.id} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
-                                {step.screenshot_path && (
-                                    <div className="absolute top-2 right-2 z-10">
-                                        <Tooltip content="Crop screenshot">
-                                            <button
-                                                onClick={() => setCroppingStepId(step.id)}
-                                                className="p-1 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
-                                            >
-                                                <Crop size={14} />
-                                            </button>
-                                        </Tooltip>
-                                    </div>
-                                )}
-                                {step.screenshot_path && (
-                                    <div className="aspect-video bg-zinc-950 relative">
-                                        <img
-                                            src={convertFileSrc(step.screenshot_path) + (cropTimestamps[step.id] ? `?t=${cropTimestamps[step.id]}` : '')}
-                                            alt={`Step ${index + 1}`}
-                                            className="w-full h-full object-cover"
-                                        />
-                                        <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
-                                            {new Date(step.timestamp).toLocaleTimeString()}
-                                        </div>
-                                        {step.is_cropped && (
-                                            <div className="absolute bottom-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs">
-                                                Cropped
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                <div className="p-4">
-                                    <h3 className="font-medium text-sm text-zinc-300">
-                                        Step {index + 1} ({step.type_ === "click" ? "Click" : step.type_ === "type" ? "Type" : "Capture"})
-                                    </h3>
-                                    {step.type_ === "click" && (
-                                        <p className="text-xs text-zinc-500 mt-1">
-                                            Clicked at ({step.x}, {step.y})
-                                        </p>
-                                    )}
-                                    {step.type_ === "type" && step.text && (
-                                        <div className="mt-2 bg-zinc-950 p-2 rounded border border-zinc-800 font-mono text-xs text-blue-400 break-words">
-                                            "{step.text}"
-                                        </div>
-                                    )}
-                                    {step.type_ === "capture" && (
-                                        <p className="text-xs text-zinc-500 mt-1">
-                                            Manual screenshot capture
-                                        </p>
-                                    )}
-                                    {step.description && (
-                                        <div className="mt-2 bg-zinc-950 p-2 rounded border border-zinc-700 text-xs text-zinc-400">
-                                            <span className="text-zinc-500 font-medium">Description: </span>
-                                            {step.description}
-                                        </div>
-                                    )}
-                                </div>
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <SortableContext
+                            items={currentRecording.steps.map(s => s.id)}
+                            strategy={rectSortingStrategy}
+                        >
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {currentRecording.steps.map((step, index) => (
+                                    <DraggableStepCard
+                                        key={step.id}
+                                        id={step.id}
+                                        step={step}
+                                        index={index}
+                                        onCrop={() => setCroppingStepId(step.id)}
+                                        onUpdateDescription={(desc) => handleUpdateDescription(step.id, desc)}
+                                        cropTimestamp={cropTimestamps[step.id]}
+                                    />
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        </SortableContext>
+                    </DndContext>
                 )}
             </main>
         </div>

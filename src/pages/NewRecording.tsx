@@ -6,16 +6,18 @@ import { listen } from "@tauri-apps/api/event";
 import { useRecorderStore, Step } from "../store/recorderStore";
 import { useRecordingsStore, StepInput } from "../store/recordingsStore";
 import { useSettingsStore } from "../store/settingsStore";
-import { Play, Square, Wand2, X, Save, ArrowLeft, Crop } from "lucide-react";
+import { Play, Square, Wand2, Save, ArrowLeft, RotateCcw } from "lucide-react";
 import RecorderOverlay from "../features/recorder/RecorderOverlay";
-import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
 import ImageCropper from "../components/ImageCropper";
+import DraggableStepCard from "../components/DraggableStepCard";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from "@dnd-kit/sortable";
 
 export default function NewRecording() {
     const navigate = useNavigate();
-    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps, updateStepDescription, updateStepScreenshot } = useRecorderStore();
+    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps, updateStepDescription, updateStepScreenshot, reorderSteps } = useRecorderStore();
     const { createRecording, saveStepsWithPath } = useRecordingsStore();
     const { screenshotPath } = useSettingsStore();
     const [recordingName, setRecordingName] = useState("");
@@ -26,6 +28,13 @@ export default function NewRecording() {
     const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
     const [croppingIndex, setCroppingIndex] = useState<number | null>(null);
     const [cropTimestamps, setCropTimestamps] = useState<Record<number, number>>({});
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     const deleteStep = async (index: number) => {
         setDeletingIndex(index);
@@ -55,7 +64,7 @@ export default function NewRecording() {
         try {
             await invoke("start_recording");
             setIsRecording(true);
-            clearSteps();
+            // Don't clear steps to allow resume functionality
         } catch (error) {
             console.error("Failed to start recording:", error);
         }
@@ -108,6 +117,19 @@ export default function NewRecording() {
         }
 
         setCroppingIndex(null);
+    };
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (over && active.id !== over.id) {
+            const oldIndex = steps.findIndex((_, idx) => `step-${idx}` === active.id);
+            const newIndex = steps.findIndex((_, idx) => `step-${idx}` === over.id);
+
+            if (oldIndex !== -1 && newIndex !== -1) {
+                reorderSteps(oldIndex, newIndex);
+            }
+        }
     };
 
     const saveRecording = async () => {
@@ -233,14 +255,25 @@ export default function NewRecording() {
 
                     <div className="flex items-center gap-2">
                         {!isRecording ? (
-                            <Tooltip content="Start recording">
-                                <button
-                                    onClick={startRecording}
-                                    className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-                                >
-                                    <Play size={18} />
-                                </button>
-                            </Tooltip>
+                            steps.length === 0 ? (
+                                <Tooltip content="Start recording">
+                                    <button
+                                        onClick={startRecording}
+                                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                    >
+                                        <Play size={18} />
+                                    </button>
+                                </Tooltip>
+                            ) : (
+                                <Tooltip content="Resume recording">
+                                    <button
+                                        onClick={startRecording}
+                                        className="p-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                                    >
+                                        <RotateCcw size={18} />
+                                    </button>
+                                </Tooltip>
+                            )
                         ) : (
                             <Tooltip content="Stop recording">
                                 <button
@@ -276,84 +309,39 @@ export default function NewRecording() {
                 </div>
 
                 {/* Steps Preview */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {steps.map((step, index) => (
-                        <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
-                            <div className="absolute top-2 right-2 z-10 flex gap-1">
-                                {step.screenshot && (
-                                    <Tooltip content="Crop screenshot">
-                                        <button
-                                            onClick={() => setCroppingIndex(index)}
-                                            className="p-1 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
-                                        >
-                                            <Crop size={14} />
-                                        </button>
-                                    </Tooltip>
-                                )}
-                                <Tooltip content="Delete step">
-                                    <button
-                                        onClick={() => deleteStep(index)}
-                                        disabled={deletingIndex === index}
-                                        className="p-1 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {deletingIndex === index ? <Spinner size="sm" /> : <X size={14} />}
-                                    </button>
-                                </Tooltip>
-                            </div>
-                            {step.screenshot && (
-                                <div className="aspect-video bg-zinc-950 relative">
-                                    <img
-                                        src={convertFileSrc(step.screenshot) + (cropTimestamps[index] ? `?t=${cropTimestamps[index]}` : '')}
-                                        alt={`Step ${index + 1}`}
-                                        className="w-full h-full object-cover"
-                                    />
-                                    <div className="absolute top-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
-                                        {new Date(step.timestamp).toLocaleTimeString()}
-                                    </div>
-                                    {step.is_cropped && (
-                                        <div className="absolute bottom-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs">
-                                            Cropped
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            <div className="p-4">
-                                <h3 className="font-medium text-sm text-zinc-300 mb-2">
-                                    Step {index + 1} ({step.type_ === "click" ? "Click" : step.type_ === "type" ? "Type" : "Capture"})
-                                </h3>
-                                {step.type_ === "click" && (
-                                    <p className="text-xs text-zinc-500 mb-2">
-                                        Clicked at ({Math.round(step.x || 0)}, {Math.round(step.y || 0)})
-                                    </p>
-                                )}
-                                {step.type_ === "type" && step.text && (
-                                    <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words mb-2">
-                                        "{step.text}"
-                                    </div>
-                                )}
-                                {step.type_ === "capture" && (
-                                    <p className="text-xs text-zinc-500 mb-2">
-                                        Manual screenshot capture
-                                    </p>
-                                )}
-                                <textarea
-                                    value={step.description || ""}
-                                    onChange={(e) => updateStepDescription(index, e.target.value)}
-                                    placeholder="Add description for AI (optional)..."
-                                    className="w-full px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none"
-                                    rows={2}
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                >
+                    <SortableContext
+                        items={steps.map((_, idx) => `step-${idx}`)}
+                        strategy={rectSortingStrategy}
+                    >
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {steps.map((step, index) => (
+                                <DraggableStepCard
+                                    key={`step-${index}`}
+                                    id={`step-${index}`}
+                                    step={step}
+                                    index={index}
+                                    onDelete={() => deleteStep(index)}
+                                    onCrop={() => setCroppingIndex(index)}
+                                    onUpdateDescription={(desc) => updateStepDescription(index, desc)}
+                                    isDeleting={deletingIndex === index}
+                                    cropTimestamp={cropTimestamps[index]}
                                 />
-                            </div>
+                            ))}
                         </div>
-                    ))}
+                    </SortableContext>
+                </DndContext>
 
-                    {steps.length === 0 && !isRecording && (
-                        <div className="col-span-full flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500">
-                            <p>No steps recorded yet.</p>
-                            <p className="text-sm">Click "Start Recording" to begin.</p>
-                        </div>
-                    )}
-                </div>
+                {steps.length === 0 && !isRecording && (
+                    <div className="col-span-full flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500">
+                        <p>No steps recorded yet.</p>
+                        <p className="text-sm">Click "Start Recording" to begin.</p>
+                    </div>
+                )}
             </main>
         </div>
     );

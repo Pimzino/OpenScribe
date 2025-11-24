@@ -544,4 +544,29 @@ impl Database {
         )?;
         Ok(())
     }
+
+    pub fn reorder_steps(&self, recording_id: &str, step_ids: Vec<String>) -> Result<()> {
+        for (index, step_id) in step_ids.into_iter().enumerate() {
+            self.conn.execute(
+                "UPDATE steps SET order_index = ?1 WHERE id = ?2 AND recording_id = ?3",
+                params![index as i32, step_id, recording_id],
+            )?;
+        }
+        
+        let now = chrono::Utc::now().timestamp_millis();
+        self.conn.execute(
+            "UPDATE recordings SET updated_at = ?1 WHERE id = ?2",
+            params![now, recording_id],
+        )?;
+        
+        Ok(())
+    }
+
+    pub fn update_step_description(&self, step_id: &str, description: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE steps SET description = ?1 WHERE id = ?2",
+            params![description, step_id],
+        )?;
+        Ok(())
+    }
 }

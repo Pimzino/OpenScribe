@@ -49,7 +49,7 @@ function App() {
         try {
           await invoke("start_recording");
           setIsRecording(true);
-          clearSteps();
+          // Don't clear steps to allow resume functionality
           navigate("/new-recording");
           // Minimize window to keep it out of the way during recording
           await getCurrentWindow().minimize();

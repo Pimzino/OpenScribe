@@ -72,6 +72,7 @@ interface RecordingsState {
     getRecording: (id: string) => Promise<RecordingWithSteps | null>;
     deleteRecording: (id: string) => Promise<void>;
     updateRecordingName: (id: string, name: string) => Promise<void>;
+    reorderRecordingSteps: (recordingId: string, stepIds: string[]) => Promise<void>;
     setCurrentRecording: (recording: RecordingWithSteps | null) => void;
     clearError: () => void;
 }
@@ -192,6 +193,18 @@ export const useRecordingsStore = create<RecordingsState>((set, get) => ({
             set({ loading: false });
         } catch (error) {
             set({ error: String(error), loading: false });
+            throw error;
+        }
+    },
+
+    reorderRecordingSteps: async (recordingId: string, stepIds: string[]) => {
+        set({ error: null });
+        try {
+            await invoke('reorder_steps', { recordingId, stepIds });
+            // Refresh recording to get updated order
+            await get().getRecording(recordingId);
+        } catch (error) {
+            set({ error: error instanceof Error ? error.message : "Failed to reorder steps" });
             throw error;
         }
     },
