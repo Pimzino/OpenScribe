@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { X, Crop, GripVertical } from "lucide-react";
+import { X, Crop, GripVertical, ImageOff, Expand } from "lucide-react";
 import Tooltip from "./Tooltip";
 import Spinner from "./Spinner";
+import ImageViewer from "./ImageViewer";
 
 interface Step {
     type_: string;
@@ -57,11 +59,26 @@ export default function DraggableStepCard({
         opacity: isDragging ? 0.5 : 1,
     };
 
+    const hasScreenshot = step.screenshot || step.screenshot_path;
+    const [isViewerOpen, setIsViewerOpen] = useState(false);
+
+    const screenshotSrc = hasScreenshot
+        ? convertFileSrc(step.screenshot || step.screenshot_path!) + (cropTimestamp ? `?t=${cropTimestamp}` : '')
+        : '';
+
     return (
+        <>
+        {isViewerOpen && hasScreenshot && (
+            <ImageViewer
+                imageSrc={screenshotSrc}
+                title={`Step ${index + 1} Screenshot`}
+                onClose={() => setIsViewerOpen(false)}
+            />
+        )}
         <div
             ref={setNodeRef}
             style={style}
-            className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative"
+            className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative h-80 flex flex-col"
         >
             {/* Drag Handle */}
             <div
@@ -74,7 +91,17 @@ export default function DraggableStepCard({
 
             {/* Action Buttons */}
             <div className="absolute top-2 right-2 z-10 flex gap-1">
-                {(step.screenshot || step.screenshot_path) && onCrop && (
+                {hasScreenshot && (
+                    <Tooltip content="View full size">
+                        <button
+                            onClick={() => setIsViewerOpen(true)}
+                            className="p-1 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center transition-colors"
+                        >
+                            <Expand size={14} />
+                        </button>
+                    </Tooltip>
+                )}
+                {hasScreenshot && onCrop && (
                     <Tooltip content="Crop screenshot">
                         <button
                             onClick={onCrop}
@@ -98,53 +125,64 @@ export default function DraggableStepCard({
             </div>
 
             {/* Screenshot */}
-            {(step.screenshot || step.screenshot_path) && (
-                <div className="aspect-video bg-zinc-950 relative">
-                    <img
-                        src={convertFileSrc(step.screenshot || step.screenshot_path!) + (cropTimestamp ? `?t=${cropTimestamp}` : '')}
-                        alt={`Step ${index + 1}`}
-                        className="w-full h-full object-cover"
-                    />
-                    <div className="absolute top-2 left-12 bg-black/50 px-2 py-1 rounded text-xs">
-                        {new Date(step.timestamp).toLocaleTimeString()}
-                    </div>
-                    {step.is_cropped && (
-                        <div className="absolute bottom-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs">
-                            Cropped
+            <div className="h-40 flex-shrink-0 bg-zinc-950 relative">
+                {hasScreenshot ? (
+                    <>
+                        <img
+                            src={screenshotSrc}
+                            alt={`Step ${index + 1}`}
+                            className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => setIsViewerOpen(true)}
+                        />
+                        <div className="absolute top-2 left-12 bg-black/50 px-2 py-1 rounded text-xs">
+                            {new Date(step.timestamp).toLocaleTimeString()}
                         </div>
-                    )}
-                </div>
-            )}
+                        {step.is_cropped && (
+                            <div className="absolute bottom-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs">
+                                Cropped
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-zinc-600">
+                        <ImageOff size={32} className="mb-2" />
+                        <span className="text-xs">No image</span>
+                    </div>
+                )}
+            </div>
 
             {/* Step Content */}
-            <div className="p-4">
-                <h3 className="font-medium text-sm text-zinc-300 mb-2">
+            <div className="p-4 flex-1 overflow-hidden flex flex-col">
+                <h3 className="font-medium text-sm text-zinc-300 mb-2 flex-shrink-0">
                     Step {index + 1} ({step.type_ === "click" ? "Click" : step.type_ === "type" ? "Type" : "Capture"})
                 </h3>
-                {step.type_ === "click" && (
-                    <p className="text-xs text-zinc-500 mb-2">
-                        Clicked at ({Math.round(step.x || 0)}, {Math.round(step.y || 0)})
-                    </p>
-                )}
-                {step.type_ === "type" && step.text && (
-                    <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words mb-2">
-                        "{step.text}"
-                    </div>
-                )}
-                {step.type_ === "capture" && (
-                    <p className="text-xs text-zinc-500 mb-2">
-                        Manual screenshot capture
-                    </p>
-                )}
+                <div className="flex-1 overflow-y-auto min-h-0">
+                    {step.type_ === "click" && (
+                        <p className="text-xs text-zinc-500 mb-2">
+                            Clicked at ({Math.round(step.x || 0)}, {Math.round(step.y || 0)})
+                        </p>
+                    )}
+                    {step.type_ === "type" && step.text && (
+                        <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words mb-2">
+                            "{step.text}"
+                        </div>
+                    )}
+                    {step.type_ === "capture" && (
+                        <p className="text-xs text-zinc-500 mb-2">
+                            Manual screenshot capture
+                        </p>
+                    )}
+                </div>
                 <textarea
                     value={step.description || ""}
                     onChange={(e) => onUpdateDescription(e.target.value)}
                     placeholder="Add description for AI (optional)..."
-                    className="w-full px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none flex-shrink-0"
                     rows={2}
                 />
             </div>
         </div>
+        </>
     );
 }
 
