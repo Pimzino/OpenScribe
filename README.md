@@ -24,7 +24,7 @@ Built with [Tauri 2](https://tauri.app/), React, and TypeScript.
 
 ## Installation
 
-Download the latest release for your platform from the [Releases](https://github.com/your-username/openscribe/releases) page.
+Download the latest release for your platform from the [Releases](https://github.com/Pimzino/OpenScribe/releases) page.
 
 ## Development Setup
 
@@ -40,7 +40,7 @@ If you prefer to build from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/openscribe.git
+git clone https://github.com/Pimzino/OpenScribe.git
 cd openscribe
 
 # Install dependencies
