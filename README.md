@@ -1,7 +1,58 @@
-# Tauri + React + Typescript
+<p align="center">
+  <img src="public/logo.png" alt="OpenScribe Logo" width="120" />
+</p>
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+<h1 align="center">OpenScribe</h1>
 
-## Recommended IDE Setup
+<p align="center">
+  Automated documentation tool that records your screen interactions and converts them into step-by-step guides.
+</p>
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+---
+
+## Features
+
+- **Interaction Recording** - Captures mouse clicks, keyboard input, and screenshots automatically
+- **Step-by-Step Documentation** - Organizes recordings into editable, reorderable steps
+- **Image Editing** - Built-in cropping tool for screenshots
+- **Export Options** - Generate PDF or DOCX documents from your recordings
+- **Cross-Platform** - Works on Windows, macOS, and Linux
+
+## Tech Stack
+
+Built with [Tauri 2](https://tauri.app/), React, and TypeScript.
+
+## Installation
+
+Download the latest release for your platform from the [Releases](https://github.com/your-username/openscribe/releases) page.
+
+## Development Setup
+
+If you prefer to build from source:
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (v18+)
+- [Rust](https://www.rust-lang.org/tools/install)
+- Platform-specific dependencies for Tauri: [see Tauri prerequisites](https://tauri.app/start/prerequisites/)
+
+### Getting Started
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/openscribe.git
+cd openscribe
+
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run tauri dev
+
+# Build for production
+npm run tauri build
+```
+
+## License
+
+[Apache 2.0](LICENSE)

@@ -65,6 +65,8 @@ export default function NewRecording() {
             await invoke("start_recording");
             setIsRecording(true);
             // Don't clear steps to allow resume functionality
+            // Minimize window to keep it out of the way during recording
+            await getCurrentWindow().minimize();
         } catch (error) {
             console.error("Failed to start recording:", error);
         }
