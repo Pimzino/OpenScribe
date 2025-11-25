@@ -1,0 +1,211 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # VALIDATION JOB
+  # ─────────────────────────────────────────────────────────────
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.content }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        id: validate
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "::error::Invalid version format '$VERSION'. Expected: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check for existing tag
+        run: |
+          TAG="v${{ inputs.version }}"
+          if git rev-parse "$TAG" &>/dev/null; then
+            echo "::error::Tag '$TAG' already exists!"
+            exit 1
+          fi
+
+      - name: Check for existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ inputs.version }}"
+          if gh release view "$TAG" &>/dev/null; then
+            echo "::error::Release '$TAG' already exists!"
+            exit 1
+          fi
+
+      - name: Verify and extract changelog
+        id: changelog
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ ! -f "CHANGELOG.md" ]]; then
+            echo "::error::CHANGELOG.md not found!"
+            exit 1
+          fi
+
+          # Extract section between ## [version] and next ## [
+          CONTENT=$(awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if ($0 ~ "\\[" ver "\\]") { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md)
+
+          if [[ -z "$CONTENT" ]]; then
+            echo "::error::No changelog entry found for version $VERSION"
+            exit 1
+          fi
+
+          {
+            echo "content<<EOF"
+            echo "$CONTENT"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+  # ─────────────────────────────────────────────────────────────
+  # BUILD JOB
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.name }})
+    needs: validate
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            name: Windows-x64
+            args: ''
+            rust-targets: ''
+          - platform: macos-latest
+            name: macOS-ARM64
+            args: '--target aarch64-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin'
+          - platform: macos-latest
+            name: macOS-x64
+            args: '--target x86_64-apple-darwin'
+            rust-targets: 'x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            name: Linux-x64
+            args: ''
+            rust-targets: ''
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Setup Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: "release-${{ matrix.name }}"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.name }}
+          path: |
+            src-tauri/target/**/release/bundle/**/*.exe
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.deb
+          if-no-files-found: error
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────
+  # RELEASE JOB
+  # ─────────────────────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: binaries-*
+          merge-multiple: true
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( \
+            -name "*.exe" -o \
+            -name "*.msi" -o \
+            -name "*.dmg" -o \
+            -name "*.AppImage" -o \
+            -name "*.deb" \
+          \) -exec cp {} release-files/ \;
+
+          echo "Files to release:"
+          ls -la release-files/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          TAG="v$VERSION"
+
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "OpenScribe $TAG" \
+            --notes "${{ needs.validate.outputs.changelog }}" \
+            release-files/*

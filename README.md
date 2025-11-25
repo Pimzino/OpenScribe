@@ -41,7 +41,7 @@ If you prefer to build from source:
 ```bash
 # Clone the repository
 git clone https://github.com/Pimzino/OpenScribe.git
-cd openscribe
+cd OpenScribe
 
 # Install dependencies
 npm install

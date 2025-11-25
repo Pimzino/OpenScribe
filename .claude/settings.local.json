@@ -1,15 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cargo build:*)",
-      "WebSearch",
-      "Bash(git push:*)",
-      "Bash(cat:*)",
-      "Bash(npm install:*)",
-      "Bash(npm run build:*)",
-      "Bash(cargo clean:*)",
-      "Bash(git show:*)",
-      "WebFetch(domain:mdxeditor.dev)"
+      "Bash(find:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:v2.tauri.app)",
+      "WebFetch(domain:keepachangelog.com)"
     ],
     "deny": [],
     "ask": []
