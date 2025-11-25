@@ -1,4 +1,4 @@
-import { FileText, X } from "lucide-react";
+import { X } from "lucide-react";
 
 interface AboutModalProps {
     isOpen: boolean;
@@ -19,9 +19,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 </button>
 
                 <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <FileText size={24} />
-                    </div>
+                    <img src="/logo.png" alt="OpenScribe" className="w-12 h-12" />
                     <div>
                         <h2 className="text-xl font-bold">OpenScribe</h2>
                         <p className="text-sm text-zinc-500">v0.1.0</p>

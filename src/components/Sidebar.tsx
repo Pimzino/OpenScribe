@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FileText, TrendingUp, List, Settings, Info, Coffee } from "lucide-react";
+import { TrendingUp, List, Settings, Info, Coffee } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import AboutModal from "./AboutModal";
@@ -23,9 +23,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         <>
             <aside className="w-64 border-r border-zinc-800 p-4 flex flex-col h-full">
                 <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <FileText size={18} />
-                    </div>
+                    <img src="/logo.png" alt="OpenScribe" className="w-8 h-8" />
                     OpenScribe
                 </h1>
 
