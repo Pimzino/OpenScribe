@@ -1,4 +1,7 @@
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
+import ChangelogModal from "./ChangelogModal";
 
 interface AboutModalProps {
     isOpen: boolean;
@@ -6,6 +9,15 @@ interface AboutModalProps {
 }
 
 export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
+    const [version, setVersion] = useState("");
+    const [showChangelog, setShowChangelog] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && !version) {
+            getVersion().then(setVersion).catch(console.error);
+        }
+    }, [isOpen, version]);
+
     if (!isOpen) return null;
 
     return (
@@ -22,7 +34,12 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                     <img src="/logo.png" alt="OpenScribe" className="w-12 h-12" />
                     <div>
                         <h2 className="text-xl font-bold">OpenScribe</h2>
-                        <p className="text-sm text-zinc-500">v0.1.0</p>
+                        <button
+                            onClick={() => setShowChangelog(true)}
+                            className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                        >
+                            v{version || "..."}
+                        </button>
                     </div>
                 </div>
 
@@ -30,6 +47,8 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                     AI-powered documentation generator that captures your screen interactions and creates step-by-step guides automatically.
                 </p>
             </div>
+
+            <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
         </div>
     );
 }

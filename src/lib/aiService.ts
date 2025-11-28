@@ -1,6 +1,10 @@
 import { Step } from "../store/recorderStore";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { useSettingsStore } from "../store/settingsStore";
+import { getProvider } from "./providers";
+
+// Default timeout for AI requests (in milliseconds)
+const DEFAULT_TIMEOUT = 120000; // 2 minutes for local models which can be slow
 
 // Crop image around a point (for click steps)
 async function cropAroundPoint(
@@ -145,12 +149,18 @@ Guidelines:
         });
     }
 
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+    
+    // Only add Authorization header if API key is provided
+    if (openaiApiKey) {
+        headers["Authorization"] = `Bearer ${openaiApiKey}`;
+    }
+
     const response = await fetch(`${openaiBaseUrl}/chat/completions`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${openaiApiKey}`,
-        },
+        headers,
         body: JSON.stringify({
             model: openaiModel,
             messages: [
@@ -160,12 +170,28 @@ Guidelines:
             max_tokens: 256,
             temperature: 0.3,
         }),
+        signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
     });
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // Provide user-friendly error messages
+        if (response.status === 401) {
+            throw new Error("Authentication failed. Please check your API key in Settings.");
+        }
+        if (response.status === 404) {
+            throw new Error(`Model "${openaiModel}" not found. Please verify the model name in Settings.`);
+        }
+        if (response.status === 429) {
+            throw new Error("Rate limit exceeded. Please wait a moment and try again.");
+        }
+        if (response.status >= 500) {
+            throw new Error("The AI server is experiencing issues. Please try again later.");
+        }
+        
         throw new Error(
-            `OpenAI API error: ${response.status} ${response.statusText}${
+            `AI request failed: ${response.status} ${response.statusText}${
                 errorData.error?.message ? ` - ${errorData.error.message}` : ""
             }`
         );
@@ -188,12 +214,18 @@ Example: "How to Test Network Connectivity Using Ping"`;
 
     const stepsText = stepDescriptions.map((desc, i) => `${i + 1}. ${desc}`).join('\n');
 
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+    
+    // Only add Authorization header if API key is provided
+    if (openaiApiKey) {
+        headers["Authorization"] = `Bearer ${openaiApiKey}`;
+    }
+
     const response = await fetch(`${openaiBaseUrl}/chat/completions`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${openaiApiKey}`,
-        },
+        headers,
         body: JSON.stringify({
             model: openaiModel,
             messages: [
@@ -203,6 +235,7 @@ Example: "How to Test Network Connectivity Using Ping"`;
             max_tokens: 64,
             temperature: 0.3,
         }),
+        signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
     });
 
     if (!response.ok) {
@@ -237,16 +270,54 @@ interface StepLike {
 export async function generateDocumentation(steps: StepLike[], config?: AIConfig): Promise<string> {
     // Use provided config or fall back to store
     const storeState = useSettingsStore.getState();
-    const openaiApiKey = config?.apiKey || storeState.openaiApiKey;
+    const openaiApiKey = config?.apiKey ?? storeState.openaiApiKey;
     const openaiBaseUrl = config?.baseUrl || storeState.openaiBaseUrl;
     const openaiModel = config?.model || storeState.openaiModel;
+    
+    // Get provider configuration to check if API key is required
+    const providerConfig = getProvider(storeState.aiProvider);
+    const requiresApiKey = providerConfig?.requiresApiKey ?? true;
 
-    if (!openaiApiKey) {
-        throw new Error("OpenAI API key not configured. Please go to Settings to add your API key.");
+    if (requiresApiKey && !openaiApiKey) {
+        throw new Error("API key not configured. Please go to Settings to add your API key.");
+    }
+
+    if (!openaiBaseUrl) {
+        throw new Error("Base URL not configured. Please go to Settings to configure the AI provider.");
+    }
+
+    if (!openaiModel) {
+        throw new Error("Model not specified. Please go to Settings to select a model.");
     }
 
     if (steps.length === 0) {
         throw new Error("No steps to generate documentation from.");
+    }
+
+    // Test connection first by checking if server is reachable
+    try {
+        const testResponse = await fetch(`${openaiBaseUrl}/models`, {
+            method: 'GET',
+            headers: openaiApiKey ? { 'Authorization': `Bearer ${openaiApiKey}` } : {},
+            signal: AbortSignal.timeout(10000),
+        }).catch(() => null);
+        
+        // If /models fails, that's okay - some providers don't support it
+        // But if we get a connection refused error, throw a helpful message
+        if (!testResponse && !openaiBaseUrl.includes('api.openai.com')) {
+            // Check if it's a local server that might not be running
+            const isLocalServer = openaiBaseUrl.includes('localhost') || openaiBaseUrl.includes('127.0.0.1');
+            if (isLocalServer) {
+                throw new Error(
+                    `Cannot connect to ${openaiBaseUrl}. Make sure your local AI server is running.`
+                );
+            }
+        }
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('Cannot connect')) {
+            throw error;
+        }
+        // Other errors during test are okay, we'll try the actual request
     }
 
 
@@ -261,28 +332,43 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
 
     // Generate description for each step with context from previous steps
     const stepDescriptions: string[] = [];
-    for (let i = 0; i < stepsWithBase64.length; i++) {
-        const { step, screenshotBase64 } = stepsWithBase64[i];
+    try {
+        for (let i = 0; i < stepsWithBase64.length; i++) {
+            const { step, screenshotBase64 } = stepsWithBase64[i];
 
-        // For click steps that haven't been manually cropped, crop image around the click point
-        // For manually cropped steps, capture steps, and type steps, use the image as-is
-        let imageToSend = screenshotBase64;
-        if (step.type_ === 'click' && step.x && step.y && screenshotBase64 && !step.is_cropped) {
-            imageToSend = await cropAroundPoint(screenshotBase64, step.x, step.y, 300);
+            // For click steps that haven't been manually cropped, crop image around the click point
+            // For manually cropped steps, capture steps, and type steps, use the image as-is
+            let imageToSend = screenshotBase64;
+            if (step.type_ === 'click' && step.x && step.y && screenshotBase64 && !step.is_cropped) {
+                imageToSend = await cropAroundPoint(screenshotBase64, step.x, step.y, 300);
+            }
+            // For capture steps and manually cropped steps, use full/cropped image as-is
+
+            const description = await generateStepDescription(
+                step,
+                i + 1,
+                steps.length,
+                imageToSend,
+                stepDescriptions.slice(), // Pass previous step descriptions as context
+                openaiBaseUrl,
+                openaiApiKey,
+                openaiModel
+            );
+            stepDescriptions.push(description);
         }
-        // For capture steps and manually cropped steps, use full/cropped image as-is
-
-        const description = await generateStepDescription(
-            step,
-            i + 1,
-            steps.length,
-            imageToSend,
-            stepDescriptions.slice(), // Pass previous step descriptions as context
-            openaiBaseUrl,
-            openaiApiKey,
-            openaiModel
-        );
-        stepDescriptions.push(description);
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new Error(
+                "Request timed out. This can happen with slow connections or when using local models. " +
+                "Try using a faster model or check your server's performance."
+            );
+        }
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+            throw new Error(
+                `Connection failed to ${openaiBaseUrl}. Please check that the server is running and accessible.`
+            );
+        }
+        throw error;
     }
 
     // Generate title based on all step descriptions (better context)

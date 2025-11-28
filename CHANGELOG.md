@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2025-05-28
+
+### Added
+- AI provider selection (OpenAI, Ollama, LM Studio, Anthropic, OpenRouter, Custom)
+- Support for local AI models without API keys
+- Auto-detect available models from your AI provider
+- Connection test to verify provider connectivity
+
 ## [0.0.1] - 2025-11-25
 
 ### Added

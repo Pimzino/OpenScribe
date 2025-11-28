@@ -3426,7 +3426,7 @@ dependencies = [
 
 [[package]]
 name = "openscribe"
-version = "0.1.0"
+version = "0.0.2"
 dependencies = [
  "atspi",
  "base64 0.21.7",

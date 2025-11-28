@@ -1,16 +1,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSettingsStore, HotkeyBinding } from "../store/settingsStore";
-import { Save, Eye, EyeOff, FolderOpen, RotateCcw } from "lucide-react";
+import { Save, Eye, EyeOff, FolderOpen, RotateCcw, ChevronDown, RefreshCw, Check, X, ExternalLink } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "../components/Sidebar";
 import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
+import { PROVIDERS, getProvider, testConnection, fetchModels } from "../lib/providers";
 
 export default function Settings() {
     const navigate = useNavigate();
     const {
+        aiProvider,
         openaiBaseUrl,
         openaiApiKey,
         openaiModel,
@@ -18,6 +21,7 @@ export default function Settings() {
         startRecordingHotkey,
         stopRecordingHotkey,
         captureHotkey,
+        setAiProvider,
         setOpenaiBaseUrl,
         setOpenaiApiKey,
         setOpenaiModel,
@@ -38,12 +42,63 @@ export default function Settings() {
     const [pathError, setPathError] = useState<string | null>(null);
     const [validatingPath, setValidatingPath] = useState(false);
     const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+    const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState<{ testing: boolean; success?: boolean; message?: string }>({ testing: false });
+    const [availableModels, setAvailableModels] = useState<string[]>([]);
+    const [fetchingModels, setFetchingModels] = useState(false);
+    const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+
+    const currentProvider = getProvider(aiProvider);
 
     const validateApiKey = (key: string): string | null => {
-        if (!key) return null;
-        if (!key.startsWith("sk-")) return "API key must start with 'sk-'";
-        if (key.length < 20) return "API key must be at least 20 characters";
+        // Skip validation if provider doesn't require API key
+        if (!currentProvider?.requiresApiKey) return null;
+        if (!key) return "API key is required for this provider";
+        // Only validate OpenAI key format for OpenAI provider
+        if (aiProvider === 'openai') {
+            if (!key.startsWith("sk-")) return "OpenAI API key must start with 'sk-'";
+            if (key.length < 20) return "API key seems too short";
+        }
         return null;
+    };
+
+    const handleTestConnection = async () => {
+        setConnectionStatus({ testing: true });
+        const result = await testConnection(
+            openaiBaseUrl,
+            openaiApiKey,
+            currentProvider?.requiresApiKey ?? true
+        );
+        setConnectionStatus({
+            testing: false,
+            success: result.success,
+            message: result.message,
+        });
+        if (result.models && result.models.length > 0) {
+            setAvailableModels(result.models);
+        }
+    };
+
+    const handleFetchModels = async () => {
+        setFetchingModels(true);
+        const models = await fetchModels(
+            openaiBaseUrl,
+            openaiApiKey,
+            currentProvider?.requiresApiKey ?? true
+        );
+        setAvailableModels(models);
+        setFetchingModels(false);
+        if (models.length > 0) {
+            setModelDropdownOpen(true);
+        }
+    };
+
+    const handleProviderChange = (providerId: string) => {
+        setAiProvider(providerId);
+        setProviderDropdownOpen(false);
+        setConnectionStatus({ testing: false });
+        setAvailableModels([]);
+        setApiKeyError(null);
     };
 
     const areHotkeysEqual = (a: HotkeyBinding, b: HotkeyBinding): boolean => {
@@ -172,6 +227,21 @@ export default function Settings() {
         }
     }, [isLoaded, loadSettings]);
 
+    // Close dropdowns when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('[data-dropdown="provider"]')) {
+                setProviderDropdownOpen(false);
+            }
+            if (!target.closest('[data-dropdown="model"]')) {
+                setModelDropdownOpen(false);
+            }
+        };
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
+
     const handleSave = async () => {
         setSaving(true);
         try {
@@ -258,74 +328,226 @@ export default function Settings() {
                             <h3 className="text-lg font-medium text-zinc-200 mb-4">AI</h3>
                         </div>
 
-                        {/* OpenAI Base URL */}
+                        {/* Provider Dropdown */}
+                        <div data-dropdown="provider">
+                            <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                Provider
+                            </label>
+                            <div className="relative">
+                                <button
+                                    onClick={() => setProviderDropdownOpen(!providerDropdownOpen)}
+                                    className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white text-left flex items-center justify-between hover:border-zinc-700 focus:outline-none focus:border-blue-600 transition-colors"
+                                >
+                                    <span>{currentProvider?.name || 'Select provider'}</span>
+                                    <ChevronDown size={16} className={`transition-transform ${providerDropdownOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {providerDropdownOpen && (
+                                    <div className="absolute z-10 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-md shadow-lg max-h-60 overflow-auto">
+                                        {PROVIDERS.map((provider) => (
+                                            <button
+                                                key={provider.id}
+                                                onClick={() => handleProviderChange(provider.id)}
+                                                className={`w-full px-4 py-2 text-left hover:bg-zinc-800 transition-colors ${
+                                                    aiProvider === provider.id ? 'bg-zinc-800 text-blue-400' : 'text-white'
+                                                }`}
+                                            >
+                                                <div className="font-medium">{provider.name}</div>
+                                                {provider.helpText && (
+                                                    <div className="text-xs text-zinc-500 mt-0.5">{provider.helpText}</div>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            {currentProvider?.helpUrl && (
+                                <a
+                                    href={currentProvider.helpUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-1 text-xs text-blue-500 hover:text-blue-400 inline-flex items-center gap-1"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        openUrl(currentProvider.helpUrl!);
+                                    }}
+                                >
+                                    Learn more <ExternalLink size={10} />
+                                </a>
+                            )}
+                        </div>
+
+                        {/* Base URL */}
                         <div>
                             <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                OpenAI Base URL
+                                Base URL
                             </label>
                             <input
                                 type="url"
                                 value={openaiBaseUrl}
-                                onChange={(e) => setOpenaiBaseUrl(e.target.value)}
-                                placeholder="https://api.openai.com/v1"
+                                onChange={(e) => {
+                                    setOpenaiBaseUrl(e.target.value);
+                                    setConnectionStatus({ testing: false });
+                                }}
+                                placeholder={currentProvider?.defaultBaseUrl || "https://api.example.com/v1"}
                                 className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-600 transition-colors"
                             />
                             <p className="mt-1 text-xs text-zinc-500">
-                                Use a custom base URL for OpenAI-compatible APIs (e.g., Azure, local models)
+                                API endpoint for the selected provider
                             </p>
                         </div>
 
-                        {/* Model ID */}
-                        <div>
+                        {/* Model ID with Refresh */}
+                        <div data-dropdown="model">
                             <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                Model ID
-                            </label>
-                            <input
-                                type="text"
-                                value={openaiModel}
-                                onChange={(e) => setOpenaiModel(e.target.value)}
-                                placeholder=""
-                                className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-600 transition-colors"
-                            />
-                            <p className="mt-1 text-xs text-zinc-500">
-                                Model to use for generation
-                            </p>
-                        </div>
-
-                        {/* API Key */}
-                        <div>
-                            <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                API Key
+                                Model
                             </label>
                             <div className="relative">
-                                <input
-                                    type={showApiKey ? "text" : "password"}
-                                    value={openaiApiKey}
-                                    onChange={(e) => {
-                                        setOpenaiApiKey(e.target.value);
-                                        setApiKeyError(validateApiKey(e.target.value));
-                                    }}
-                                    placeholder="sk-..."
-                                    className={`w-full px-4 py-2 pr-10 bg-zinc-900 border rounded-md text-white placeholder-zinc-500 focus:outline-none transition-colors ${
-                                        apiKeyError
-                                            ? "border-red-600 focus:border-red-500"
-                                            : "border-zinc-800 focus:border-blue-600"
-                                    }`}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowApiKey(!showApiKey)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                                >
-                                    {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                                </button>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <input
+                                            type="text"
+                                            value={openaiModel}
+                                            onChange={(e) => {
+                                                setOpenaiModel(e.target.value);
+                                                // Show dropdown with filtered results as user types
+                                                if (availableModels.length > 0) {
+                                                    setModelDropdownOpen(true);
+                                                }
+                                            }}
+                                            onFocus={() => {
+                                                // Auto-fetch models on focus if we don't have any yet
+                                                if (availableModels.length === 0 && openaiBaseUrl) {
+                                                    handleFetchModels();
+                                                }
+                                                if (availableModels.length > 0) {
+                                                    setModelDropdownOpen(true);
+                                                }
+                                            }}
+                                            placeholder={currentProvider?.defaultModel || "model-name"}
+                                            className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-600 transition-colors"
+                                        />
+                                        {modelDropdownOpen && availableModels.length > 0 && (
+                                            <div className="absolute z-10 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-md shadow-lg max-h-48 overflow-auto">
+                                                {availableModels
+                                                    .filter(model => 
+                                                        !openaiModel || 
+                                                        model.toLowerCase().includes(openaiModel.toLowerCase())
+                                                    )
+                                                    .map((model) => (
+                                                        <button
+                                                            key={model}
+                                                            onClick={() => {
+                                                                setOpenaiModel(model);
+                                                                setModelDropdownOpen(false);
+                                                            }}
+                                                            className={`w-full px-4 py-2 text-left hover:bg-zinc-800 transition-colors text-sm ${
+                                                                openaiModel === model ? 'bg-zinc-800 text-blue-400' : 'text-white'
+                                                            }`}
+                                                        >
+                                                            {model}
+                                                        </button>
+                                                    ))}
+                                                {availableModels.filter(model => 
+                                                    !openaiModel || 
+                                                    model.toLowerCase().includes(openaiModel.toLowerCase())
+                                                ).length === 0 && (
+                                                    <div className="px-4 py-2 text-sm text-zinc-500">
+                                                        No matching models
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        {fetchingModels && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                <Spinner size="sm" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <Tooltip content="Refresh models list" position="top">
+                                        <button
+                                            onClick={handleFetchModels}
+                                            disabled={fetchingModels || !openaiBaseUrl}
+                                            className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <RefreshCw size={16} className={fetchingModels ? 'animate-spin' : ''} />
+                                        </button>
+                                    </Tooltip>
+                                </div>
                             </div>
-                            {apiKeyError && (
-                                <p className="mt-1 text-xs text-red-500">{apiKeyError}</p>
-                            )}
                             <p className="mt-1 text-xs text-zinc-500">
-                                Your API key is stored securely on your device
+                                {currentProvider?.supportsVision 
+                                    ? "Use a vision-capable model for best results (e.g., gpt-4o, llava, claude-3)"
+                                    : "Model to use for generation"
+                                }
                             </p>
+                        </div>
+
+                        {/* API Key - Only show if provider requires it */}
+                        {currentProvider?.requiresApiKey && (
+                            <div>
+                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                    API Key
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type={showApiKey ? "text" : "password"}
+                                        value={openaiApiKey}
+                                        onChange={(e) => {
+                                            setOpenaiApiKey(e.target.value);
+                                            setApiKeyError(validateApiKey(e.target.value));
+                                            setConnectionStatus({ testing: false });
+                                        }}
+                                        placeholder={aiProvider === 'openai' ? "sk-..." : "Enter API key"}
+                                        className={`w-full px-4 py-2 pr-10 bg-zinc-900 border rounded-md text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                                            apiKeyError
+                                                ? "border-red-600 focus:border-red-500"
+                                                : "border-zinc-800 focus:border-blue-600"
+                                        }`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowApiKey(!showApiKey)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                                    >
+                                        {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                                {apiKeyError && (
+                                    <p className="mt-1 text-xs text-red-500">{apiKeyError}</p>
+                                )}
+                                <p className="mt-1 text-xs text-zinc-500">
+                                    Your API key is stored securely on your device
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Test Connection Button */}
+                        <div>
+                            <button
+                                onClick={handleTestConnection}
+                                disabled={connectionStatus.testing || !openaiBaseUrl}
+                                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {connectionStatus.testing ? (
+                                    <>
+                                        <Spinner size="sm" />
+                                        Testing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <RefreshCw size={16} />
+                                        Test Connection
+                                    </>
+                                )}
+                            </button>
+                            {connectionStatus.message && (
+                                <div className={`mt-2 flex items-center gap-2 text-sm ${
+                                    connectionStatus.success ? 'text-green-500' : 'text-red-500'
+                                }`}>
+                                    {connectionStatus.success ? <Check size={16} /> : <X size={16} />}
+                                    {connectionStatus.message}
+                                </div>
+                            )}
                         </div>
 
                         {/* Hotkeys Section */}
@@ -414,12 +636,12 @@ export default function Settings() {
                         <div className="pt-4">
                             <button
                                 onClick={handleSave}
-                                disabled={saving || !!apiKeyError || hotkeysMatch}
+                                disabled={saving || (currentProvider?.requiresApiKey && !!apiKeyError) || hotkeysMatch}
                                 className={`flex items-center gap-2 px-6 py-2 rounded-md font-medium transition-colors ${
                                     saved
                                         ? "bg-green-600 hover:bg-green-700"
                                         : "bg-blue-600 hover:bg-blue-700"
-                                } ${saving || !!apiKeyError || hotkeysMatch ? "opacity-50 cursor-not-allowed" : ""}`}
+                                } ${saving || (currentProvider?.requiresApiKey && !!apiKeyError) || hotkeysMatch ? "opacity-50 cursor-not-allowed" : ""}`}
                             >
                                 {saving ? <Spinner size="sm" /> : <Save size={16} />}
                                 {saving ? "Saving..." : saved ? "Saved!" : "Save Settings"}

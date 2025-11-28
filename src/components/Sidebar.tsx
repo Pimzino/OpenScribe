@@ -3,6 +3,7 @@ import { TrendingUp, List, Settings, Info, Coffee } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import AboutModal from "./AboutModal";
+import ChangelogModal from "./ChangelogModal";
 
 type Page = "dashboard" | "recordings" | "settings" | "new-recording" | "recording-detail";
 
@@ -13,6 +14,7 @@ interface SidebarProps {
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
     const [showAbout, setShowAbout] = useState(false);
+    const [showChangelog, setShowChangelog] = useState(false);
     const [version, setVersion] = useState("");
 
     useEffect(() => {
@@ -76,11 +78,17 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                         <Info size={16} />
                         About
                     </button>
-                    <p className="text-xs text-zinc-600 text-center mt-2">v{version}</p>
+                    <button
+                        onClick={() => setShowChangelog(true)}
+                        className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors text-center mt-2 w-full"
+                    >
+                        v{version}
+                    </button>
                 </div>
             </aside>
 
             <AboutModal isOpen={showAbout} onClose={() => setShowAbout(false)} />
+            <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
         </>
     );
 }

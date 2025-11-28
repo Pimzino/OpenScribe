@@ -26,5 +26,8 @@ dist-ssr
 # AI
 .claude/
 
+# Auto-generated
+src/lib/changelog-data.ts
+
 # VSCode
 .vscode/

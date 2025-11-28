@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { load, Store } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
+import { getProvider, getDefaultProvider } from "../lib/providers";
 
 export interface HotkeyBinding {
     ctrl: boolean;
@@ -10,6 +11,7 @@ export interface HotkeyBinding {
 }
 
 interface SettingsState {
+    aiProvider: string;
     openaiBaseUrl: string;
     openaiApiKey: string;
     openaiModel: string;
@@ -18,6 +20,7 @@ interface SettingsState {
     stopRecordingHotkey: HotkeyBinding;
     captureHotkey: HotkeyBinding;
     isLoaded: boolean;
+    setAiProvider: (provider: string) => void;
     setOpenaiBaseUrl: (url: string) => void;
     setOpenaiApiKey: (key: string) => void;
     setOpenaiModel: (model: string) => void;
@@ -44,15 +47,30 @@ const defaultStopHotkey: HotkeyBinding = { ctrl: true, shift: false, alt: true, 
 const defaultCaptureHotkey: HotkeyBinding = { ctrl: true, shift: false, alt: true, key: "KeyC" };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-    openaiBaseUrl: "https://api.openai.com/v1",
+    aiProvider: getDefaultProvider().id,
+    openaiBaseUrl: getDefaultProvider().defaultBaseUrl,
     openaiApiKey: "",
-    openaiModel: "",
+    openaiModel: getDefaultProvider().defaultModel || "",
     screenshotPath: "",
     startRecordingHotkey: defaultStartHotkey,
     stopRecordingHotkey: defaultStopHotkey,
     captureHotkey: defaultCaptureHotkey,
     isLoaded: false,
 
+    setAiProvider: (provider) => {
+        const providerConfig = getProvider(provider);
+        if (providerConfig) {
+            set({
+                aiProvider: provider,
+                openaiBaseUrl: providerConfig.defaultBaseUrl,
+                openaiModel: providerConfig.defaultModel || "",
+                // Clear API key when switching to provider that doesn't need it
+                openaiApiKey: providerConfig.requiresApiKey ? get().openaiApiKey : "",
+            });
+        } else {
+            set({ aiProvider: provider });
+        }
+    },
     setOpenaiBaseUrl: (url) => set({ openaiBaseUrl: url }),
     setOpenaiApiKey: (key) => set({ openaiApiKey: key }),
     setOpenaiModel: (model) => set({ openaiModel: model }),
@@ -73,6 +91,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     loadSettings: async () => {
         try {
             const store = await getStore();
+            const aiProvider = await store.get<string>("aiProvider");
             const baseUrl = await store.get<string>("openaiBaseUrl");
             const apiKey = await store.get<string>("openaiApiKey");
             const model = await store.get<string>("openaiModel");
@@ -100,10 +119,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 }
             }
 
+            // Get provider defaults for any missing values
+            const providerConfig = getProvider(aiProvider || getDefaultProvider().id);
+            const defaultProvider = getDefaultProvider();
+
             set({
-                openaiBaseUrl: baseUrl || "https://api.openai.com/v1",
+                aiProvider: aiProvider || defaultProvider.id,
+                openaiBaseUrl: baseUrl || providerConfig?.defaultBaseUrl || defaultProvider.defaultBaseUrl,
                 openaiApiKey: apiKey || "",
-                openaiModel: model || "",
+                openaiModel: model || providerConfig?.defaultModel || "",
                 screenshotPath: finalScreenshotPath,
                 startRecordingHotkey: startHotkey || defaultStartHotkey,
                 stopRecordingHotkey: stopHotkey || defaultStopHotkey,
@@ -119,8 +143,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     saveSettings: async () => {
         try {
             const store = await getStore();
-            const { openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
+            const { aiProvider, openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
 
+            await store.set("aiProvider", aiProvider);
             await store.set("openaiBaseUrl", openaiBaseUrl);
             await store.set("openaiApiKey", openaiApiKey);
             await store.set("openaiModel", openaiModel);
