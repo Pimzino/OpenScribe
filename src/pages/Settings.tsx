@@ -342,7 +342,7 @@ export default function Settings() {
                                     <ChevronDown size={16} className={`transition-transform ${providerDropdownOpen ? 'rotate-180' : ''}`} />
                                 </button>
                                 {providerDropdownOpen && (
-                                    <div className="absolute z-10 w-full mt-1 glass-surface-3 rounded-xl shadow-lg max-h-60 overflow-auto overflow-hidden">
+                                    <div className="absolute z-10 w-full mt-1 glass-surface-3 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                                         {PROVIDERS.map((provider) => (
                                             <button
                                                 key={provider.id}
@@ -427,7 +427,7 @@ export default function Settings() {
                                             className="w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8] transition-colors"
                                         />
                                         {modelDropdownOpen && availableModels.length > 0 && (
-                                            <div className="absolute z-10 w-full mt-1 glass-surface-3 rounded-xl shadow-lg max-h-48 overflow-auto overflow-hidden">
+                                            <div className="absolute z-10 w-full mt-1 glass-surface-3 rounded-xl shadow-lg max-h-48 overflow-y-auto">
                                                 {availableModels
                                                     .filter(model =>
                                                         !openaiModel ||
