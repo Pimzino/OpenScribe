@@ -96,7 +96,7 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
             </Tooltip>
 
             {isOpen && (
-                <div className="absolute right-0 top-full mt-2 w-48 glass-surface-3 rounded-xl shadow-xl z-50 py-1">
+                <div className="absolute right-0 top-full mt-2 w-48 glass-surface-3 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
                     <button
                         onClick={handleCopy}
                         disabled={isCopying || isExporting}

@@ -100,7 +100,7 @@ export default function RecordingsList() {
                         <div className="text-white/50">Loading recordings...</div>
                     </div>
                 ) : filteredRecordings.length > 0 ? (
-                    <div className="glass-surface-2 rounded-xl divide-y divide-white/8">
+                    <div className="glass-surface-2 rounded-xl divide-y divide-white/8 overflow-hidden">
                         {filteredRecordings.map((recording: Recording) => (
                             <div
                                 key={recording.id}
