@@ -382,30 +382,30 @@ export default function RecordingDetail() {
 
     if (!id) {
         return (
-            <div className="flex h-screen bg-zinc-950 text-white items-center justify-center">
-                <div className="text-zinc-500">Invalid recording ID</div>
+            <div className="flex h-screen text-white items-center justify-center">
+                <div className="text-white/50">Invalid recording ID</div>
             </div>
         );
     }
 
     if (loading && !currentRecording) {
         return (
-            <div className="flex h-screen bg-zinc-950 text-white items-center justify-center">
-                <div className="text-zinc-500">Loading recording...</div>
+            <div className="flex h-screen text-white items-center justify-center">
+                <div className="text-white/50">Loading recording...</div>
             </div>
         );
     }
 
     if (!currentRecording) {
         return (
-            <div className="flex h-screen bg-zinc-950 text-white items-center justify-center">
-                <div className="text-zinc-500">Recording not found</div>
+            <div className="flex h-screen text-white items-center justify-center">
+                <div className="text-white/50">Recording not found</div>
             </div>
         );
     }
 
     return (
-        <div className="flex h-screen bg-zinc-950 text-white">
+        <div className="flex h-screen text-white">
             <Sidebar activePage="recording-detail" onNavigate={handleNavigate} />
 
             {/* Image Cropper Modal */}
@@ -430,14 +430,14 @@ export default function RecordingDetail() {
                                     }
                                     navigate('/recordings');
                                 }}
-                                className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                className="p-2 hover:bg-white/10 rounded-md transition-colors"
                             >
                                 <ArrowLeft size={18} />
                             </button>
                         </Tooltip>
                         <div>
                             <h2 className="text-2xl font-bold">{currentRecording.recording.name}</h2>
-                            <p className="text-sm text-zinc-500">
+                            <p className="text-sm text-white/50">
                                 {currentRecording.steps.length} steps • Created {new Date(currentRecording.recording.created_at).toLocaleDateString()}
                             </p>
                         </div>
@@ -451,7 +451,7 @@ export default function RecordingDetail() {
                                         <Tooltip content="Discard changes">
                                             <button
                                                 onClick={handleDiscardChanges}
-                                                className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-md transition-colors"
+                                                className="p-2 bg-white/10 hover:bg-white/15 rounded-md transition-colors"
                                             >
                                                 <XCircle size={18} />
                                             </button>
@@ -474,8 +474,8 @@ export default function RecordingDetail() {
                                             onClick={togglePositionSelection}
                                             className={`px-3 py-2 rounded-md transition-colors flex items-center gap-2 ${
                                                 isSelectingPosition
-                                                    ? 'bg-zinc-800 hover:bg-zinc-700'
-                                                    : 'bg-blue-600 hover:bg-blue-700'
+                                                    ? 'bg-white/10 hover:bg-white/15'
+                                                    : 'bg-[#2721E8] hover:bg-[#4a45f5]'
                                             }`}
                                         >
                                             <MapPin size={18} />
@@ -516,7 +516,7 @@ export default function RecordingDetail() {
                                         <Tooltip content="Cancel">
                                             <button
                                                 onClick={handleCancelEdit}
-                                                className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                                className="p-2 hover:bg-white/10 rounded-md transition-colors"
                                             >
                                                 <X size={18} />
                                             </button>
@@ -535,7 +535,7 @@ export default function RecordingDetail() {
                                         <Tooltip content="Edit documentation">
                                             <button
                                                 onClick={handleStartEdit}
-                                                className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-md transition-colors"
+                                                className="p-2 bg-white/10 hover:bg-white/15 rounded-md transition-colors"
                                             >
                                                 <Pencil size={18} />
                                             </button>
@@ -563,17 +563,17 @@ export default function RecordingDetail() {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-1 mb-6 bg-zinc-900 p-1 rounded-lg w-fit">
+                <div className="flex gap-1 mb-6 glass-surface-1 p-1 rounded-xl w-fit">
                     <button
                         onClick={() => setActiveTab("docs")}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "docs" ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-white"
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "docs" ? "bg-[#2721E8]/30 text-white" : "text-white/60 hover:text-white"
                             }`}
                     >
                         Documentation
                     </button>
                     <button
                         onClick={() => setActiveTab("steps")}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "steps" ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-white"
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "steps" ? "bg-[#2721E8]/30 text-white" : "text-white/60 hover:text-white"
                             }`}
                     >
                         Steps
@@ -582,7 +582,7 @@ export default function RecordingDetail() {
 
                 {/* Error Display */}
                 {error && (
-                    <div className="mb-6 p-4 bg-red-900/50 border border-red-800 rounded-lg">
+                    <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg">
                         <p className="text-sm text-red-400">{error}</p>
                         <button
                             onClick={() => setError(null)}
@@ -594,7 +594,7 @@ export default function RecordingDetail() {
                 )}
 
                 {activeTab === "docs" ? (
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 print-content">
+                    <div className="glass-surface-2 rounded-xl p-6 print-content">
                         {currentRecording.recording.documentation ? (
                             isEditing ? (
                                 <div className="mdx-editor-dark">
@@ -653,7 +653,7 @@ export default function RecordingDetail() {
                                 <MarkdownViewer content={currentRecording.recording.documentation} className="markdown-content" />
                             )
                         ) : (
-                            <div className="text-center py-12 text-zinc-500">
+                            <div className="text-center py-12 text-white/50">
                                 <p>No documentation generated yet</p>
                                 <button
                                     onClick={handleRegenerate}
@@ -690,10 +690,10 @@ export default function RecordingDetail() {
                                                 className={`absolute -top-3 left-0 right-0 h-6 flex items-center justify-center z-20 transition-all ${
                                                     insertPosition === index
                                                         ? 'bg-green-500/20 border-2 border-green-500'
-                                                        : 'bg-zinc-800/50 border border-zinc-700 hover:bg-zinc-700/50'
+                                                        : 'bg-white/10 border border-white/10 hover:bg-white/15'
                                                 }`}
                                             >
-                                                <MapPin size={14} className={insertPosition === index ? 'text-green-500' : 'text-zinc-400'} />
+                                                <MapPin size={14} className={insertPosition === index ? 'text-green-500' : 'text-white/60'} />
                                                 {insertPosition === index && (
                                                     <span className="ml-1 text-xs text-green-500 font-medium">Insert Here</span>
                                                 )}
@@ -717,12 +717,12 @@ export default function RecordingDetail() {
                                         className={`h-32 flex items-center justify-center rounded-lg transition-all ${
                                             insertPosition === localSteps.length
                                                 ? 'bg-green-500/20 border-2 border-green-500'
-                                                : 'bg-zinc-800/50 border-2 border-dashed border-zinc-700 hover:bg-zinc-700/50'
+                                                : 'bg-white/10 border-2 border-dashed border-white/20 hover:bg-white/15'
                                         }`}
                                     >
                                         <div className="text-center">
-                                            <MapPin size={24} className={insertPosition === localSteps.length ? 'text-green-500 mx-auto' : 'text-zinc-400 mx-auto'} />
-                                            <span className={`text-sm ${insertPosition === localSteps.length ? 'text-green-500 font-medium' : 'text-zinc-400'}`}>
+                                            <MapPin size={24} className={insertPosition === localSteps.length ? 'text-green-500 mx-auto' : 'text-white/60 mx-auto'} />
+                                            <span className={`text-sm ${insertPosition === localSteps.length ? 'text-green-500 font-medium' : 'text-white/60'}`}>
                                                 {insertPosition === localSteps.length ? 'Insert Here' : 'Insert at End'}
                                             </span>
                                         </div>

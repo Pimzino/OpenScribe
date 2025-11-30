@@ -21,11 +21,11 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 w-96 relative">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="glass-surface-2 rounded-2xl shadow-2xl p-6 w-96 relative">
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 p-1 hover:bg-zinc-800 rounded-md transition-colors"
+                    className="absolute top-4 right-4 p-1 hover:bg-white/10 rounded-lg transition-colors"
                 >
                     <X size={16} />
                 </button>
@@ -36,14 +36,14 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                         <h2 className="text-xl font-bold">OpenScribe</h2>
                         <button
                             onClick={() => setShowChangelog(true)}
-                            className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                            className="text-sm text-white/50 hover:text-white/70 transition-colors"
                         >
                             v{version || "..."}
                         </button>
                     </div>
                 </div>
 
-                <p className="text-sm text-zinc-300">
+                <p className="text-sm text-white/70">
                     AI-powered documentation generator that captures your screen interactions and creates step-by-step guides automatically.
                 </p>
             </div>

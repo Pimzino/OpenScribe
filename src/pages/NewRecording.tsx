@@ -178,7 +178,7 @@ export default function NewRecording() {
     };
 
     return (
-        <div className="flex h-screen bg-zinc-950 text-white relative">
+        <div className="flex h-screen text-white relative">
             <RecorderOverlay />
 
             {/* Image Cropper Modal */}
@@ -192,15 +192,15 @@ export default function NewRecording() {
 
             {/* Name Dialog */}
             {showNameDialog && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 w-96">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="glass-surface-2 rounded-2xl p-6 w-96">
                         <h3 className="text-lg font-semibold mb-4">Save Recording</h3>
                         <input
                             type="text"
                             value={recordingName}
                             onChange={(e) => setRecordingName(e.target.value)}
                             placeholder="Enter recording name..."
-                            className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 mb-4"
+                            className="w-full px-3 py-2 bg-[#161316] border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8] mb-4"
                             autoFocus
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && recordingName.trim()) {
@@ -209,21 +209,21 @@ export default function NewRecording() {
                             }}
                         />
                         {saveError && (
-                            <div className="mb-4 p-3 bg-red-900/50 border border-red-800 rounded-md text-sm text-red-400">
+                            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-400">
                                 {saveError}
                             </div>
                         )}
                         <div className="flex justify-end gap-2">
                             <button
                                 onClick={() => setShowNameDialog(false)}
-                                className="px-4 py-2 rounded-md hover:bg-zinc-800 transition-colors"
+                                className="px-4 py-2 rounded-md hover:bg-white/10 transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={saveRecording}
                                 disabled={!recordingName.trim() || saving}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-4 py-2 bg-[#2721E8] hover:bg-[#4a45f5] rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {saving ? "Saving..." : "Save"}
                             </button>
@@ -247,7 +247,7 @@ export default function NewRecording() {
                         <Tooltip content="Go back">
                             <button
                                 onClick={() => navigate('/')}
-                                className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                className="p-2 hover:bg-white/10 rounded-md transition-colors"
                             >
                                 <ArrowLeft size={18} />
                             </button>
@@ -261,7 +261,7 @@ export default function NewRecording() {
                                 <Tooltip content="Start recording">
                                     <button
                                         onClick={startRecording}
-                                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                        className="p-2 bg-[#2721E8] hover:bg-[#4a45f5] rounded-md transition-colors"
                                     >
                                         <Play size={18} />
                                     </button>
@@ -300,7 +300,7 @@ export default function NewRecording() {
                                 <Tooltip content="Generate documentation">
                                     <button
                                         onClick={handleGenerateDocs}
-                                        className="p-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
+                                        className="p-2 bg-[#49B8D3] hover:bg-[#5fc5e0] rounded-md transition-colors"
                                     >
                                         <Wand2 size={18} />
                                     </button>
@@ -339,7 +339,7 @@ export default function NewRecording() {
                 </DndContext>
 
                 {steps.length === 0 && !isRecording && (
-                    <div className="col-span-full flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500">
+                    <div className="col-span-full flex flex-col items-center justify-center h-64 border-2 border-dashed border-white/20 rounded-lg text-white/50">
                         <p>No steps recorded yet.</p>
                         <p className="text-sm">Click "Start Recording" to begin.</p>
                     </div>

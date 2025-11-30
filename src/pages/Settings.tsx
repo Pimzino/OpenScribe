@@ -261,7 +261,7 @@ export default function Settings() {
     };
 
     return (
-        <div className="flex h-screen bg-zinc-950 text-white">
+        <div className="flex h-screen text-white">
             <Sidebar activePage="settings" onNavigate={handleNavigate} />
 
             {/* Main Content */}
@@ -276,7 +276,7 @@ export default function Settings() {
 
                             {/* Screenshot Path */}
                             <div>
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                <label className="block text-sm font-medium text-white/80 mb-2">
                                     Screenshot Storage Location
                                 </label>
                                 <div className="flex gap-2">
@@ -288,16 +288,16 @@ export default function Settings() {
                                             validatePath(e.target.value);
                                         }}
                                         placeholder="Select a folder..."
-                                        className={`flex-1 px-4 py-2 bg-zinc-900 border rounded-md text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                                        className={`flex-1 px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border rounded-md text-white placeholder-white/50 focus:outline-none transition-colors ${
                                             pathError
                                                 ? "border-red-600 focus:border-red-500"
-                                                : "border-zinc-800 focus:border-blue-600"
+                                                : "border-white/10 focus:border-[#2721E8]"
                                         }`}
                                     />
                                     <Tooltip content="Browse for folder" position="top">
                                         <button
                                             onClick={handleBrowseFolder}
-                                            className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors"
+                                            className="px-3 py-2 bg-white/10 border border-white/10 rounded-md hover:bg-white/15 transition-colors"
                                         >
                                             <FolderOpen size={16} />
                                         </button>
@@ -305,7 +305,7 @@ export default function Settings() {
                                     <Tooltip content="Reset to default" position="top">
                                         <button
                                             onClick={handleResetPath}
-                                            className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors"
+                                            className="px-3 py-2 bg-white/10 border border-white/10 rounded-md hover:bg-white/15 transition-colors"
                                         >
                                             <RotateCcw size={16} />
                                         </button>
@@ -315,45 +315,45 @@ export default function Settings() {
                                     <p className="mt-1 text-xs text-red-500">{pathError}</p>
                                 )}
                                 {validatingPath && (
-                                    <p className="mt-1 text-xs text-zinc-500">Validating path...</p>
+                                    <p className="mt-1 text-xs text-white/50">Validating path...</p>
                                 )}
-                                <p className="mt-1 text-xs text-zinc-500">
+                                <p className="mt-1 text-xs text-white/50">
                                     Screenshots will be saved in subfolders named after each recording
                                 </p>
                             </div>
                         </div>
 
                         {/* AI Section */}
-                        <div className="border-t border-zinc-800 pt-6">
-                            <h3 className="text-lg font-medium text-zinc-200 mb-4">AI</h3>
+                        <div className="border-t border-white/8 pt-6">
+                            <h3 className="text-lg font-medium text-white/80 mb-4">AI</h3>
                         </div>
 
                         {/* Provider Dropdown */}
                         <div data-dropdown="provider">
-                            <label className="block text-sm font-medium text-zinc-300 mb-2">
+                            <label className="block text-sm font-medium text-white/80 mb-2">
                                 Provider
                             </label>
                             <div className="relative">
                                 <button
                                     onClick={() => setProviderDropdownOpen(!providerDropdownOpen)}
-                                    className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white text-left flex items-center justify-between hover:border-zinc-700 focus:outline-none focus:border-blue-600 transition-colors"
+                                    className="w-full px-4 py-2 glass-surface-3 rounded-xl text-white text-left flex items-center justify-between hover:border-white/15 focus:outline-none focus:border-[#2721E8] transition-colors"
                                 >
                                     <span>{currentProvider?.name || 'Select provider'}</span>
                                     <ChevronDown size={16} className={`transition-transform ${providerDropdownOpen ? 'rotate-180' : ''}`} />
                                 </button>
                                 {providerDropdownOpen && (
-                                    <div className="absolute z-10 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-md shadow-lg max-h-60 overflow-auto">
+                                    <div className="absolute z-10 w-full mt-1 glass-surface-3 rounded-xl shadow-lg max-h-60 overflow-auto">
                                         {PROVIDERS.map((provider) => (
                                             <button
                                                 key={provider.id}
                                                 onClick={() => handleProviderChange(provider.id)}
-                                                className={`w-full px-4 py-2 text-left hover:bg-zinc-800 transition-colors ${
-                                                    aiProvider === provider.id ? 'bg-zinc-800 text-blue-400' : 'text-white'
+                                                className={`w-full px-4 py-2 text-left hover:bg-white/10 transition-colors ${
+                                                    aiProvider === provider.id ? 'bg-[#2721E8]/20 text-[#49B8D3]' : 'text-white'
                                                 }`}
                                             >
                                                 <div className="font-medium">{provider.name}</div>
                                                 {provider.helpText && (
-                                                    <div className="text-xs text-zinc-500 mt-0.5">{provider.helpText}</div>
+                                                    <div className="text-xs text-white/50 mt-0.5">{provider.helpText}</div>
                                                 )}
                                             </button>
                                         ))}
@@ -365,7 +365,7 @@ export default function Settings() {
                                     href={currentProvider.helpUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="mt-1 text-xs text-blue-500 hover:text-blue-400 inline-flex items-center gap-1"
+                                    className="mt-1 text-xs text-[#49B8D3] hover:text-[#5fc5e0] inline-flex items-center gap-1"
                                     onClick={(e) => {
                                         e.preventDefault();
                                         openUrl(currentProvider.helpUrl!);
@@ -378,7 +378,7 @@ export default function Settings() {
 
                         {/* Base URL */}
                         <div>
-                            <label className="block text-sm font-medium text-zinc-300 mb-2">
+                            <label className="block text-sm font-medium text-white/80 mb-2">
                                 Base URL
                             </label>
                             <input
@@ -389,16 +389,16 @@ export default function Settings() {
                                     setConnectionStatus({ testing: false });
                                 }}
                                 placeholder={currentProvider?.defaultBaseUrl || "https://api.example.com/v1"}
-                                className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-600 transition-colors"
+                                className="w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8] transition-colors"
                             />
-                            <p className="mt-1 text-xs text-zinc-500">
+                            <p className="mt-1 text-xs text-white/50">
                                 API endpoint for the selected provider
                             </p>
                         </div>
 
                         {/* Model ID with Refresh */}
                         <div data-dropdown="model">
-                            <label className="block text-sm font-medium text-zinc-300 mb-2">
+                            <label className="block text-sm font-medium text-white/80 mb-2">
                                 Model
                             </label>
                             <div className="relative">
@@ -424,13 +424,13 @@ export default function Settings() {
                                                 }
                                             }}
                                             placeholder={currentProvider?.defaultModel || "model-name"}
-                                            className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-600 transition-colors"
+                                            className="w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8] transition-colors"
                                         />
                                         {modelDropdownOpen && availableModels.length > 0 && (
-                                            <div className="absolute z-10 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-md shadow-lg max-h-48 overflow-auto">
+                                            <div className="absolute z-10 w-full mt-1 glass-surface-3 rounded-xl shadow-lg max-h-48 overflow-auto">
                                                 {availableModels
-                                                    .filter(model => 
-                                                        !openaiModel || 
+                                                    .filter(model =>
+                                                        !openaiModel ||
                                                         model.toLowerCase().includes(openaiModel.toLowerCase())
                                                     )
                                                     .map((model) => (
@@ -440,18 +440,18 @@ export default function Settings() {
                                                                 setOpenaiModel(model);
                                                                 setModelDropdownOpen(false);
                                                             }}
-                                                            className={`w-full px-4 py-2 text-left hover:bg-zinc-800 transition-colors text-sm ${
-                                                                openaiModel === model ? 'bg-zinc-800 text-blue-400' : 'text-white'
+                                                            className={`w-full px-4 py-2 text-left hover:bg-white/10 transition-colors text-sm ${
+                                                                openaiModel === model ? 'bg-[#2721E8]/20 text-[#49B8D3]' : 'text-white'
                                                             }`}
                                                         >
                                                             {model}
                                                         </button>
                                                     ))}
-                                                {availableModels.filter(model => 
-                                                    !openaiModel || 
+                                                {availableModels.filter(model =>
+                                                    !openaiModel ||
                                                     model.toLowerCase().includes(openaiModel.toLowerCase())
                                                 ).length === 0 && (
-                                                    <div className="px-4 py-2 text-sm text-zinc-500">
+                                                    <div className="px-4 py-2 text-sm text-white/50">
                                                         No matching models
                                                     </div>
                                                 )}
@@ -467,15 +467,15 @@ export default function Settings() {
                                         <button
                                             onClick={handleFetchModels}
                                             disabled={fetchingModels || !openaiBaseUrl}
-                                            className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="px-3 py-2 bg-white/10 border border-white/10 rounded-md hover:bg-white/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             <RefreshCw size={16} className={fetchingModels ? 'animate-spin' : ''} />
                                         </button>
                                     </Tooltip>
                                 </div>
                             </div>
-                            <p className="mt-1 text-xs text-zinc-500">
-                                {currentProvider?.supportsVision 
+                            <p className="mt-1 text-xs text-white/50">
+                                {currentProvider?.supportsVision
                                     ? "Use a vision-capable model for best results (e.g., gpt-4o, llava, claude-3)"
                                     : "Model to use for generation"
                                 }
@@ -485,7 +485,7 @@ export default function Settings() {
                         {/* API Key - Only show if provider requires it */}
                         {currentProvider?.requiresApiKey && (
                             <div>
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                <label className="block text-sm font-medium text-white/80 mb-2">
                                     API Key
                                 </label>
                                 <div className="relative">
@@ -498,16 +498,16 @@ export default function Settings() {
                                             setConnectionStatus({ testing: false });
                                         }}
                                         placeholder={aiProvider === 'openai' ? "sk-..." : "Enter API key"}
-                                        className={`w-full px-4 py-2 pr-10 bg-zinc-900 border rounded-md text-white placeholder-zinc-500 focus:outline-none transition-colors ${
+                                        className={`w-full px-4 py-2 pr-10 bg-[#161316]/70 backdrop-blur-sm border rounded-md text-white placeholder-white/50 focus:outline-none transition-colors ${
                                             apiKeyError
                                                 ? "border-red-600 focus:border-red-500"
-                                                : "border-zinc-800 focus:border-blue-600"
+                                                : "border-white/10 focus:border-[#2721E8]"
                                         }`}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowApiKey(!showApiKey)}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/70"
                                     >
                                         {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                                     </button>
@@ -515,7 +515,7 @@ export default function Settings() {
                                 {apiKeyError && (
                                     <p className="mt-1 text-xs text-red-500">{apiKeyError}</p>
                                 )}
-                                <p className="mt-1 text-xs text-zinc-500">
+                                <p className="mt-1 text-xs text-white/50">
                                     Your API key is stored securely on your device
                                 </p>
                             </div>
@@ -526,7 +526,7 @@ export default function Settings() {
                             <button
                                 onClick={handleTestConnection}
                                 disabled={connectionStatus.testing || !openaiBaseUrl}
-                                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-2 px-4 py-2 bg-white/10 border border-white/10 rounded-md hover:bg-white/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {connectionStatus.testing ? (
                                     <>
@@ -551,23 +551,23 @@ export default function Settings() {
                         </div>
 
                         {/* Hotkeys Section */}
-                        <div className="border-t border-zinc-800 pt-6 mt-6">
-                            <h3 className="text-lg font-medium text-zinc-200 mb-4">Keyboard Shortcuts</h3>
+                        <div className="border-t border-white/8 pt-6 mt-6">
+                            <h3 className="text-lg font-medium text-white/80 mb-4">Keyboard Shortcuts</h3>
 
                             {/* Start Recording Hotkey */}
                             <div className="mb-4">
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                <label className="block text-sm font-medium text-white/80 mb-2">
                                     Start Recording
                                 </label>
                                 <button
                                     onClick={() => setCapturingHotkey("start")}
                                     onKeyDown={(e) => capturingHotkey === "start" && handleHotkeyCapture(e, "start")}
-                                    className={`w-full px-4 py-2 bg-zinc-900 border rounded-md text-left font-mono text-sm transition-colors ${
+                                    className={`w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border rounded-md text-left font-mono text-sm transition-colors ${
                                         capturingHotkey === "start"
-                                            ? "border-blue-600 text-blue-400"
+                                            ? "border-[#2721E8] text-[#49B8D3]"
                                             : startWarning
                                             ? "border-yellow-600 text-white hover:border-yellow-500"
-                                            : "border-zinc-800 text-white hover:border-zinc-700"
+                                            : "border-white/10 text-white hover:border-white/20"
                                     }`}
                                 >
                                     {capturingHotkey === "start" ? "Press keys..." : formatHotkey(startRecordingHotkey)}
@@ -579,18 +579,18 @@ export default function Settings() {
 
                             {/* Stop Recording Hotkey */}
                             <div className="mb-4">
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                <label className="block text-sm font-medium text-white/80 mb-2">
                                     Stop Recording
                                 </label>
                                 <button
                                     onClick={() => setCapturingHotkey("stop")}
                                     onKeyDown={(e) => capturingHotkey === "stop" && handleHotkeyCapture(e, "stop")}
-                                    className={`w-full px-4 py-2 bg-zinc-900 border rounded-md text-left font-mono text-sm transition-colors ${
+                                    className={`w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border rounded-md text-left font-mono text-sm transition-colors ${
                                         capturingHotkey === "stop"
-                                            ? "border-blue-600 text-blue-400"
+                                            ? "border-[#2721E8] text-[#49B8D3]"
                                             : stopWarning
                                             ? "border-yellow-600 text-white hover:border-yellow-500"
-                                            : "border-zinc-800 text-white hover:border-zinc-700"
+                                            : "border-white/10 text-white hover:border-white/20"
                                     }`}
                                 >
                                     {capturingHotkey === "stop" ? "Press keys..." : formatHotkey(stopRecordingHotkey)}
@@ -602,18 +602,18 @@ export default function Settings() {
 
                             {/* Manual Capture Hotkey */}
                             <div>
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                <label className="block text-sm font-medium text-white/80 mb-2">
                                     Manual Capture (Screenshot)
                                 </label>
                                 <button
                                     onClick={() => setCapturingHotkey("capture")}
                                     onKeyDown={(e) => capturingHotkey === "capture" && handleHotkeyCapture(e, "capture")}
-                                    className={`w-full px-4 py-2 bg-zinc-900 border rounded-md text-left font-mono text-sm transition-colors ${
+                                    className={`w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border rounded-md text-left font-mono text-sm transition-colors ${
                                         capturingHotkey === "capture"
-                                            ? "border-blue-600 text-blue-400"
+                                            ? "border-[#2721E8] text-[#49B8D3]"
                                             : captureWarning
                                             ? "border-yellow-600 text-white hover:border-yellow-500"
-                                            : "border-zinc-800 text-white hover:border-zinc-700"
+                                            : "border-white/10 text-white hover:border-white/20"
                                     }`}
                                 >
                                     {capturingHotkey === "capture" ? "Press keys..." : formatHotkey(captureHotkey)}
@@ -627,7 +627,7 @@ export default function Settings() {
                                     Hotkeys cannot be the same
                                 </p>
                             )}
-                            <p className="mt-2 text-xs text-zinc-500">
+                            <p className="mt-2 text-xs text-white/50">
                                 Click on a field and press your desired key combination
                             </p>
                         </div>
@@ -640,7 +640,7 @@ export default function Settings() {
                                 className={`flex items-center gap-2 px-6 py-2 rounded-md font-medium transition-colors ${
                                     saved
                                         ? "bg-green-600 hover:bg-green-700"
-                                        : "bg-blue-600 hover:bg-blue-700"
+                                        : "bg-[#2721E8] hover:bg-[#4a45f5]"
                                 } ${saving || (currentProvider?.requiresApiKey && !!apiKeyError) || hotkeysMatch ? "opacity-50 cursor-not-allowed" : ""}`}
                             >
                                 {saving ? <Spinner size="sm" /> : <Save size={16} />}

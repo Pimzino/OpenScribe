@@ -100,14 +100,14 @@ export default function Editor() {
 
 
     return (
-        <div className="flex h-screen bg-zinc-950 text-white">
+        <div className="flex h-screen text-white">
             <main className="flex-1 p-8 overflow-auto">
                 <div className="flex justify-between items-center mb-6">
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
                             <button
                                 onClick={handleBack}
-                                className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                className="p-2 hover:bg-white/10 rounded-md transition-colors"
                             >
                                 <ArrowLeft size={18} />
                             </button>
@@ -123,7 +123,7 @@ export default function Editor() {
                                 <Tooltip content="Edit">
                                     <button
                                         onClick={handleEdit}
-                                        className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-md transition-colors"
+                                        className="p-2 bg-white/10 hover:bg-white/15 rounded-md transition-colors"
                                     >
                                         <Edit3 size={18} />
                                     </button>
@@ -139,7 +139,7 @@ export default function Editor() {
                                 <Tooltip content="Cancel">
                                     <button
                                         onClick={handleCancelEdit}
-                                        className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
+                                        className="p-2 hover:bg-white/10 rounded-md transition-colors"
                                     >
                                         <X size={18} />
                                     </button>
@@ -148,7 +148,7 @@ export default function Editor() {
                                     <button
                                         onClick={handleSave}
                                         disabled={saving}
-                                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-50"
+                                        className="p-2 bg-[#2721E8] hover:bg-[#4a45f5] rounded-md transition-colors disabled:opacity-50"
                                     >
                                         <Save size={18} />
                                     </button>
@@ -158,7 +158,7 @@ export default function Editor() {
                     </div>
                 </div>
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center h-full text-zinc-500 gap-4">
+                    <div className="flex flex-col items-center justify-center h-full text-white/50 gap-4">
                         <Spinner size="lg" />
                         <p>Generating documentation with AI...</p>
                         <p className="text-xs">
@@ -167,13 +167,13 @@ export default function Editor() {
                     </div>
                 ) : error ? (
                     <div className="flex flex-col items-center justify-center h-full gap-4">
-                        <div className="bg-red-900/50 border border-red-800 rounded-lg p-6 max-w-md text-center">
+                        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-6 max-w-md text-center">
                             <p className="text-red-400 font-medium mb-2">Error</p>
-                            <p className="text-sm text-zinc-300">{error}</p>
+                            <p className="text-sm text-white/70">{error}</p>
                         </div>
                         <button
                             onClick={handleBack}
-                            className="text-sm text-zinc-400 hover:text-white transition-colors"
+                            className="text-sm text-white/60 hover:text-white transition-colors"
                         >
                             Go back and try again
                         </button>
@@ -183,12 +183,12 @@ export default function Editor() {
                         <textarea
                             value={editedMarkdown}
                             onChange={(e) => setEditedMarkdown(e.target.value)}
-                            className="w-full h-[calc(100vh-200px)] bg-zinc-900 p-6 rounded-lg border border-zinc-800 font-mono text-sm text-zinc-300 resize-none focus:outline-none focus:border-blue-500"
+                            className="w-full h-[calc(100vh-200px)] bg-[#161316]/70 backdrop-blur-sm p-6 rounded-xl border border-white/10 font-mono text-sm text-white/70 resize-none focus:outline-none focus:border-[#2721E8]"
                             placeholder="Edit your documentation..."
                         />
                     </div>
                 ) : (
-                    <div className="max-w-3xl mx-auto bg-zinc-900 p-8 rounded-lg border border-zinc-800 shadow-lg print-content">
+                    <div className="max-w-3xl mx-auto glass-surface-2 p-8 rounded-xl shadow-lg print-content">
                         <MarkdownViewer content={markdown} className="markdown-content" />
                     </div>
                 )}

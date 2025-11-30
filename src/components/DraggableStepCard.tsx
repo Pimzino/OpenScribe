@@ -78,15 +78,15 @@ export default function DraggableStepCard({
         <div
             ref={setNodeRef}
             style={style}
-            className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative h-80 flex flex-col"
+            className="glass-surface-2 rounded-xl overflow-hidden relative h-80 flex flex-col"
         >
             {/* Drag Handle */}
             <div
                 {...attributes}
                 {...listeners}
-                className="absolute top-2 left-2 z-10 cursor-grab active:cursor-grabbing p-1 bg-zinc-800/80 hover:bg-zinc-700/80 rounded transition-colors"
+                className="absolute top-2 left-2 z-10 cursor-grab active:cursor-grabbing p-1 bg-white/10 hover:bg-white/15 rounded transition-colors"
             >
-                <GripVertical size={16} className="text-zinc-400" />
+                <GripVertical size={16} className="text-white/70" />
             </div>
 
             {/* Action Buttons */}
@@ -95,7 +95,7 @@ export default function DraggableStepCard({
                     <Tooltip content="View full size">
                         <button
                             onClick={() => setIsViewerOpen(true)}
-                            className="p-1 bg-zinc-700 hover:bg-zinc-600 rounded-full flex items-center justify-center transition-colors"
+                            className="p-1 bg-white/10 hover:bg-white/15 rounded-full flex items-center justify-center transition-colors"
                         >
                             <Expand size={14} />
                         </button>
@@ -105,7 +105,7 @@ export default function DraggableStepCard({
                     <Tooltip content="Crop screenshot">
                         <button
                             onClick={onCrop}
-                            className="p-1 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                            className="p-1 bg-[#2721E8] hover:bg-[#4a45f5] rounded-full flex items-center justify-center transition-colors"
                         >
                             <Crop size={14} />
                         </button>
@@ -125,7 +125,7 @@ export default function DraggableStepCard({
             </div>
 
             {/* Screenshot */}
-            <div className="h-40 flex-shrink-0 bg-zinc-950 relative">
+            <div className="h-40 flex-shrink-0 bg-[#161316] relative">
                 {hasScreenshot ? (
                     <>
                         <img
@@ -144,7 +144,7 @@ export default function DraggableStepCard({
                         )}
                     </>
                 ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-zinc-600">
+                    <div className="w-full h-full flex flex-col items-center justify-center text-white/50">
                         <ImageOff size={32} className="mb-2" />
                         <span className="text-xs">No image</span>
                     </div>
@@ -153,22 +153,22 @@ export default function DraggableStepCard({
 
             {/* Step Content */}
             <div className="p-4 flex-1 overflow-hidden flex flex-col">
-                <h3 className="font-medium text-sm text-zinc-300 mb-2 flex-shrink-0">
+                <h3 className="font-medium text-sm text-white/80 mb-2 flex-shrink-0">
                     Step {index + 1} ({step.type_ === "click" ? "Click" : step.type_ === "type" ? "Type" : "Capture"})
                 </h3>
                 <div className="flex-1 overflow-y-auto min-h-0">
                     {step.type_ === "click" && (
-                        <p className="text-xs text-zinc-500 mb-2">
+                        <p className="text-xs text-white/50 mb-2">
                             Clicked at ({Math.round(step.x || 0)}, {Math.round(step.y || 0)})
                         </p>
                     )}
                     {step.type_ === "type" && step.text && (
-                        <div className="bg-zinc-950 p-3 rounded border border-zinc-800 font-mono text-sm text-blue-400 break-words mb-2">
+                        <div className="bg-[#161316] p-3 rounded border border-white/8 font-mono text-sm text-[#49B8D3] break-words mb-2">
                             "{step.text}"
                         </div>
                     )}
                     {step.type_ === "capture" && (
-                        <p className="text-xs text-zinc-500 mb-2">
+                        <p className="text-xs text-white/50 mb-2">
                             Manual screenshot capture
                         </p>
                     )}
@@ -177,7 +177,7 @@ export default function DraggableStepCard({
                     value={step.description || ""}
                     onChange={(e) => onUpdateDescription(e.target.value)}
                     placeholder="Add description for AI (optional)..."
-                    className="w-full px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none flex-shrink-0"
+                    className="w-full px-2 py-1 bg-[#161316] border border-white/8 rounded text-xs text-white/80 placeholder-white/40 focus:outline-none focus:border-[#2721E8] resize-none flex-shrink-0"
                     rows={2}
                 />
             </div>

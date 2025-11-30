@@ -23,7 +23,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
 
     return (
         <>
-            <aside className="w-64 border-r border-zinc-800 p-4 flex flex-col h-full">
+            <aside className="w-64 glass-surface-1 border-r border-white/8 p-4 flex flex-col h-full">
                 <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
                     <img src="/logo.png" alt="OpenScribe" className="w-8 h-8" />
                     OpenScribe
@@ -32,8 +32,8 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                 <nav className="space-y-2 flex-1">
                     <button
                         onClick={() => onNavigate("dashboard")}
-                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors ${
-                            activePage === "dashboard" ? "bg-zinc-900 text-white" : "text-zinc-400"
+                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-white/10 transition-colors ${
+                            activePage === "dashboard" ? "bg-[#2721E8]/20 text-white border-l-2 border-[#2721E8]" : "text-white/60"
                         }`}
                     >
                         <TrendingUp size={16} />
@@ -41,10 +41,10 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                     </button>
                     <button
                         onClick={() => onNavigate("recordings")}
-                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors ${
+                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-white/10 transition-colors ${
                             activePage === "recordings" || activePage === "new-recording" || activePage === "recording-detail"
-                                ? "bg-zinc-900 text-white"
-                                : "text-zinc-400"
+                                ? "bg-[#2721E8]/20 text-white border-l-2 border-[#2721E8]"
+                                : "text-white/60"
                         }`}
                     >
                         <List size={16} />
@@ -52,8 +52,8 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                     </button>
                     <button
                         onClick={() => onNavigate("settings")}
-                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors ${
-                            activePage === "settings" ? "bg-zinc-900 text-white" : "text-zinc-400"
+                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-white/10 transition-colors ${
+                            activePage === "settings" ? "bg-[#2721E8]/20 text-white border-l-2 border-[#2721E8]" : "text-white/60"
                         }`}
                     >
                         <Settings size={16} />
@@ -61,7 +61,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                     </button>
                 </nav>
 
-                <div className="border-t border-zinc-800 pt-4 mt-4">
+                <div className="border-t border-white/8 pt-4 mt-4">
                     <button
                         onClick={() => {
                             openUrl("https://buymeacoffee.com/Pimzino").catch(console.error);
@@ -73,14 +73,14 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                     </button>
                     <button
                         onClick={() => setShowAbout(true)}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-zinc-800 transition-colors text-zinc-400"
+                        className="w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-white/10 transition-colors text-white/60"
                     >
                         <Info size={16} />
                         About
                     </button>
                     <button
                         onClick={() => setShowChangelog(true)}
-                        className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors text-center mt-2 w-full"
+                        className="text-xs text-white/40 hover:text-white/60 transition-colors text-center mt-2 w-full"
                     >
                         v{version}
                     </button>

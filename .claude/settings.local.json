@@ -4,7 +4,9 @@
       "Bash(find:*)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:v2.tauri.app)",
-      "WebFetch(domain:keepachangelog.com)"
+      "WebFetch(domain:keepachangelog.com)",
+      "WebFetch(domain:dribbble.com)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

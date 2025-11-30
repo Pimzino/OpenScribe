@@ -40,19 +40,19 @@ export default function RecordingsList() {
     };
 
     return (
-        <div className="flex h-screen bg-zinc-950 text-white">
+        <div className="flex h-screen text-white">
             {/* Delete Confirmation Dialog */}
             {deleteConfirm && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 w-96">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="glass-surface-2 rounded-2xl p-6 w-96">
                         <h3 className="text-lg font-semibold mb-4">Delete Recording</h3>
-                        <p className="text-zinc-400 mb-4">
+                        <p className="text-white/70 mb-4">
                             Are you sure you want to delete this recording? This action cannot be undone.
                         </p>
                         <div className="flex justify-end gap-2">
                             <button
                                 onClick={() => setDeleteConfirm(null)}
-                                className="px-4 py-2 rounded-md hover:bg-zinc-800 transition-colors"
+                                className="px-4 py-2 rounded-md hover:bg-white/10 transition-colors"
                             >
                                 Cancel
                             </button>
@@ -76,7 +76,7 @@ export default function RecordingsList() {
                     <Tooltip content="New recording">
                         <button
                             onClick={() => navigate('/new-recording')}
-                            className="p-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                            className="p-2 bg-[#2721E8] hover:bg-[#4a45f5] rounded-md transition-colors"
                         >
                             <Plus size={18} />
                         </button>
@@ -85,38 +85,38 @@ export default function RecordingsList() {
 
                 {/* Search */}
                 <div className="relative mb-6">
-                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50" />
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search recordings..."
-                        className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                        className="w-full pl-10 pr-4 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8]"
                     />
                 </div>
 
                 {loading && recordings.length === 0 ? (
                     <div className="flex items-center justify-center h-64">
-                        <div className="text-zinc-500">Loading recordings...</div>
+                        <div className="text-white/50">Loading recordings...</div>
                     </div>
                 ) : filteredRecordings.length > 0 ? (
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg divide-y divide-zinc-800">
+                    <div className="glass-surface-2 rounded-xl divide-y divide-white/8">
                         {filteredRecordings.map((recording: Recording) => (
                             <div
                                 key={recording.id}
-                                className="flex items-center justify-between p-4 hover:bg-zinc-800/50 transition-colors"
+                                className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
                             >
                                 <button
                                     onClick={() => navigate(`/recordings/${recording.id}`)}
                                     className="flex-1 text-left"
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center">
-                                            <FileText size={18} className="text-zinc-500" />
+                                        <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+                                            <FileText size={18} className="text-white/50" />
                                         </div>
                                         <div>
                                             <p className="font-medium">{recording.name}</p>
-                                            <p className="text-sm text-zinc-500">
+                                            <p className="text-sm text-white/50">
                                                 {recording.step_count} steps • {formatDate(recording.updated_at)}
                                             </p>
                                         </div>
@@ -129,7 +129,7 @@ export default function RecordingsList() {
                                                 e.stopPropagation();
                                                 setDeleteConfirm(recording.id);
                                             }}
-                                            className="p-2 hover:bg-zinc-700 rounded-md transition-colors text-zinc-400 hover:text-red-500"
+                                            className="p-2 hover:bg-white/10 rounded-md transition-colors text-white/60 hover:text-red-500"
                                         >
                                             <Trash2 size={18} />
                                         </button>
@@ -139,7 +139,7 @@ export default function RecordingsList() {
                         ))}
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500">
+                    <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-white/20 rounded-lg text-white/50">
                         {searchQuery ? (
                             <p>No recordings match "{searchQuery}"</p>
                         ) : (
@@ -147,7 +147,7 @@ export default function RecordingsList() {
                                 <p>No recordings yet</p>
                                 <button
                                     onClick={() => navigate('/new-recording')}
-                                    className="mt-2 text-blue-500 hover:text-blue-400"
+                                    className="mt-2 text-[#49B8D3] hover:text-[#49B8D3]/80"
                                 >
                                     Create your first recording
                                 </button>

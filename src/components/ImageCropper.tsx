@@ -86,21 +86,21 @@ export default function ImageCropper({ imageSrc, onSave, onCancel }: ImageCroppe
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-zinc-900 rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="glass-surface-2 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
                     <h3 className="text-lg font-semibold">Crop Screenshot</h3>
                     <button
                         onClick={onCancel}
-                        className="p-1 hover:bg-zinc-800 rounded transition-colors"
+                        className="p-1 hover:bg-white/10 rounded-lg transition-colors"
                     >
                         <X size={20} />
                     </button>
                 </div>
 
                 {/* Crop Area */}
-                <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-zinc-950">
+                <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-[#161316]">
                     <ReactCrop
                         crop={crop}
                         onChange={(_, percentCrop) => setCrop(percentCrop)}
@@ -119,10 +119,10 @@ export default function ImageCropper({ imageSrc, onSave, onCancel }: ImageCroppe
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between p-4 border-t border-zinc-800">
+                <div className="flex items-center justify-between p-4 border-t border-white/10">
                     <button
                         onClick={handleReset}
-                        className="flex items-center gap-2 px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+                        className="flex items-center gap-2 px-3 py-2 text-sm bg-white/10 hover:bg-white/15 rounded transition-colors"
                     >
                         <RotateCcw size={16} />
                         Reset
@@ -130,14 +130,14 @@ export default function ImageCropper({ imageSrc, onSave, onCancel }: ImageCroppe
                     <div className="flex items-center gap-2">
                         <button
                             onClick={onCancel}
-                            className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+                            className="px-4 py-2 text-sm bg-white/10 hover:bg-white/15 rounded transition-colors"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleSave}
                             disabled={!completedCrop}
-                            className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#2721E8] hover:bg-[#4a45f5] disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
                         >
                             <Check size={16} />
                             Save Crop
