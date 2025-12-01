@@ -50,8 +50,11 @@ export function TiptapEditor({
 }: TiptapEditorProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('rich');
   const [sourceContent, setSourceContent] = useState(content);
+  const [isToolbarStuck, setIsToolbarStuck] = useState(false);
   const lastSyncedContent = useRef(content);
   const isInternalUpdate = useRef(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -154,6 +157,37 @@ export function TiptapEditor({
     }
   }, [content, editor]);
 
+  // Detect when toolbar becomes sticky
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    const container = containerRef.current;
+    if (!toolbar || !container) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // When the sentinel (top of container) is not visible, toolbar is stuck
+        setIsToolbarStuck(!entry.isIntersecting);
+      },
+      {
+        threshold: 0,
+        rootMargin: '-1px 0px 0px 0px',
+      }
+    );
+
+    // Create a sentinel element at the top of the container
+    const sentinel = document.createElement('div');
+    sentinel.style.height = '1px';
+    sentinel.style.marginBottom = '-1px';
+    container.insertBefore(sentinel, container.firstChild);
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+      sentinel.remove();
+    };
+  }, []);
+
   if (!editor) {
     return (
       <div
@@ -164,9 +198,16 @@ export function TiptapEditor({
   }
 
   return (
-    <div className={`tiptap-editor-dark rounded-xl overflow-hidden ${className}`}>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 p-2 bg-[rgba(22,19,22,0.75)] backdrop-blur-md border-b border-white/10">
+    <div ref={containerRef} className={`tiptap-editor-dark rounded-xl border border-white/10 ${className}`}>
+      {/* Toolbar - sticky on scroll, floats when pinned */}
+      <div
+        ref={toolbarRef}
+        className={`sticky top-0 z-10 flex items-center justify-between gap-2 p-2 backdrop-blur-md transition-all duration-200 ${
+          isToolbarStuck
+            ? 'mx-6 mt-3 rounded-xl bg-[rgba(22,19,22,0.98)] border border-[#2721E8]/50 shadow-[0_4px_20px_rgba(39,33,232,0.3)]'
+            : 'rounded-t-xl bg-[rgba(22,19,22,0.95)] border-b border-white/10'
+        }`}
+      >
         <TiptapToolbar
           editor={editor}
           groups={toolbarGroups}
@@ -181,7 +222,7 @@ export function TiptapEditor({
       </div>
 
       {/* Editor Content */}
-      <div className="bg-[#161316]" style={{ minHeight }}>
+      <div className="bg-[#161316] rounded-b-xl" style={{ minHeight }}>
         {viewMode === 'rich' ? (
           <EditorContent editor={editor} className="tiptap-content" />
         ) : (
