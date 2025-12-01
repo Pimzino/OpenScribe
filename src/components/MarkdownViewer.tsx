@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -15,9 +15,12 @@ interface MarkdownImageProps {
     alt?: string;
 }
 
-function MarkdownImage({ src, alt }: MarkdownImageProps) {
+const MarkdownImage = memo(function MarkdownImage({ src, alt }: MarkdownImageProps) {
     const [isViewerOpen, setIsViewerOpen] = useState(false);
-    const imageSrc = src ? convertFileSrc(decodeURIComponent(src)) : '';
+    const imageSrc = useMemo(
+        () => src ? convertFileSrc(decodeURIComponent(src)) : '',
+        [src]
+    );
 
     return (
         <>
@@ -33,6 +36,8 @@ function MarkdownImage({ src, alt }: MarkdownImageProps) {
                 <img
                     src={imageSrc}
                     alt={alt || ''}
+                    loading="lazy"
+                    decoding="async"
                     className="max-w-full max-h-80 w-auto h-auto object-contain rounded"
                 />
                 <button
@@ -44,7 +49,7 @@ function MarkdownImage({ src, alt }: MarkdownImageProps) {
             </span>
         </>
     );
-}
+});
 
 export default function MarkdownViewer({ content, className }: MarkdownViewerProps) {
     return (

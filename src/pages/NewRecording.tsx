@@ -320,7 +320,7 @@ export default function NewRecording() {
                         items={steps.map((_, idx) => `step-${idx}`)}
                         strategy={rectSortingStrategy}
                     >
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 scroll-optimized">
                             {steps.map((step, index) => (
                                 <DraggableStepCard
                                     key={`step-${index}`}

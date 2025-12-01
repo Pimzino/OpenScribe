@@ -192,7 +192,7 @@ export default function Editor() {
                     </div>
                 ) : (
                     <div className="max-w-3xl mx-auto glass-surface-2 p-8 rounded-xl shadow-lg print-content">
-                        <MarkdownViewer content={markdown} className="markdown-content" />
+                        <MarkdownViewer content={markdown} className="markdown-content scroll-optimized" />
                     </div>
                 )}
             </main>

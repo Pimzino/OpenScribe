@@ -579,7 +579,7 @@ export default function RecordingDetail() {
                                     placeholder="Edit your documentation..."
                                 />
                             ) : (
-                                <MarkdownViewer content={currentRecording.recording.documentation} className="markdown-content" />
+                                <MarkdownViewer content={currentRecording.recording.documentation} className="markdown-content scroll-optimized" />
                             )
                         ) : (
                             <div className="text-center py-12 text-white/50">
@@ -610,7 +610,7 @@ export default function RecordingDetail() {
                             items={localSteps.map(s => s.id)}
                             strategy={rectSortingStrategy}
                         >
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 scroll-optimized">
                                 {localSteps.map((step, index) => (
                                     <div key={step.id} className="relative">
                                         {isSelectingPosition && (

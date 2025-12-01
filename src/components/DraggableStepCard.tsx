@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, memo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -34,7 +34,7 @@ interface DraggableStepCardProps {
     cropTimestamp?: number;
 }
 
-export default function DraggableStepCard({
+const DraggableStepCard = memo(function DraggableStepCard({
     step,
     index,
     id,
@@ -62,9 +62,12 @@ export default function DraggableStepCard({
     const hasScreenshot = step.screenshot || step.screenshot_path;
     const [isViewerOpen, setIsViewerOpen] = useState(false);
 
-    const screenshotSrc = hasScreenshot
-        ? convertFileSrc(step.screenshot || step.screenshot_path!) + (cropTimestamp ? `?t=${cropTimestamp}` : '')
-        : '';
+    const screenshotSrc = useMemo(
+        () => hasScreenshot
+            ? convertFileSrc(step.screenshot || step.screenshot_path!) + (cropTimestamp ? `?t=${cropTimestamp}` : '')
+            : '',
+        [hasScreenshot, step.screenshot, step.screenshot_path, cropTimestamp]
+    );
 
     return (
         <>
@@ -131,7 +134,9 @@ export default function DraggableStepCard({
                         <img
                             src={screenshotSrc}
                             alt={`Step ${index + 1}`}
-                            className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover cursor-pointer hover:opacity-90"
                             onClick={() => setIsViewerOpen(true)}
                         />
                         <div className="absolute top-2 left-12 bg-black/50 px-2 py-1 rounded text-xs">
@@ -184,5 +189,7 @@ export default function DraggableStepCard({
         </div>
         </>
     );
-}
+});
+
+export default DraggableStepCard;
 

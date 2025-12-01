@@ -123,6 +123,17 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.12);
   }
 
+  /* Scroll performance optimization */
+  .scroll-optimized {
+    contain: layout style paint;
+  }
+
+  /* Sticky element optimization - promotes to compositor layer */
+  .sticky-optimized {
+    will-change: transform;
+    contain: layout style;
+  }
+
   /* Glow effects */
   .glow-primary {
     box-shadow: 0 0 20px rgba(39, 33, 232, 0.3);

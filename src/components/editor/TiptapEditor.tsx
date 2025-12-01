@@ -205,7 +205,7 @@ export function TiptapEditor({
         style={{
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
-        className={`sticky top-0 z-10 flex items-center justify-between gap-2 p-2 backdrop-blur-md ${
+        className={`sticky top-0 z-10 flex items-center justify-between gap-2 p-2 backdrop-blur-md sticky-optimized ${
           isToolbarStuck
             ? 'mx-6 mt-3 rounded-xl bg-[rgba(22,19,22,0.98)] border border-[#2721E8]/50 shadow-[0_4px_20px_rgba(39,33,232,0.3)]'
             : 'mx-0 mt-0 rounded-t-xl rounded-b-none bg-[rgba(22,19,22,0.95)] border-b border-transparent border-b-white/10 shadow-none'
@@ -225,7 +225,7 @@ export function TiptapEditor({
       </div>
 
       {/* Editor Content */}
-      <div className="bg-[#161316] rounded-b-xl" style={{ minHeight }}>
+      <div className="bg-[#161316] rounded-b-xl scroll-optimized" style={{ minHeight }}>
         {viewMode === 'rich' ? (
           <EditorContent editor={editor} className="tiptap-content" />
         ) : (

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { NodeViewWrapper, NodeViewProps } from '@tiptap/react';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -6,7 +6,7 @@ import { Expand } from 'lucide-react';
 import ImageViewer from '../../ImageViewer';
 import { normalizeImagePath, isLocalPath } from './TauriImage';
 
-export function TauriImageView({ node, selected }: NodeViewProps) {
+export const TauriImageView = memo(function TauriImageView({ node, selected }: NodeViewProps) {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
 
@@ -37,7 +37,9 @@ export function TauriImageView({ node, selected }: NodeViewProps) {
           src={src}
           alt={alt || ''}
           title={title || ''}
-          className={`tiptap-image max-w-full max-h-80 w-auto h-auto object-contain rounded-lg transition-opacity ${
+          loading="lazy"
+          decoding="async"
+          className={`tiptap-image max-w-full max-h-80 w-auto h-auto object-contain rounded-lg ${
             selected ? 'ring-2 ring-[#2721E8]' : ''
           } ${imageError ? 'opacity-50' : ''}`}
           onError={() => setImageError(true)}
@@ -52,4 +54,4 @@ export function TauriImageView({ node, selected }: NodeViewProps) {
       </NodeViewWrapper>
     </>
   );
-}
+});
