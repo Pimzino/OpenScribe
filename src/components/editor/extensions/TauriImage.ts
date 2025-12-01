@@ -1,5 +1,7 @@
 import Image from '@tiptap/extension-image';
+import { ReactNodeViewRenderer } from '@tiptap/react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { TauriImageView } from './TauriImageView';
 
 /**
  * Normalize and decode image path for Tauri
@@ -88,36 +90,7 @@ export const TauriImage = Image.extend({
   },
 
   addNodeView() {
-    return ({ node, HTMLAttributes }) => {
-      const container = document.createElement('div');
-      container.className = 'tiptap-image-container';
-      container.style.display = 'inline-block';
-
-      const img = document.createElement('img');
-
-      // Apply all HTML attributes
-      Object.entries(HTMLAttributes).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
-          img.setAttribute(key, value as string);
-        }
-      });
-
-      // Add default styling class - ProseMirror adds ProseMirror-selectednode when selected
-      img.className = 'tiptap-image max-w-full rounded-lg my-4';
-
-      // Error handling for failed image loads
-      img.onerror = () => {
-        img.style.opacity = '0.5';
-        img.alt = 'Image failed to load: ' + (node.attrs.src || 'unknown');
-      };
-
-      container.appendChild(img);
-
-      return {
-        dom: container,
-        contentDOM: null,
-      };
-    };
+    return ReactNodeViewRenderer(TauriImageView);
   },
 });
 

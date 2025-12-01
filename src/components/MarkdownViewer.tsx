@@ -1,9 +1,49 @@
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { Expand } from "lucide-react";
+import ImageViewer from "./ImageViewer";
 
 interface MarkdownViewerProps {
     content: string;
     className?: string;
+}
+
+interface MarkdownImageProps {
+    src?: string;
+    alt?: string;
+}
+
+function MarkdownImage({ src, alt }: MarkdownImageProps) {
+    const [isViewerOpen, setIsViewerOpen] = useState(false);
+    const imageSrc = src ? convertFileSrc(decodeURIComponent(src)) : '';
+
+    return (
+        <>
+            {isViewerOpen && createPortal(
+                <ImageViewer
+                    imageSrc={imageSrc}
+                    title={alt || 'Image'}
+                    onClose={() => setIsViewerOpen(false)}
+                />,
+                document.body
+            )}
+            <span className="relative inline-block my-4 group">
+                <img
+                    src={imageSrc}
+                    alt={alt || ''}
+                    className="max-w-full max-h-80 w-auto h-auto object-contain rounded"
+                />
+                <button
+                    onClick={() => setIsViewerOpen(true)}
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                    <Expand size={14} className="text-white" />
+                </button>
+            </span>
+        </>
+    );
 }
 
 export default function MarkdownViewer({ content, className }: MarkdownViewerProps) {
@@ -21,13 +61,7 @@ export default function MarkdownViewer({ content, className }: MarkdownViewerPro
                     li: ({ children }) => <li className="mb-1">{children}</li>,
                     code: ({ children }) => <code className="bg-[#161316] px-1 py-0.5 rounded text-sm text-[#49B8D3]">{children}</code>,
                     pre: ({ children }) => <pre className="bg-[#161316] p-4 rounded mb-4 overflow-x-auto">{children}</pre>,
-                    img: ({ src, alt }) => (
-                        <img
-                            src={src ? convertFileSrc(decodeURIComponent(src)) : ''}
-                            alt={alt || ''}
-                            className="max-w-full rounded my-4"
-                        />
-                    ),
+                    img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
                 }}
             >
                 {content}

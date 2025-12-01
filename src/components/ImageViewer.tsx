@@ -13,15 +13,15 @@ export default function ImageViewer({ imageSrc, title, onClose }: ImageViewerPro
             onClick={onClose}
         >
             <div
-                className="glass-surface-2 rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col"
+                className="glass-surface-2 rounded-2xl shadow-2xl max-w-[95vw] w-full max-h-[95vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-white/10">
-                    <h3 className="text-lg font-semibold">{title || 'View Screenshot'}</h3>
+                <div className="flex items-center justify-between p-4 border-b border-white/10 bg-[#161316]/90 rounded-t-2xl">
+                    <h3 className="text-lg font-semibold text-white">{title || 'View Screenshot'}</h3>
                     <button
                         onClick={onClose}
-                        className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                        className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white"
                     >
                         <X size={20} />
                     </button>
@@ -32,15 +32,15 @@ export default function ImageViewer({ imageSrc, title, onClose }: ImageViewerPro
                     <img
                         src={imageSrc}
                         alt={title || 'Screenshot'}
-                        className="max-h-[70vh] max-w-full object-contain"
+                        className="max-h-[80vh] max-w-full object-contain"
                     />
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end p-4 border-t border-white/10">
+                <div className="flex items-center justify-end p-4 border-t border-white/10 bg-[#161316]/90 rounded-b-2xl">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-sm bg-white/10 hover:bg-white/15 rounded transition-colors"
+                        className="px-4 py-2 text-sm bg-white/15 hover:bg-white/25 rounded-lg transition-colors text-white font-medium"
                     >
                         Close
                     </button>
