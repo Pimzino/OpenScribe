@@ -81,11 +81,11 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
             </Tooltip>
 
             {isOpen && (
-                <div className="absolute right-0 top-full mt-2 w-48 glass-surface-3 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-48 glass-surface-3 rounded-xl shadow-xl z-50 overflow-hidden">
                     <button
                         onClick={handleExportPdf}
                         disabled={isExporting}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed rounded-t-xl"
                     >
                         <FileType size={16} />
                         Export to PDF
@@ -109,7 +109,7 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
                     <button
                         onClick={handleExportWord}
                         disabled={isExporting}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed rounded-b-xl"
                     >
                         <FileText size={16} />
                         Export to Word
