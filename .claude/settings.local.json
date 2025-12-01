@@ -6,7 +6,9 @@
       "WebFetch(domain:v2.tauri.app)",
       "WebFetch(domain:keepachangelog.com)",
       "WebFetch(domain:dribbble.com)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebSearch",
+      "WebFetch(domain:tiptap.dev)"
     ],
     "deny": [],
     "ask": []

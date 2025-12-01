@@ -10,6 +10,7 @@ import Tooltip from "../components/Tooltip";
 import MarkdownViewer from "../components/MarkdownViewer";
 import Spinner from "../components/Spinner";
 import { mapStepsForAI } from "../lib/stepMapper";
+import { TiptapEditor } from "../components/editor";
 
 export default function Editor() {
     const navigate = useNavigate();
@@ -180,10 +181,12 @@ export default function Editor() {
                     </div>
                 ) : isEditing ? (
                     <div className="max-w-4xl mx-auto">
-                        <textarea
-                            value={editedMarkdown}
-                            onChange={(e) => setEditedMarkdown(e.target.value)}
-                            className="w-full h-[calc(100vh-200px)] bg-[#161316]/70 backdrop-blur-sm p-6 rounded-xl border border-white/10 font-mono text-sm text-white/70 resize-none focus:outline-none focus:border-[#2721E8]"
+                        <TiptapEditor
+                            content={editedMarkdown}
+                            onChange={setEditedMarkdown}
+                            showSourceToggle={true}
+                            toolbarGroups={['history', 'format', 'list']}
+                            minHeight="calc(100vh - 200px)"
                             placeholder="Edit your documentation..."
                         />
                     </div>

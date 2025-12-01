@@ -16,34 +16,7 @@ import { mapStepsForAI } from "../lib/stepMapper";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from "@dnd-kit/sortable";
 import DraggableStepCard from "../components/DraggableStepCard";
-import {
-    MDXEditor,
-    headingsPlugin,
-    listsPlugin,
-    quotePlugin,
-    thematicBreakPlugin,
-    markdownShortcutPlugin,
-    toolbarPlugin,
-    imagePlugin,
-    linkPlugin,
-    linkDialogPlugin,
-    tablePlugin,
-    codeBlockPlugin,
-    diffSourcePlugin,
-    BoldItalicUnderlineToggles,
-    BlockTypeSelect,
-    ListsToggle,
-    UndoRedo,
-    InsertImage,
-    CreateLink,
-    InsertTable,
-    InsertThematicBreak,
-    InsertCodeBlock,
-    CodeToggle,
-    Separator,
-    DiffSourceToggleWrapper
-} from '@mdxeditor/editor';
-import '@mdxeditor/editor/style.css';
+import { TiptapEditor } from '../components/editor';
 import ImageCropper from "../components/ImageCropper";
 
 export default function RecordingDetail() {
@@ -597,58 +570,14 @@ export default function RecordingDetail() {
                     <div className="glass-surface-2 rounded-xl p-6 print-content">
                         {currentRecording.recording.documentation ? (
                             isEditing ? (
-                                <div className="mdx-editor-dark">
-                                    <MDXEditor
-                                        markdown={editedContent}
-                                        onChange={(value) => setEditedContent(value)}
-                                        plugins={[
-                                            headingsPlugin(),
-                                            listsPlugin(),
-                                            quotePlugin(),
-                                            thematicBreakPlugin(),
-                                            markdownShortcutPlugin(),
-                                            linkPlugin(),
-                                            linkDialogPlugin(),
-                                            tablePlugin(),
-                                            codeBlockPlugin({ defaultCodeBlockLanguage: 'js' }),
-                                            imagePlugin({
-                                                imagePreviewHandler: async (imageSource) => {
-                                                    // Convert local file paths to Tauri asset URLs
-                                                    // Decode URI components first (e.g., %20 -> space)
-                                                    const decodedSource = decodeURIComponent(imageSource);
-                                                    if (decodedSource.startsWith('C:') || decodedSource.startsWith('/')) {
-                                                        return Promise.resolve(convertFileSrc(decodedSource));
-                                                    }
-                                                    return Promise.resolve(imageSource);
-                                                }
-                                            }),
-                                            diffSourcePlugin({ viewMode: 'rich-text' }),
-                                            toolbarPlugin({
-                                                toolbarContents: () => (
-                                                    <DiffSourceToggleWrapper>
-                                                        <UndoRedo />
-                                                        <Separator />
-                                                        <BlockTypeSelect />
-                                                        <Separator />
-                                                        <BoldItalicUnderlineToggles />
-                                                        <Separator />
-                                                        <ListsToggle />
-                                                        <Separator />
-                                                        <CreateLink />
-                                                        <InsertImage />
-                                                        <Separator />
-                                                        <InsertTable />
-                                                        <InsertThematicBreak />
-                                                        <Separator />
-                                                        <InsertCodeBlock />
-                                                        <CodeToggle />
-                                                    </DiffSourceToggleWrapper>
-                                                )
-                                            })
-                                        ]}
-                                        contentEditableClassName="prose prose-invert max-w-none min-h-[500px] p-4"
-                                    />
-                                </div>
+                                <TiptapEditor
+                                    content={editedContent}
+                                    onChange={(value) => setEditedContent(value)}
+                                    showSourceToggle={true}
+                                    toolbarGroups={['history', 'heading', 'format', 'list', 'insert', 'code']}
+                                    minHeight="500px"
+                                    placeholder="Edit your documentation..."
+                                />
                             ) : (
                                 <MarkdownViewer content={currentRecording.recording.documentation} className="markdown-content" />
                             )

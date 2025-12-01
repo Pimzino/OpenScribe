@@ -111,374 +111,272 @@ body {
   }
 }
 
+/* ============================================
+   TIPTAP EDITOR DARK THEME
+   ============================================ */
 
-/* MDXEditor Dark Theme */
-.mdx-editor-dark {
-    --accentBase: #2721E8;
-    --accentBgSubtle: rgba(30, 27, 35, 0.65);
-    --accentBg: rgba(255, 255, 255, 0.1);
-    --accentBgHover: rgba(255, 255, 255, 0.15);
-    --accentBgActive: rgba(255, 255, 255, 0.2);
-    --accentLine: rgba(255, 255, 255, 0.1);
-    --accentBorder: rgba(255, 255, 255, 0.15);
-    --accentBorderHover: rgba(255, 255, 255, 0.25);
-    --accentSolid: #2721E8;
-    --accentSolidHover: #4a45f5;
-    --accentText: #49B8D3;
-    --accentTextContrast: white;
-
-    --baseBase: #161316;
-    --baseBgSubtle: rgba(22, 19, 22, 0.75);
-    --baseBg: rgba(30, 27, 35, 0.65);
-    --baseBgHover: rgba(255, 255, 255, 0.1);
-    --baseBgActive: rgba(255, 255, 255, 0.15);
-    --baseLine: rgba(255, 255, 255, 0.1);
-    --baseBorder: rgba(255, 255, 255, 0.1);
-    --baseBorderHover: rgba(255, 255, 255, 0.2);
-    --baseSolid: rgba(255, 255, 255, 0.15);
-    --baseSolidHover: rgba(255, 255, 255, 0.2);
-    --baseText: rgba(255, 255, 255, 0.7);
-    --baseTextContrast: white;
-}
-
-.mdx-editor-dark .mdxeditor {
+/* Editor Container */
+.tiptap-editor-dark {
     background: rgba(30, 27, 35, 0.65);
     color: rgba(255, 255, 255, 0.8);
 }
 
-.mdx-editor-dark [class*="_toolbarRoot_"] {
-    background: rgba(22, 19, 22, 0.75);
-    border-color: rgba(255, 255, 255, 0.1);
-}
-
-.mdx-editor-dark [class*="_contentEditable_"] {
+/* Content Area - ProseMirror */
+.tiptap-editor-dark .tiptap-content .ProseMirror {
     background: #161316;
+    color: rgba(255, 255, 255, 0.9);
+    min-height: 500px;
+    padding: 1rem;
+    outline: none;
 }
 
-.mdx-editor-dark .mdxeditor [class*="_editorWrapper_"] {
+.tiptap-editor-dark .tiptap-content .ProseMirror:focus {
+    outline: none;
+}
+
+/* Placeholder */
+.tiptap-editor-dark .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+    float: left;
+    height: 0;
+}
+
+/* Typography - Headings */
+.tiptap-editor-dark .ProseMirror h1 {
+    font-size: 1.875rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    margin-top: 1.5rem;
+    color: white;
+    line-height: 1.2;
+}
+
+.tiptap-editor-dark .ProseMirror h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    margin-top: 1.25rem;
+    color: white;
+    line-height: 1.3;
+}
+
+.tiptap-editor-dark .ProseMirror h3 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    margin-top: 1rem;
+    color: white;
+    line-height: 1.4;
+}
+
+/* Typography - Body */
+.tiptap-editor-dark .ProseMirror p {
+    margin-bottom: 1rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+}
+
+.tiptap-editor-dark .ProseMirror strong {
+    font-weight: 700;
     color: white;
 }
 
-.mdx-editor-dark .mdxeditor h1,
-.mdx-editor-dark .mdxeditor h2,
-.mdx-editor-dark .mdxeditor h3,
-.mdx-editor-dark .mdxeditor p,
-.mdx-editor-dark .mdxeditor li {
-    color: white;
+.tiptap-editor-dark .ProseMirror em {
+    font-style: italic;
 }
 
-.mdx-editor-dark .mdxeditor [contenteditable="true"] {
-    color: white;
-    caret-color: white;
+.tiptap-editor-dark .ProseMirror u {
+    text-decoration: underline;
 }
 
-.mdx-editor-dark .mdxeditor img {
+.tiptap-editor-dark .ProseMirror s {
+    text-decoration: line-through;
+}
+
+/* Links */
+.tiptap-editor-dark .ProseMirror a {
+    color: #49B8D3;
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+.tiptap-editor-dark .ProseMirror a:hover {
+    color: #5fc5e0;
+}
+
+/* Lists */
+.tiptap-editor-dark .ProseMirror ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.tiptap-editor-dark .ProseMirror ol {
+    list-style-type: decimal;
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.tiptap-editor-dark .ProseMirror li {
+    margin-bottom: 0.25rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.tiptap-editor-dark .ProseMirror li > p {
+    margin-bottom: 0;
+}
+
+/* Blockquotes */
+.tiptap-editor-dark .ProseMirror blockquote {
+    border-left: 4px solid #2721E8;
+    padding-left: 1rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    margin: 1rem 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+}
+
+.tiptap-editor-dark .ProseMirror blockquote p {
+    margin-bottom: 0;
+}
+
+/* Horizontal Rule */
+.tiptap-editor-dark .ProseMirror hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 1.5rem 0;
+}
+
+/* Inline Code */
+.tiptap-editor-dark .ProseMirror code {
+    background: rgba(22, 19, 22, 0.75);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: #49B8D3;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+/* Code Blocks */
+.tiptap-editor-dark .ProseMirror pre {
+    background: rgba(22, 19, 22, 0.75);
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    overflow-x: auto;
+}
+
+.tiptap-editor-dark .ProseMirror pre code {
+    background: transparent;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Code block syntax highlighting */
+.tiptap-editor-dark .ProseMirror pre .hljs-keyword {
+    color: #f472b6;
+}
+
+.tiptap-editor-dark .ProseMirror pre .hljs-string {
+    color: #4ade80;
+}
+
+.tiptap-editor-dark .ProseMirror pre .hljs-comment {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.tiptap-editor-dark .ProseMirror pre .hljs-function {
+    color: #60a5fa;
+}
+
+.tiptap-editor-dark .ProseMirror pre .hljs-number {
+    color: #fbbf24;
+}
+
+.tiptap-editor-dark .ProseMirror pre .hljs-variable,
+.tiptap-editor-dark .ProseMirror pre .hljs-attr {
+    color: #c084fc;
+}
+
+/* Images */
+.tiptap-editor-dark .ProseMirror img {
     max-width: 100%;
-    border-radius: 0.5rem;
+    border-radius: 8px;
     margin: 1rem 0;
 }
 
-/* Toolbar buttons and icons */
-.mdx-editor-dark .mdxeditor button,
-.mdx-editor-dark .mdxeditor [role="toolbar"] button {
+.tiptap-editor-dark .tiptap-image-container {
+    display: inline-block;
+}
+
+.tiptap-editor-dark .ProseMirror img.ProseMirror-selectednode {
+    outline: 2px solid #2721E8;
+    outline-offset: 2px;
+}
+
+/* Tables */
+.tiptap-editor-dark .ProseMirror table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    table-layout: fixed;
+    overflow: hidden;
+}
+
+.tiptap-editor-dark .ProseMirror th,
+.tiptap-editor-dark .ProseMirror td {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+    position: relative;
+}
+
+.tiptap-editor-dark .ProseMirror th {
+    background: rgba(39, 33, 232, 0.15);
+    font-weight: 600;
     color: white;
 }
 
-.mdx-editor-dark .mdxeditor button svg {
-    color: white;
-    stroke: currentColor;
+.tiptap-editor-dark .ProseMirror td {
+    background: transparent;
 }
 
-.mdx-editor-dark .mdxeditor button:hover {
-    background: rgba(255, 255, 255, 0.1);
+.tiptap-editor-dark .ProseMirror .selectedCell {
+    background: rgba(39, 33, 232, 0.2);
 }
 
-.mdx-editor-dark .mdxeditor [data-state="on"] {
+.tiptap-editor-dark .ProseMirror .selectedCell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(39, 33, 232, 0.2);
+    pointer-events: none;
+}
+
+/* Table resize handle */
+.tiptap-editor-dark .ProseMirror .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: -2px;
+    width: 4px;
+    background-color: #2721E8;
+    pointer-events: none;
+}
+
+.tiptap-editor-dark .ProseMirror.resize-cursor {
+    cursor: col-resize;
+}
+
+/* Selection highlighting */
+.tiptap-editor-dark .ProseMirror ::selection {
     background: rgba(39, 33, 232, 0.3);
-}
-
-/* Dropdowns and selects */
-.mdx-editor-dark .mdxeditor select,
-.mdx-editor-dark .mdxeditor [role="combobox"] {
-    background: rgba(22, 19, 22, 0.75);
-    color: white;
-    border-color: rgba(255, 255, 255, 0.1);
-}
-
-/* Popup dialogs */
-.mdx-editor-dark [data-radix-popper-content-wrapper] {
-    --tw-bg-opacity: 1;
-}
-
-.mdx-editor-dark [data-radix-popper-content-wrapper]>div,
-.mdx-editor-dark .mdxeditor-popup-container>div,
-.mdx-editor-dark [role="dialog"],
-.mdx-editor-dark [class*="_dialogContent_"],
-.mdx-editor-dark [class*="_dialogForm_"],
-.mdx-editor-dark [class*="_formField_"],
-.mdx-editor-dark form {
-    background: rgba(40, 37, 50, 0.95) !important;
-    color: white !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.mdx-editor-dark [data-radix-popper-content-wrapper] input,
-.mdx-editor-dark [role="dialog"] input,
-.mdx-editor-dark [class*="_dialogContent_"] input,
-.mdx-editor-dark [class*="_textInput_"] {
-    background: #161316 !important;
-    color: white !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.mdx-editor-dark [data-radix-popper-content-wrapper] label,
-.mdx-editor-dark [role="dialog"] label,
-.mdx-editor-dark [class*="_dialogContent_"] label {
-    color: rgba(255, 255, 255, 0.7) !important;
-}
-
-.mdx-editor-dark [data-radix-popper-content-wrapper] button,
-.mdx-editor-dark [role="dialog"] button,
-.mdx-editor-dark [class*="_dialogContent_"] button {
-    color: white;
-}
-
-/* Image dialog specific */
-.mdx-editor-dark [class*="_imageDialog_"],
-.mdx-editor-dark [class*="_linkDialog_"],
-.mdx-editor-dark [class*="_tableDialog_"] {
-    background: rgba(40, 37, 50, 0.95) !important;
-}
-
-/* Dialog overlay */
-.mdx-editor-dark [class*="_dialogOverlay_"] {
-    background: rgba(0, 0, 0, 0.7) !important;
-}
-
-/* Dialog action buttons */
-.mdx-editor-dark [class*="_primaryButton_"] {
-    background: #2721E8 !important;
-    color: white !important;
-}
-
-.mdx-editor-dark [class*="_secondaryButton_"] {
-    background: rgba(255, 255, 255, 0.15) !important;
-    color: white !important;
-}
-
-/* Global MDXEditor dialog styling (portals render outside component tree) */
-[class*="_dialogContent_"],
-[class*="_multiFieldForm_"],
-[class*="_formField_"] {
-    background: rgba(40, 37, 50, 0.95) !important;
-    color: white !important;
-}
-
-[class*="_dialogContent_"] input,
-[class*="_dialogContent_"] [class*="_textInput_"] {
-    background: #161316 !important;
-    color: white !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-[class*="_dialogContent_"] label,
-[class*="_dialogContent_"] span {
-    color: rgba(255, 255, 255, 0.7) !important;
-}
-
-[class*="_dialogContent_"] [class*="_actionButton_"],
-[class*="_primaryButton_"] {
-    background: #2721E8 !important;
-    color: white !important;
-}
-
-[class*="_secondaryButton_"],
-[class*="_dialogContent_"] button:not([class*="_primaryButton_"]):not([class*="_actionButton_"]) {
-    background: rgba(255, 255, 255, 0.15) !important;
-    color: white !important;
-}
-
-/* Upload image button */
-[class*="_uploadButton_"] {
-    background: rgba(255, 255, 255, 0.1) !important;
-    color: white !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Select dropdown menu */
-.mdx-editor-dark [role="listbox"],
-.mdx-editor-dark [role="menu"] {
-    background: rgba(40, 37, 50, 0.95) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.mdx-editor-dark [role="option"],
-.mdx-editor-dark [role="menuitem"] {
-    color: white !important;
-}
-
-.mdx-editor-dark [role="option"]:hover,
-.mdx-editor-dark [role="menuitem"]:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Separator styling */
-.mdx-editor-dark .mdxeditor [class*="_toolbarGroupOfGroups_"]>[class*="_separator_"] {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-/* Source editor (CodeMirror) */
-.mdx-editor-dark .mdxeditor-source-editor,
-.mdx-editor-dark .mdxeditor-diff-editor,
-.mdx-editor-dark [class*="_sourceEditor_"],
-.mdx-editor-dark [class*="_diffEditor_"] {
-    background: #161316 !important;
-}
-
-/* CodeMirror editor styling */
-.mdx-editor-dark .cm-editor {
-    background: #161316 !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-scroller {
-    background: #161316 !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-gutters {
-    background: rgba(22, 19, 22, 0.75) !important;
-    color: rgba(255, 255, 255, 0.5) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-content {
-    color: rgba(255, 255, 255, 0.9) !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-line {
-    color: rgba(255, 255, 255, 0.9) !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-activeLine {
-    background: rgba(255, 255, 255, 0.05) !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-activeLineGutter {
-    background: rgba(255, 255, 255, 0.05) !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-selectionBackground {
-    background: rgba(39, 33, 232, 0.3) !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-cursor {
-    border-color: white !important;
-}
-
-/* Markdown syntax highlighting in source mode */
-.mdx-editor-dark .cm-editor .cm-header {
-    color: #4a45f5 !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-link,
-.mdx-editor-dark .cm-editor .cm-url {
-    color: #49B8D3 !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-string {
-    color: #4ade80 !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-comment {
-    color: rgba(255, 255, 255, 0.4) !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-meta {
-    color: #c084fc !important;
-}
-
-.mdx-editor-dark .cm-editor .cm-keyword {
-    color: #f472b6 !important;
-}
-
-/* Image paths in source mode */
-.mdx-editor-dark .cm-editor .cm-image,
-.mdx-editor-dark .cm-editor .cm-image-marker {
-    color: #FF6B35 !important;
-}
-
-/* View mode switcher (rich/diff/source toggle) */
-.mdx-editor-dark [class*="_viewMode_"],
-.mdx-editor-dark [class*="_diffSourceToggle_"] {
-    background: rgba(22, 19, 22, 0.75) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.mdx-editor-dark [class*="_viewMode_"] button,
-.mdx-editor-dark [class*="_diffSourceToggle_"] button {
-    background: transparent !important;
-    color: rgba(255, 255, 255, 0.6) !important;
-}
-
-.mdx-editor-dark [class*="_viewMode_"] button[data-state="on"],
-.mdx-editor-dark [class*="_diffSourceToggle_"] button[data-state="on"],
-.mdx-editor-dark [class*="_viewMode_"] button[aria-pressed="true"],
-.mdx-editor-dark [class*="_diffSourceToggle_"] button[aria-pressed="true"] {
-    background: rgba(39, 33, 232, 0.3) !important;
-    color: white !important;
-}
-
-/* Image editor controls (delete/edit buttons) */
-.mdx-editor-dark [class*="_imageWrapper_"] [class*="_editImageButton_"],
-.mdx-editor-dark [class*="_imageWrapper_"] button,
-.mdx-editor-dark [class*="_imageResizer_"],
-.mdx-editor-dark [class*="_imageControlWrapperResizing_"],
-.mdx-editor-dark [class*="_imageControls_"] {
-    background: rgba(22, 19, 22, 0.75) !important;
-    color: white !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-.mdx-editor-dark [class*="_imageWrapper_"] [class*="_iconButton_"],
-.mdx-editor-dark [class*="_imageWrapper_"] svg {
-    color: white !important;
-}
-
-/* Remove any white borders on image control containers */
-.mdx-editor-dark [class*="_imageWrapper_"]>div,
-.mdx-editor-dark [class*="_imageWrapper_"] [class*="_button_"] {
-    border: none !important;
-    outline: none !important;
-}
-
-/* Force style image editing UI container and buttons */
-.mdx-editor-dark .mdxeditor [class*="_iconButton_"] {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-.mdx-editor-dark .mdxeditor [class*="_editImageToolbar_"],
-.mdx-editor-dark .mdxeditor [class*="_imageToolbar_"] {
-    background: rgba(22, 19, 22, 0.85) !important;
-    border: none !important;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
-    padding: 4px !important;
-    border-radius: 8px !important;
-    gap: 4px !important;
-}
-
-/* Any remaining white backgrounds in toolbar area */
-.mdx-editor-dark [class*="_toggleGroup_"],
-.mdx-editor-dark [class*="_selectTrigger_"],
-.mdx-editor-dark [class*="_toolbarToggleItem_"] {
-    background: transparent !important;
-}
-
-.mdx-editor-dark [class*="_selectTrigger_"] {
-    background: rgba(22, 19, 22, 0.75) !important;
-    color: white !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Print Styles */
