@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Download, FileText, FileCode, FileType, Check } from "lucide-react";
-import { exportToPdf, exportToHtml, exportToWord, exportToMarkdown, copyToClipboard } from "../lib/export";
+import { Download, FileText, FileCode, FileType } from "lucide-react";
+import { exportToPdf, exportToHtml, exportToWord, exportToMarkdown } from "../lib/export";
 import Tooltip from "./Tooltip";
-import Spinner from "./Spinner";
 
 interface ExportDropdownProps {
     markdown: string;
@@ -12,9 +11,7 @@ interface ExportDropdownProps {
 export default function ExportDropdown({ markdown, fileName }: ExportDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const [copied, setCopied] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
-    const [isCopying, setIsCopying] = useState(false);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -25,18 +22,6 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
-
-    const handleCopy = async () => {
-        setIsCopying(true);
-        try {
-            await copyToClipboard(markdown);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-            setIsOpen(false);
-        } finally {
-            setIsCopying(false);
-        }
-    };
 
     const handleExportMarkdown = () => {
         exportToMarkdown(markdown, fileName);
@@ -98,17 +83,8 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
             {isOpen && (
                 <div className="absolute right-0 top-full mt-2 w-48 glass-surface-3 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
                     <button
-                        onClick={handleCopy}
-                        disabled={isCopying || isExporting}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isCopying ? <Spinner size="sm" /> : copied ? <Check size={16} className="text-green-500" /> : <FileText size={16} />}
-                        Copy to Markdown
-                    </button>
-                    <div className="h-px bg-white/10 my-1" />
-                    <button
                         onClick={handleExportPdf}
-                        disabled={isExporting || isCopying}
+                        disabled={isExporting}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileType size={16} />
@@ -116,7 +92,7 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
                     </button>
                     <button
                         onClick={handleExportMarkdown}
-                        disabled={isExporting || isCopying}
+                        disabled={isExporting}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileCode size={16} />
@@ -124,7 +100,7 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
                     </button>
                     <button
                         onClick={handleExportHtml}
-                        disabled={isExporting || isCopying}
+                        disabled={isExporting}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileCode size={16} />
@@ -132,7 +108,7 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
                     </button>
                     <button
                         onClick={handleExportWord}
-                        disabled={isExporting || isCopying}
+                        disabled={isExporting}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileText size={16} />
