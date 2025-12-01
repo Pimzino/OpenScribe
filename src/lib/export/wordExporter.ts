@@ -125,6 +125,7 @@ export async function exportToWord(markdown: string, fileName: string): Promise<
         }],
     });
 
-    const buffer = await Packer.toBuffer(doc);
+    const blob = await Packer.toBlob(doc);
+    const buffer = await blob.arrayBuffer();
     await saveFile(new Uint8Array(buffer), `${fileName}.docx`, [{ name: "Word Document", extensions: ["docx"] }]);
 }
