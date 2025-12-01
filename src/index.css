@@ -68,6 +68,38 @@ body {
   min-height: 100vh;
 }
 
+/* Custom Scrollbar - Glass Effect */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2721E8 rgba(30, 27, 35, 0.65);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(30, 27, 35, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2721E8;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a45f5;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 @layer utilities {
   /* Glass Surfaces - 3 depth levels */
   .glass-surface-1 {
