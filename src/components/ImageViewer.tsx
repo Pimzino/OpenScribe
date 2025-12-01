@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 interface ImageViewerProps {
     imageSrc: string;
@@ -7,7 +8,7 @@ interface ImageViewerProps {
 }
 
 export default function ImageViewer({ imageSrc, title, onClose }: ImageViewerProps) {
-    return (
+    return createPortal(
         <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={onClose}
@@ -46,7 +47,8 @@ export default function ImageViewer({ imageSrc, title, onClose }: ImageViewerPro
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
