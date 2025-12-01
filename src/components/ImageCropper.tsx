@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { X, Check, RotateCcw } from 'lucide-react';
@@ -85,15 +86,20 @@ export default function ImageCropper({ imageSrc, onSave, onCancel }: ImageCroppe
         onSave(base64);
     };
 
-    return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="glass-surface-2 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+    return createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={onCancel}
+        >
+            <div
+                className="glass-surface-2 rounded-2xl shadow-2xl max-w-[95vw] w-full max-h-[95vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-white/10">
-                    <h3 className="text-lg font-semibold">Crop Screenshot</h3>
+                <div className="flex items-center justify-between p-4 border-b border-white/10 bg-[#161316]/90 rounded-t-2xl">
+                    <h3 className="text-lg font-semibold text-white">Crop Screenshot</h3>
                     <button
                         onClick={onCancel}
-                        className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                        className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white"
                     >
                         <X size={20} />
                     </button>
@@ -113,16 +119,16 @@ export default function ImageCropper({ imageSrc, onSave, onCancel }: ImageCroppe
                             alt="Crop preview"
                             onLoad={onImageLoad}
                             crossOrigin="anonymous"
-                            className="max-h-[60vh] object-contain"
+                            className="max-h-[80vh] max-w-full object-contain"
                         />
                     </ReactCrop>
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between p-4 border-t border-white/10">
+                <div className="flex items-center justify-between p-4 border-t border-white/10 bg-[#161316]/90 rounded-b-2xl">
                     <button
                         onClick={handleReset}
-                        className="flex items-center gap-2 px-3 py-2 text-sm bg-white/10 hover:bg-white/15 rounded transition-colors"
+                        className="flex items-center gap-2 px-3 py-2 text-sm bg-white/10 hover:bg-white/15 rounded-lg transition-colors text-white font-medium"
                     >
                         <RotateCcw size={16} />
                         Reset
@@ -130,14 +136,14 @@ export default function ImageCropper({ imageSrc, onSave, onCancel }: ImageCroppe
                     <div className="flex items-center gap-2">
                         <button
                             onClick={onCancel}
-                            className="px-4 py-2 text-sm bg-white/10 hover:bg-white/15 rounded transition-colors"
+                            className="px-4 py-2 text-sm bg-white/15 hover:bg-white/25 rounded-lg transition-colors text-white font-medium"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleSave}
                             disabled={!completedCrop}
-                            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#2721E8] hover:bg-[#4a45f5] disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#2721E8] hover:bg-[#4a45f5] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors text-white font-medium"
                         >
                             <Check size={16} />
                             Save Crop
@@ -145,6 +151,7 @@ export default function ImageCropper({ imageSrc, onSave, onCancel }: ImageCroppe
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
