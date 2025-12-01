@@ -23,9 +23,16 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const handleExportMarkdown = () => {
-        exportToMarkdown(markdown, fileName);
-        setIsOpen(false);
+    const handleExportMarkdown = async () => {
+        setIsExporting(true);
+        try {
+            await exportToMarkdown(markdown, fileName);
+            setIsOpen(false);
+        } catch (e) {
+            console.error("Markdown Export failed", e);
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const handleExportHtml = async () => {

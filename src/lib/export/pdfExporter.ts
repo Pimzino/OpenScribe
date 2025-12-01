@@ -3,7 +3,7 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
-import { getFileBuffer, arrayBufferToBase64, getMimeType } from "./utils";
+import { getFileBuffer, arrayBufferToBase64, getMimeType, saveFile } from "./utils";
 
 // Register fonts for pdfmake
 // @ts-ignore
@@ -152,5 +152,13 @@ export async function exportToPdf(markdown: string, fileName: string): Promise<v
         }
     } as any;
 
-    pdfMake.createPdf(docDefinition).download(`${fileName}.pdf`);
+    const pdfDoc = pdfMake.createPdf(docDefinition);
+
+    const buffer = await new Promise<Uint8Array>((resolve) => {
+        pdfDoc.getBuffer((buffer: Buffer) => {
+            resolve(new Uint8Array(buffer));
+        });
+    });
+
+    await saveFile(buffer, `${fileName}.pdf`, [{ name: "PDF", extensions: ["pdf"] }]);
 }

@@ -2,7 +2,7 @@ import { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, ExternalH
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
-import { getFileBuffer, downloadFile } from "./utils";
+import { getFileBuffer, saveFile } from "./utils";
 
 export async function exportToWord(markdown: string, fileName: string): Promise<void> {
     // Parse markdown to AST
@@ -125,6 +125,6 @@ export async function exportToWord(markdown: string, fileName: string): Promise<
         }],
     });
 
-    const blob = await Packer.toBlob(doc);
-    downloadFile(blob, `${fileName}.docx`);
+    const buffer = await Packer.toBuffer(doc);
+    await saveFile(new Uint8Array(buffer), `${fileName}.docx`, [{ name: "Word Document", extensions: ["docx"] }]);
 }

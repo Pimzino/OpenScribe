@@ -15,6 +15,12 @@
         { "path": "**" }
       ]
     },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        { "path": "**" }
+      ]
+    },
     "store:default",
     "dialog:default",
     "core:window:allow-minimize",

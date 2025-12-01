@@ -1,4 +1,5 @@
-import { readFile } from "@tauri-apps/plugin-fs";
+import { readFile, writeFile } from "@tauri-apps/plugin-fs";
+import { save } from "@tauri-apps/plugin-dialog";
 
 // Helper to read file as Uint8Array
 export async function getFileBuffer(path: string): Promise<Uint8Array | null> {
@@ -61,12 +62,17 @@ export function getMimeType(path: string): string {
     return 'image/png';
 }
 
-// Helper to trigger file download
-export function downloadFile(blob: Blob, fileName: string): void {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
+// Helper to save file using native file picker
+export async function saveFile(data: Uint8Array, fileName: string, filters: { name: string; extensions: string[] }[]): Promise<boolean> {
+    const path = await save({
+        defaultPath: fileName,
+        filters,
+    });
+
+    if (!path) {
+        return false; // User cancelled
+    }
+
+    await writeFile(path, data);
+    return true;
 }

@@ -1,12 +1,12 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
-import { getFileBuffer, arrayBufferToBase64, getMimeType, downloadFile } from "./utils";
+import { getFileBuffer, arrayBufferToBase64, getMimeType, saveFile } from "./utils";
 
 export async function exportToHtml(markdown: string, fileName: string): Promise<void> {
     const html = await processMarkdownToHtml(markdown, fileName);
-    const blob = new Blob([html], { type: 'text/html' });
-    downloadFile(blob, `${fileName}.html`);
+    const data = new TextEncoder().encode(html);
+    await saveFile(data, `${fileName}.html`, [{ name: "HTML", extensions: ["html"] }]);
 }
 
 async function processMarkdownToHtml(markdown: string, fileName: string): Promise<string> {

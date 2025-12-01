@@ -1,10 +1,6 @@
-import { downloadFile } from "./utils";
+import { saveFile } from "./utils";
 
-export function exportToMarkdown(markdown: string, fileName: string): void {
-    const blob = new Blob([markdown], { type: 'text/markdown' });
-    downloadFile(blob, `${fileName}.md`);
-}
-
-export async function copyToClipboard(markdown: string): Promise<void> {
-    await navigator.clipboard.writeText(markdown);
+export async function exportToMarkdown(markdown: string, fileName: string): Promise<void> {
+    const data = new TextEncoder().encode(markdown);
+    await saveFile(data, `${fileName}.md`, [{ name: "Markdown", extensions: ["md"] }]);
 }
