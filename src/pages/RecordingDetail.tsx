@@ -567,7 +567,7 @@ export default function RecordingDetail() {
                 )}
 
                 {activeTab === "docs" ? (
-                    <div className="glass-surface-2 rounded-xl p-6 print-content">
+                    <div className={`glass-surface-2 rounded-xl print-content ${isEditing ? '' : 'p-6'}`}>
                         {currentRecording.recording.documentation ? (
                             isEditing ? (
                                 <TiptapEditor
