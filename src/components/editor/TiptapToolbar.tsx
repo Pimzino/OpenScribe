@@ -21,6 +21,7 @@ import {
   FileCode,
 } from 'lucide-react';
 import type { ToolbarGroup } from './TiptapEditor';
+import { ImageModal } from './ImageModal';
 
 interface ToolbarButtonProps {
   onClick: () => void;
@@ -72,6 +73,12 @@ export function TiptapToolbar({
   // Force re-render on editor selection/transaction changes
   const [, forceUpdate] = useState(0);
 
+  // Image modal state
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [currentImageSrc, setCurrentImageSrc] = useState('');
+  const [currentImageAlt, setCurrentImageAlt] = useState('');
+  const [isEditingImage, setIsEditingImage] = useState(false);
+
   useEffect(() => {
     const handleUpdate = () => {
       forceUpdate((n) => n + 1);
@@ -86,32 +93,65 @@ export function TiptapToolbar({
     };
   }, [editor]);
 
-  const addImage = () => {
-    // Check if an image is currently selected
-    const isImageSelected = editor.isActive('image') || editor.isActive('tauriImage');
-    const currentSrc = isImageSelected
-      ? editor.getAttributes('image').src || editor.getAttributes('tauriImage').src || ''
-      : '';
+  const openImageModal = () => {
+    // Check if an image is currently selected (tauriImage is the custom extension name)
+    const isTauriImage = editor.isActive('tauriImage');
+    const isStandardImage = editor.isActive('image');
+    const isImageSelected = isTauriImage || isStandardImage;
 
-    const promptText = isImageSelected
-      ? 'Edit image path (leave empty to remove):'
-      : 'Enter image URL or file path:';
+    let imageSrc = '';
+    let imageAlt = '';
 
-    const url = window.prompt(promptText, currentSrc);
+    if (isImageSelected) {
+      // Get attributes from the correct node type
+      const attrs = isTauriImage
+        ? editor.getAttributes('tauriImage')
+        : editor.getAttributes('image');
 
-    if (url === null) {
-      return; // User cancelled
+      imageSrc = attrs.src || '';
+      imageAlt = attrs.alt || '';
     }
 
-    if (url === '' && isImageSelected) {
+    // Also try to get from the selected node directly if attrs didn't work
+    if (!imageSrc) {
+      const { selection } = editor.state;
+      const node = selection.$anchor.parent;
+
+      // Check if parent is an image
+      if (node.type.name === 'tauriImage' || node.type.name === 'image') {
+        imageSrc = node.attrs.src || '';
+        imageAlt = node.attrs.alt || '';
+      }
+
+      // Check the node at the current position
+      const nodeAt = editor.state.doc.nodeAt(selection.from);
+      if (nodeAt && (nodeAt.type.name === 'tauriImage' || nodeAt.type.name === 'image')) {
+        imageSrc = nodeAt.attrs.src || '';
+        imageAlt = nodeAt.attrs.alt || '';
+      }
+    }
+
+    if (imageSrc) {
+      setCurrentImageSrc(imageSrc);
+      setCurrentImageAlt(imageAlt);
+      setIsEditingImage(true);
+    } else {
+      setCurrentImageSrc('');
+      setCurrentImageAlt('');
+      setIsEditingImage(false);
+    }
+
+    setImageModalOpen(true);
+  };
+
+  const handleImageInsert = (src: string, alt: string) => {
+    if (src === '' && isEditingImage) {
       // Remove the image if user clears the path
       editor.chain().focus().deleteSelection().run();
-      return;
+    } else if (src) {
+      editor.chain().focus().setImage({ src, alt: alt || undefined }).run();
     }
-
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run();
-    }
+    setImageModalOpen(false);
   };
 
   const addLink = () => {
@@ -284,7 +324,7 @@ export function TiptapToolbar({
               <LinkIcon size={16} />
             </ToolbarButton>
             <ToolbarButton
-              onClick={addImage}
+              onClick={openImageModal}
               isActive={editor.isActive('image') || editor.isActive('tauriImage')}
               disabled={disabled}
               title="Insert/Edit Image"
@@ -324,18 +364,29 @@ export function TiptapToolbar({
   };
 
   return (
-    <div
-      className={`flex items-center gap-1 flex-wrap ${
-        disabled ? 'pointer-events-none opacity-50' : ''
-      }`}
-    >
-      {groups.map((group, index) => (
-        <div key={group} className="flex items-center">
-          {index > 0 && <ToolbarSeparator />}
-          {renderGroup(group)}
-        </div>
-      ))}
-    </div>
+    <>
+      <div
+        className={`flex items-center gap-1 flex-wrap ${
+          disabled ? 'pointer-events-none opacity-50' : ''
+        }`}
+      >
+        {groups.map((group, index) => (
+          <div key={group} className="flex items-center">
+            {index > 0 && <ToolbarSeparator />}
+            {renderGroup(group)}
+          </div>
+        ))}
+      </div>
+
+      <ImageModal
+        isOpen={imageModalOpen}
+        onClose={() => setImageModalOpen(false)}
+        onInsert={handleImageInsert}
+        initialSrc={currentImageSrc}
+        initialAlt={currentImageAlt}
+        isEditing={isEditingImage}
+      />
+    </>
   );
 }
 

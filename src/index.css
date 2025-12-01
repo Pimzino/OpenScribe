@@ -308,13 +308,16 @@ body {
     max-width: 100%;
     border-radius: 8px;
     margin: 1rem 0;
+    cursor: pointer;
 }
 
 .tiptap-editor-dark .tiptap-image-container {
     display: inline-block;
 }
 
-.tiptap-editor-dark .ProseMirror img.ProseMirror-selectednode {
+.tiptap-editor-dark .ProseMirror img.ProseMirror-selectednode,
+.tiptap-editor-dark .ProseMirror .ProseMirror-selectednode img,
+.tiptap-editor-dark .ProseMirror .tiptap-image-container.ProseMirror-selectednode img {
     outline: 2px solid #2721E8;
     outline-offset: 2px;
 }

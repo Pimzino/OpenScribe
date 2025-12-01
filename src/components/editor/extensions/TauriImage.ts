@@ -42,6 +42,10 @@ function isLocalPath(path: string): boolean {
 export const TauriImage = Image.extend({
   name: 'tauriImage',
 
+  // Ensure the node is selectable
+  selectable: true,
+  draggable: true,
+
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -87,6 +91,7 @@ export const TauriImage = Image.extend({
     return ({ node, HTMLAttributes }) => {
       const container = document.createElement('div');
       container.className = 'tiptap-image-container';
+      container.style.display = 'inline-block';
 
       const img = document.createElement('img');
 
@@ -97,7 +102,7 @@ export const TauriImage = Image.extend({
         }
       });
 
-      // Add default styling class
+      // Add default styling class - ProseMirror adds ProseMirror-selectednode when selected
       img.className = 'tiptap-image max-w-full rounded-lg my-4';
 
       // Error handling for failed image loads
