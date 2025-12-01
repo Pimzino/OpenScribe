@@ -87,7 +87,7 @@ export default function Dashboard() {
                         {/* Recent Recordings */}
                         <div className="glass-surface-2 rounded-xl">
                             <div className="flex justify-between items-center p-4 border-b border-white/8">
-                                <h3 className="font-semibold">Recent Recordings</h3>
+                                <h3 className="text-xs font-semibold uppercase tracking-wider text-white/60">Recent Recordings</h3>
                                 <button
                                     onClick={() => navigate('/recordings')}
                                     className="text-sm text-[#49B8D3] hover:text-[#5fc5e0]"
