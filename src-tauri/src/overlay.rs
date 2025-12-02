@@ -86,7 +86,17 @@ mod windows_impl {
             let hwnd_val = OVERLAY_HWND.swap(0, Ordering::SeqCst);
             if hwnd_val != 0 {
                 let hwnd = HWND(hwnd_val as *mut std::ffi::c_void);
+                // Hide the window immediately
+                let _ = ShowWindow(hwnd, SW_HIDE);
+                // Destroy the window
                 DestroyWindow(hwnd).ok();
+                // Flush pending messages to ensure compositor has processed the hide
+                // This makes the operation truly synchronous from a visual perspective
+                let mut msg = MSG::default();
+                while PeekMessageW(&mut msg, HWND::default(), 0, 0, PM_REMOVE).as_bool() {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
             }
             Ok(())
         }

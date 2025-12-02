@@ -428,8 +428,10 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
     use std::io::BufWriter;
     use tokio::time::{sleep, Duration};
 
-    // Hide highlight overlay first
-    let _ = overlay::hide_monitor_border();
+    // Hide highlight overlay first - this is synchronous with message flush
+    if let Err(e) = overlay::hide_monitor_border() {
+        eprintln!("Warning: Failed to hide overlay: {}", e);
+    }
 
     // Close the picker window
     *state.is_picker_open.lock().unwrap() = false;
@@ -437,7 +439,7 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
         let _ = window.close();
     }
 
-    // Wait for window to fully close
+    // Wait for picker window to fully close
     sleep(Duration::from_millis(150)).await;
 
     // Now capture the monitor
@@ -578,6 +580,9 @@ async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -
 
 #[tauri::command]
 async fn close_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -> Result<(), String> {
+    // Always ensure the highlight overlay is hidden when picker closes
+    let _ = overlay::hide_monitor_border();
+
     // Reset picker open flag to resume step recording
     *state.is_picker_open.lock().unwrap() = false;
 
