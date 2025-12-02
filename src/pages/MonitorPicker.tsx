@@ -127,6 +127,7 @@ export default function MonitorPicker() {
   };
 
   const layout = getMonitorLayout();
+  const monitorGap = 6; // Gap between monitors in pixels
 
   return (
     <div className="h-screen w-screen glass-surface-2 flex flex-col select-none overflow-hidden" data-tauri-drag-region>
@@ -150,10 +151,10 @@ export default function MonitorPicker() {
                 : "border-white/20 bg-white/5 text-white/70 hover:border-white/40 hover:bg-white/10"
             }`}
             style={{
-              left: (monitor.x - layout.offsetX) * layout.scale + layout.centerOffsetX,
-              top: (monitor.y - layout.offsetY) * layout.scale + layout.centerOffsetY,
-              width: Math.max(monitor.width * layout.scale, 60),
-              height: Math.max(monitor.height * layout.scale, 40),
+              left: (monitor.x - layout.offsetX) * layout.scale + layout.centerOffsetX + monitorGap / 2,
+              top: (monitor.y - layout.offsetY) * layout.scale + layout.centerOffsetY + monitorGap / 2,
+              width: Math.max(monitor.width * layout.scale - monitorGap, 60),
+              height: Math.max(monitor.height * layout.scale - monitorGap, 40),
             }}
             onMouseEnter={() => handleMouseEnter(idx)}
             onMouseLeave={handleMouseLeave}
