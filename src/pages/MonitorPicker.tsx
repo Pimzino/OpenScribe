@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { X } from "lucide-react";
 
 interface MonitorInfo {
   index: number;
@@ -15,16 +16,16 @@ export default function MonitorPicker() {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     loadMonitors();
 
-    // Handle escape key to close
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         handleClose();
       }
-      // Number keys 1-9 for quick selection
       const num = parseInt(e.key);
       if (num >= 1 && num <= monitors.length) {
         handleCapture(num - 1);
@@ -34,6 +35,18 @@ export default function MonitorPicker() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [monitors.length]);
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setContainerSize({ width: rect.width, height: rect.height });
+      }
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
 
   const loadMonitors = async () => {
     try {
@@ -68,22 +81,10 @@ export default function MonitorPicker() {
     setHoveredIndex(null);
 
     try {
-      // Hide the highlight overlay first
-      await invoke("hide_monitor_highlight");
-      // Wait for the overlay window to be fully destroyed by the OS
-      await new Promise(resolve => setTimeout(resolve, 100));
-      // Capture the monitor
-      await invoke("capture_monitor", { index });
-      // Close the picker window
-      await invoke("close_monitor_picker");
+      // Use combined command that closes picker before capture (handled in Rust)
+      await invoke("capture_monitor_and_close_picker", { index });
     } catch (error) {
       console.error("Failed to capture monitor:", error);
-      // Ensure highlight is hidden even on error
-      try {
-        await invoke("hide_monitor_highlight");
-      } catch {}
-    } finally {
-      setIsCapturing(false);
     }
   };
 
@@ -96,9 +97,10 @@ export default function MonitorPicker() {
     }
   };
 
-  // Calculate layout for monitor thumbnails
   const getMonitorLayout = () => {
-    if (monitors.length === 0) return { scale: 1, offsetX: 0, offsetY: 0 };
+    if (monitors.length === 0 || containerSize.width === 0) {
+      return { scale: 1, offsetX: 0, offsetY: 0, centerOffsetX: 0, centerOffsetY: 0 };
+    }
 
     const minX = Math.min(...monitors.map(m => m.x));
     const minY = Math.min(...monitors.map(m => m.y));
@@ -108,67 +110,67 @@ export default function MonitorPicker() {
     const totalWidth = maxX - minX;
     const totalHeight = maxY - minY;
 
-    // Scale to fit in container (300x150 max)
-    const scaleX = 280 / totalWidth;
-    const scaleY = 120 / totalHeight;
-    const scale = Math.min(scaleX, scaleY, 0.1); // Max 10% of actual size
+    const padding = 24;
+    const availableWidth = containerSize.width - padding * 2;
+    const availableHeight = containerSize.height - padding * 2;
 
-    return { scale, offsetX: minX, offsetY: minY };
+    const scaleX = availableWidth / totalWidth;
+    const scaleY = availableHeight / totalHeight;
+    const scale = Math.min(scaleX, scaleY);
+
+    const layoutWidth = totalWidth * scale;
+    const layoutHeight = totalHeight * scale;
+    const centerOffsetX = (containerSize.width - layoutWidth) / 2;
+    const centerOffsetY = (containerSize.height - layoutHeight) / 2;
+
+    return { scale, offsetX: minX, offsetY: minY, centerOffsetX, centerOffsetY };
   };
 
   const layout = getMonitorLayout();
 
   return (
-    <div className="h-screen w-screen bg-zinc-900 flex flex-col select-none" data-tauri-drag-region>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-700" data-tauri-drag-region>
-        <span className="text-sm font-medium text-zinc-200">Select Monitor to Capture</span>
+    <div className="h-screen w-screen glass-surface-2 flex flex-col select-none overflow-hidden" data-tauri-drag-region>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10" data-tauri-drag-region>
+        <span className="text-sm font-medium text-white">Select Monitor to Capture</span>
         <button
           onClick={handleClose}
-          className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-700"
+          className="text-white/60 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
+          <X size={16} />
         </button>
       </div>
 
-      {/* Monitor preview area */}
-      <div className="flex-1 p-4 flex items-center justify-center">
-        <div className="relative" style={{ width: 280, height: 120 }}>
-          {monitors.map((monitor, idx) => (
-            <button
-              key={monitor.index}
-              className={`absolute border-2 rounded transition-all cursor-pointer flex items-center justify-center text-xs font-bold ${
-                hoveredIndex === idx
-                  ? "border-green-500 bg-green-500/20 text-green-400"
-                  : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:border-zinc-500"
-              }`}
-              style={{
-                left: (monitor.x - layout.offsetX) * layout.scale,
-                top: (monitor.y - layout.offsetY) * layout.scale,
-                width: monitor.width * layout.scale,
-                height: monitor.height * layout.scale,
-              }}
-              onMouseEnter={() => handleMouseEnter(idx)}
-              onMouseLeave={handleMouseLeave}
-              onClick={() => handleCapture(idx)}
-            >
-              <span className="flex flex-col items-center gap-0.5">
-                <span>{idx + 1}</span>
-                {monitor.is_primary && (
-                  <span className="text-[8px] opacity-60">Primary</span>
-                )}
-              </span>
-            </button>
-          ))}
-        </div>
+      <div ref={containerRef} className="flex-1 min-h-0 relative">
+        {monitors.map((monitor, idx) => (
+          <button
+            key={monitor.index}
+            className={`absolute border-2 rounded-lg transition-all cursor-pointer flex items-center justify-center text-sm font-semibold ${
+              hoveredIndex === idx
+                ? "border-primary bg-primary/20 text-white"
+                : "border-white/20 bg-white/5 text-white/70 hover:border-white/40 hover:bg-white/10"
+            }`}
+            style={{
+              left: (monitor.x - layout.offsetX) * layout.scale + layout.centerOffsetX,
+              top: (monitor.y - layout.offsetY) * layout.scale + layout.centerOffsetY,
+              width: Math.max(monitor.width * layout.scale, 60),
+              height: Math.max(monitor.height * layout.scale, 40),
+            }}
+            onMouseEnter={() => handleMouseEnter(idx)}
+            onMouseLeave={handleMouseLeave}
+            onClick={() => handleCapture(idx)}
+          >
+            <span className="flex flex-col items-center gap-0.5">
+              <span>{idx + 1}</span>
+              {monitor.is_primary && (
+                <span className="text-[10px] opacity-70 font-medium">Primary</span>
+              )}
+            </span>
+          </button>
+        ))}
       </div>
 
-      {/* Footer hint */}
-      <div className="px-4 py-2 border-t border-zinc-700">
-        <div className="text-xs text-zinc-500 text-center">
+      <div className="px-4 py-2 border-t border-white/10">
+        <div className="text-xs text-white/50 text-center">
           Press 1-{monitors.length} or click to capture
         </div>
       </div>

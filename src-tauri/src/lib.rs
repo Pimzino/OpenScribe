@@ -418,6 +418,58 @@ async fn capture_monitor(app: AppHandle, index: usize) -> Result<String, String>
     Ok(file_path.to_string_lossy().to_string())
 }
 
+
+/// Combined command that closes picker first, waits, then captures
+/// This ensures the picker window is not visible in the screenshot
+#[tauri::command]
+async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, RecordingState>, index: usize) -> Result<String, String> {
+    use xcap::Monitor;
+    use image::codecs::jpeg::JpegEncoder;
+    use std::io::BufWriter;
+    use tokio::time::{sleep, Duration};
+
+    // Hide highlight overlay first
+    let _ = overlay::hide_monitor_border();
+
+    // Close the picker window
+    *state.is_picker_open.lock().unwrap() = false;
+    if let Some(window) = app.get_webview_window("monitor-picker") {
+        let _ = window.close();
+    }
+
+    // Wait for window to fully close
+    sleep(Duration::from_millis(150)).await;
+
+    // Now capture the monitor
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+    let monitor = monitors.get(index).ok_or("Invalid monitor index")?;
+
+    let image = monitor.capture_image().map_err(|e| e.to_string())?;
+
+    // Save to temp file
+    let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    let filename = format!("manual_capture_{}.jpg", timestamp);
+    let file_path = temp_dir.join(&filename);
+
+    let file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+    let mut writer = BufWriter::new(file);
+    let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
+
+    encoder.encode_image(&image).map_err(|e| e.to_string())?;
+
+    // Emit capture event to recorder
+    let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 async fn capture_all_monitors(app: AppHandle) -> Result<String, String> {
     use xcap::Monitor;
@@ -512,7 +564,7 @@ async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -
         url
     )
     .title("Select Monitor")
-    .inner_size(400.0, 300.0)
+    .inner_size(480.0, 320.0)
     .resizable(false)
     .decorations(false)
     .always_on_top(true)
@@ -656,6 +708,7 @@ pub fn run() {
             // Monitor selection commands
             get_monitors,
             capture_monitor,
+            capture_monitor_and_close_picker,
             capture_all_monitors,
             show_monitor_picker,
             close_monitor_picker,
