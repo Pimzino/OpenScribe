@@ -72,6 +72,8 @@ export default function MonitorPicker() {
     setHoveredMonitor(index);
     setHoveredWindow(null);
     try {
+      // Hide any existing border first, then show new one
+      await invoke("hide_monitor_highlight");
       await invoke("show_monitor_highlight", { index });
     } catch (err) {
       console.error("Failed to show highlight:", err);
@@ -81,12 +83,14 @@ export default function MonitorPicker() {
   const handleWindowEnter = async (windowId: number, isMinimized: boolean) => {
     setHoveredWindow(windowId);
     setHoveredMonitor(null);
-    if (!isMinimized) {
-      try {
+    try {
+      // Hide any existing border first
+      await invoke("hide_monitor_highlight");
+      if (!isMinimized) {
         await invoke("show_window_highlight", { windowId });
-      } catch (err) {
-        console.error("Failed to show window highlight:", err);
       }
+    } catch (err) {
+      console.error("Failed to show window highlight:", err);
     }
   };
 

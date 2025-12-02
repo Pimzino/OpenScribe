@@ -22,21 +22,29 @@ mod windows_impl {
         unsafe {
             let existing = OVERLAY_HWND.load(Ordering::SeqCst);
             if existing != 0 {
-                // Move existing window
                 let hwnd = HWND(existing as *mut std::ffi::c_void);
-                SetWindowPos(
-                    hwnd,
-                    HWND_TOPMOST,
-                    x,
-                    y,
-                    width as i32,
-                    height as i32,
-                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
-                ).map_err(|e| format!("SetWindowPos failed: {}", e))?;
 
-                let _ = InvalidateRect(hwnd, None, TRUE);
-                let _ = UpdateWindow(hwnd);
-                return Ok(());
+                // Check if window is still valid
+                if !IsWindow(hwnd).as_bool() {
+                    // Window was destroyed externally, reset the handle
+                    OVERLAY_HWND.store(0, Ordering::SeqCst);
+                    // Fall through to create a new window
+                } else {
+                    // Move existing window
+                    SetWindowPos(
+                        hwnd,
+                        HWND_TOPMOST,
+                        x,
+                        y,
+                        width as i32,
+                        height as i32,
+                        SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                    ).map_err(|e| format!("SetWindowPos failed: {}", e))?;
+
+                    let _ = InvalidateRect(hwnd, None, TRUE);
+                    let _ = UpdateWindow(hwnd);
+                    return Ok(());
+                }
             }
 
             // Register window class if not already done

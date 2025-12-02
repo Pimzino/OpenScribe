@@ -747,44 +747,8 @@ async fn capture_all_monitors(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -> Result<(), String> {
     use tauri::{WebviewWindowBuilder, WebviewUrl};
-    use xcap::Monitor;
 
-    let monitors = Monitor::all().map_err(|e| e.to_string())?;
-
-    // Single monitor: capture immediately without showing picker
-    if monitors.len() == 1 {
-        use image::codecs::jpeg::JpegEncoder;
-        use std::io::BufWriter;
-
-        let monitor = &monitors[0];
-        let image = monitor.capture_image().map_err(|e| e.to_string())?;
-
-        let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
-        let _ = std::fs::create_dir_all(&temp_dir);
-
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis();
-
-        let filename = format!("manual_capture_{}.jpg", timestamp);
-        let file_path = temp_dir.join(&filename);
-
-        let file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
-        let mut writer = BufWriter::new(file);
-        let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
-        encoder.encode_image(&image).map_err(|e| e.to_string())?;
-
-        // Emit capture complete
-        let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
-
-        // Emit toast notification
-        let _ = app.emit("show-toast", "Screenshot captured");
-
-        return Ok(());
-    }
-
-    // Multiple monitors: show picker UI
+    // Always show picker UI so user can select monitors OR windows
     *state.is_picker_open.lock().unwrap() = true;
 
     // Close existing picker if any
