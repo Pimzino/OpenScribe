@@ -361,6 +361,19 @@ pub struct MonitorInfo {
     pub is_primary: bool,
 }
 
+// Window info structure for frontend
+#[derive(Clone, serde::Serialize)]
+pub struct WindowInfo {
+    pub id: u32,
+    pub title: String,
+    pub app_name: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub is_minimized: bool,
+}
+
 #[tauri::command]
 fn get_monitors() -> Result<Vec<MonitorInfo>, String> {
     use xcap::Monitor;
@@ -381,6 +394,186 @@ fn get_monitors() -> Result<Vec<MonitorInfo>, String> {
     }
 
     Ok(result)
+}
+
+// Helper function to filter system windows
+fn is_capturable_window(title: &str, _app_name: &str) -> bool {
+    // Filter empty titles
+    if title.trim().is_empty() {
+        return false;
+    }
+
+    // Filter system windows
+    let system_titles = [
+        "Program Manager",
+        "Windows Input Experience",
+        "Microsoft Text Input Application",
+        "Settings",
+        "MSCTFIME UI",
+        "Default IME",
+    ];
+
+    // Filter own windows
+    if title.contains("OpenScribe") || title.contains("Select Capture") || title.contains("monitor-picker") {
+        return false;
+    }
+
+    !system_titles.iter().any(|s| title.eq_ignore_ascii_case(s))
+}
+
+#[tauri::command]
+fn get_windows() -> Result<Vec<WindowInfo>, String> {
+    use xcap::Window;
+
+    let windows = Window::all().map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+
+    for window in windows.iter() {
+        let title = window.title().unwrap_or_default();
+        let app_name = window.app_name().unwrap_or_default();
+
+        if !is_capturable_window(&title, &app_name) {
+            continue;
+        }
+
+        // Skip windows with zero size
+        let width = window.width().unwrap_or(0);
+        let height = window.height().unwrap_or(0);
+        if width == 0 || height == 0 {
+            continue;
+        }
+
+        result.push(WindowInfo {
+            id: window.id().ok().unwrap_or(0),
+            title,
+            app_name,
+            x: window.x().unwrap_or(0),
+            y: window.y().unwrap_or(0),
+            width,
+            height,
+            is_minimized: window.is_minimized().unwrap_or(false),
+        });
+    }
+
+    // Limit to prevent UI issues
+    result.truncate(30);
+
+    Ok(result)
+}
+
+#[tauri::command]
+async fn show_window_highlight(window_id: u32) -> Result<(), String> {
+    use xcap::Window;
+
+    let windows = Window::all().map_err(|e| e.to_string())?;
+    let target = windows.iter().find(|w| w.id().ok().unwrap_or(0) == window_id)
+        .ok_or("Window not found")?;
+
+    // Don't show highlight for minimized windows (no valid position)
+    if target.is_minimized().unwrap_or(false) {
+        return Ok(());
+    }
+
+    let x = target.x().unwrap_or(0);
+    let y = target.y().unwrap_or(0);
+    let width = target.width().unwrap_or(0);
+    let height = target.height().unwrap_or(0);
+
+    overlay::show_monitor_border(x, y, width, height)
+}
+
+// Helper to save capture and emit events
+async fn save_and_emit_capture(app: AppHandle, image: image::RgbaImage, prefix: &str) -> Result<String, String> {
+    use image::codecs::jpeg::JpegEncoder;
+    use std::io::BufWriter;
+    use tokio::time::{sleep, Duration};
+
+    let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    let filename = format!("manual_capture_{}_{}.jpg", prefix, timestamp);
+    let file_path = temp_dir.join(&filename);
+
+    let file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+    let mut writer = BufWriter::new(file);
+    let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
+    encoder.encode_image(&image).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+
+    // Schedule picker close
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        sleep(Duration::from_millis(50)).await;
+        if let Some(window) = app_clone.get_webview_window("monitor-picker") {
+            let _ = window.close();
+        }
+    });
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn capture_window_and_close_picker(
+    app: AppHandle,
+    state: State<'_, RecordingState>,
+    window_id: u32
+) -> Result<String, String> {
+    use xcap::Window;
+    use tokio::time::{sleep, Duration};
+
+    // IMPORTANT: Hide highlight overlay FIRST and ensure it's destroyed
+    let _ = overlay::hide_monitor_border();
+
+    // Small delay to ensure overlay is fully destroyed
+    sleep(Duration::from_millis(50)).await;
+
+    // Hide picker window
+    *state.is_picker_open.lock().unwrap() = false;
+    if let Some(picker) = app.get_webview_window("monitor-picker") {
+        let _ = picker.hide();
+    }
+
+    // Wait for picker to fully hide
+    sleep(Duration::from_millis(150)).await;
+
+    // Find the target window BEFORE any operations
+    let windows = Window::all().map_err(|e| e.to_string())?;
+    let target = windows.into_iter()
+        .find(|w| w.id().ok().unwrap_or(0) == window_id)
+        .ok_or("Window not found")?;
+
+    // Restore minimized window if needed (Windows only)
+    #[cfg(target_os = "windows")]
+    if target.is_minimized().unwrap_or(false) {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SetForegroundWindow, SW_RESTORE};
+
+        unsafe {
+            let hwnd = HWND(window_id as isize as *mut std::ffi::c_void);
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+            let _ = SetForegroundWindow(hwnd);
+        }
+        sleep(Duration::from_millis(300)).await;
+
+        // Re-fetch the window after restore
+        let windows = Window::all().map_err(|e| e.to_string())?;
+        let target = windows.into_iter()
+            .find(|w| w.id().ok().unwrap_or(0) == window_id)
+            .ok_or("Window not found after restore")?;
+
+        let image = target.capture_image().map_err(|e| e.to_string())?;
+        return save_and_emit_capture(app, image, "window").await;
+    }
+
+    // Capture the window
+    let image = target.capture_image().map_err(|e| e.to_string())?;
+    save_and_emit_capture(app, image, "window").await
 }
 
 #[tauri::command]
@@ -554,8 +747,44 @@ async fn capture_all_monitors(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -> Result<(), String> {
     use tauri::{WebviewWindowBuilder, WebviewUrl};
+    use xcap::Monitor;
 
-    // Set picker open flag to pause step recording
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+
+    // Single monitor: capture immediately without showing picker
+    if monitors.len() == 1 {
+        use image::codecs::jpeg::JpegEncoder;
+        use std::io::BufWriter;
+
+        let monitor = &monitors[0];
+        let image = monitor.capture_image().map_err(|e| e.to_string())?;
+
+        let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+
+        let filename = format!("manual_capture_{}.jpg", timestamp);
+        let file_path = temp_dir.join(&filename);
+
+        let file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+        let mut writer = BufWriter::new(file);
+        let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
+        encoder.encode_image(&image).map_err(|e| e.to_string())?;
+
+        // Emit capture complete
+        let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+
+        // Emit toast notification
+        let _ = app.emit("show-toast", "Screenshot captured");
+
+        return Ok(());
+    }
+
+    // Multiple monitors: show picker UI
     *state.is_picker_open.lock().unwrap() = true;
 
     // Close existing picker if any
@@ -569,14 +798,14 @@ async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -
     #[cfg(not(debug_assertions))]
     let url = WebviewUrl::App("/#/monitor-picker".into());
 
-    // Create the picker window
+    // Taller window for combined UI
     let _window = WebviewWindowBuilder::new(
         &app,
         "monitor-picker",
         url
     )
-    .title("Select Monitor")
-    .inner_size(480.0, 320.0)
+    .title("Select Capture Target")
+    .inner_size(520.0, 500.0)
     .resizable(false)
     .decorations(false)
     .always_on_top(true)
@@ -728,7 +957,11 @@ pub fn run() {
             show_monitor_picker,
             close_monitor_picker,
             show_monitor_highlight,
-            hide_monitor_highlight
+            hide_monitor_highlight,
+            // Window capture commands
+            get_windows,
+            show_window_highlight,
+            capture_window_and_close_picker
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

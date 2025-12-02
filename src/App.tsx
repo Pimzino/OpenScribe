@@ -10,6 +10,7 @@ import RecordingDetail from "./pages/RecordingDetail";
 import Editor from "./pages/Editor";
 import Settings from "./pages/Settings";
 import MonitorPicker from "./pages/MonitorPicker";
+import Toast from "./components/Toast";
 import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
 
@@ -93,16 +94,19 @@ function App() {
   }, [isRecording, setIsRecording, clearSteps, navigate]);
 
   return (
-    <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/new-recording" element={<NewRecording />} />
-      <Route path="/recordings" element={<RecordingsList />} />
-      <Route path="/recordings/:id" element={<RecordingDetail />} />
-      <Route path="/editor/:id?" element={<Editor />} />
-      <Route path="/settings" element={<Settings />} />
-      {/* Monitor selection route for separate window */}
-      <Route path="/monitor-picker" element={<MonitorPicker />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/new-recording" element={<NewRecording />} />
+        <Route path="/recordings" element={<RecordingsList />} />
+        <Route path="/recordings/:id" element={<RecordingDetail />} />
+        <Route path="/editor/:id?" element={<Editor />} />
+        <Route path="/settings" element={<Settings />} />
+        {/* Monitor selection route for separate window */}
+        <Route path="/monitor-picker" element={<MonitorPicker />} />
+      </Routes>
+      <Toast />
+    </>
   );
 }
 

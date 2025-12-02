@@ -86,20 +86,33 @@ mod windows_impl {
             let hwnd_val = OVERLAY_HWND.swap(0, Ordering::SeqCst);
             if hwnd_val != 0 {
                 let hwnd = HWND(hwnd_val as *mut std::ffi::c_void);
-                // Hide the window immediately
-                let _ = ShowWindow(hwnd, SW_HIDE);
 
-                // Process any pending paint messages for this window before destroying
-                // This ensures the compositor sees the hide
-                let mut msg = MSG::default();
-                while PeekMessageW(&mut msg, hwnd, 0, 0, PM_REMOVE).as_bool() {
-                    let _ = TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
+                // Check if window is still valid
+                if IsWindow(hwnd).as_bool() {
+                    // Hide the window immediately
+                    let _ = ShowWindow(hwnd, SW_HIDE);
+
+                    // Force the window off screen as backup
+                    let _ = SetWindowPos(
+                        hwnd,
+                        HWND_BOTTOM,
+                        -10000,
+                        -10000,
+                        1,
+                        1,
+                        SWP_NOACTIVATE | SWP_HIDEWINDOW,
+                    );
+
+                    // Process any pending messages for this window
+                    let mut msg = MSG::default();
+                    while PeekMessageW(&mut msg, hwnd, 0, 0, PM_REMOVE).as_bool() {
+                        let _ = TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+
+                    // Destroy the window
+                    let _ = DestroyWindow(hwnd);
                 }
-
-                // Now destroy the window - don't pump messages after this
-                // as the window handle becomes invalid
-                DestroyWindow(hwnd).ok();
             }
             Ok(())
         }
