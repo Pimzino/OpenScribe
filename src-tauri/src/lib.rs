@@ -2,6 +2,7 @@
 mod recorder;
 mod accessibility;
 mod database;
+mod overlay;
 
 use std::sync::Mutex;
 use std::path::PathBuf;
@@ -348,8 +349,224 @@ fn save_steps_with_path(
         .map_err(|e| e.to_string())
 }
 
+// Monitor info structure for frontend
+#[derive(Clone, serde::Serialize)]
+pub struct MonitorInfo {
+    pub index: usize,
+    pub name: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub is_primary: bool,
+}
+
+#[tauri::command]
+fn get_monitors() -> Result<Vec<MonitorInfo>, String> {
+    use xcap::Monitor;
+
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+
+    for (index, mon) in monitors.iter().enumerate() {
+        result.push(MonitorInfo {
+            index,
+            name: mon.name().unwrap_or_else(|_| format!("Monitor {}", index + 1)),
+            x: mon.x().unwrap_or(0),
+            y: mon.y().unwrap_or(0),
+            width: mon.width().unwrap_or(0),
+            height: mon.height().unwrap_or(0),
+            is_primary: mon.is_primary().unwrap_or(false),
+        });
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+async fn capture_monitor(app: AppHandle, index: usize) -> Result<String, String> {
+    use xcap::Monitor;
+    use image::codecs::jpeg::JpegEncoder;
+    use std::io::BufWriter;
+
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+    let monitor = monitors.get(index).ok_or("Invalid monitor index")?;
+
+    let image = monitor.capture_image().map_err(|e| e.to_string())?;
+
+    // Save to temp file
+    let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    let filename = format!("manual_capture_{}.jpg", timestamp);
+    let file_path = temp_dir.join(&filename);
+
+    let file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+    let mut writer = BufWriter::new(file);
+    let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
+
+    encoder.encode_image(&image).map_err(|e| e.to_string())?;
+
+    // Emit capture event to recorder
+    let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn capture_all_monitors(app: AppHandle) -> Result<String, String> {
+    use xcap::Monitor;
+    use image::{RgbaImage, codecs::jpeg::JpegEncoder};
+    use std::io::BufWriter;
+
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+
+    if monitors.is_empty() {
+        return Err("No monitors found".to_string());
+    }
+
+    // Calculate virtual screen bounds
+    let mut min_x = i32::MAX;
+    let mut min_y = i32::MAX;
+    let mut max_x = i32::MIN;
+    let mut max_y = i32::MIN;
+
+    for mon in &monitors {
+        let x = mon.x().unwrap_or(0);
+        let y = mon.y().unwrap_or(0);
+        let w = mon.width().unwrap_or(0) as i32;
+        let h = mon.height().unwrap_or(0) as i32;
+
+        min_x = min_x.min(x);
+        min_y = min_y.min(y);
+        max_x = max_x.max(x + w);
+        max_y = max_y.max(y + h);
+    }
+
+    let total_width = (max_x - min_x) as u32;
+    let total_height = (max_y - min_y) as u32;
+
+    // Create composite image
+    let mut composite = RgbaImage::new(total_width, total_height);
+
+    for mon in monitors {
+        if let Ok(img) = mon.capture_image() {
+            let offset_x = (mon.x().unwrap_or(0) - min_x) as i64;
+            let offset_y = (mon.y().unwrap_or(0) - min_y) as i64;
+            image::imageops::overlay(&mut composite, &img, offset_x, offset_y);
+        }
+    }
+
+    // Save to temp file
+    let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    let filename = format!("manual_capture_all_{}.jpg", timestamp);
+    let file_path = temp_dir.join(&filename);
+
+    let file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+    let mut writer = BufWriter::new(file);
+    let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
+
+    let rgb_image = image::DynamicImage::ImageRgba8(composite).to_rgb8();
+    encoder.encode_image(&rgb_image).map_err(|e| e.to_string())?;
+
+    // Emit capture event
+    let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn show_monitor_picker(app: AppHandle) -> Result<(), String> {
+    use tauri::{WebviewWindowBuilder, WebviewUrl};
+
+    // Close existing picker if any
+    if let Some(window) = app.get_webview_window("monitor-picker") {
+        let _ = window.close();
+    }
+
+    // Use hash-based URL for HashRouter compatibility
+    #[cfg(debug_assertions)]
+    let url = WebviewUrl::External("http://localhost:1420/#/monitor-picker".parse().unwrap());
+    #[cfg(not(debug_assertions))]
+    let url = WebviewUrl::App("/#/monitor-picker".into());
+
+    // Create the picker window
+    let _window = WebviewWindowBuilder::new(
+        &app,
+        "monitor-picker",
+        url
+    )
+    .title("Select Monitor")
+    .inner_size(400.0, 300.0)
+    .resizable(false)
+    .decorations(false)
+    .always_on_top(true)
+    .center()
+    .focused(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_monitor_picker(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("monitor-picker") {
+        window.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn show_monitor_highlight(_app: AppHandle, index: usize) -> Result<(), String> {
+    use xcap::Monitor;
+
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+    let monitor = monitors.get(index).ok_or("Invalid monitor index")?;
+
+    let x = monitor.x().unwrap_or(0);
+    let y = monitor.y().unwrap_or(0);
+    let width = monitor.width().unwrap_or(0);
+    let height = monitor.height().unwrap_or(0);
+
+    println!("Monitor {}: pos=({}, {}), size={}x{}", index, x, y, width, height);
+
+    // Use native overlay instead of Tauri webview windows
+    overlay::show_monitor_border(x, y, width, height)
+}
+
+#[tauri::command]
+async fn hide_monitor_highlight(_app: AppHandle) -> Result<(), String> {
+    // Use native overlay instead of Tauri webview windows
+    overlay::hide_monitor_border()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize DPI awareness BEFORE any window/monitor operations (Windows only)
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::HiDpi::{
+            SetProcessDpiAwarenessContext,
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+        };
+        unsafe {
+            let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        }
+    }
+
     let recording_state = RecordingState::new();
     let is_recording_clone = recording_state.is_recording.clone();
     let start_hotkey_clone = recording_state.start_hotkey.clone();
@@ -428,7 +645,15 @@ pub fn run() {
             update_step_screenshot,
             reorder_steps,
             update_step_description,
-            delete_step
+            delete_step,
+            // Monitor selection commands
+            get_monitors,
+            capture_monitor,
+            capture_all_monitors,
+            show_monitor_picker,
+            close_monitor_picker,
+            show_monitor_highlight,
+            hide_monitor_highlight
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

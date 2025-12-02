@@ -55,8 +55,27 @@ export default function NewRecording() {
             addStep(event.payload);
         });
 
+        // Listen for manual captures from the monitor picker
+        const unlistenManualCapture = listen<string>("manual-capture-complete", (event) => {
+            const screenshotPath = event.payload;
+            const captureStep: Step = {
+                type_: "capture",
+                x: null,
+                y: null,
+                text: null,
+                timestamp: Date.now(),
+                screenshot: screenshotPath,
+                element_name: null,
+                element_type: null,
+                element_value: null,
+                app_name: null,
+            };
+            addStep(captureStep);
+        });
+
         return () => {
             unlisten.then((f) => f());
+            unlistenManualCapture.then((f) => f());
         };
     }, [addStep]);
 

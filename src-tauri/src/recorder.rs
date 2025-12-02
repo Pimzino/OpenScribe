@@ -3,7 +3,7 @@ use std::time::{SystemTime, Instant, Duration};
 use std::fs;
 use std::io::BufWriter;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::{AppHandle, Emitter, Listener};
+use tauri::{AppHandle, Emitter};
 use rdev::{listen, EventType, Button};
 use xcap::Monitor;
 use image::codecs::jpeg::JpegEncoder;
@@ -72,7 +72,7 @@ impl RecordingState {
 enum RecorderEvent {
     Click { x: f64, y: f64 },
     Key { key: rdev::Key, text: Option<String> },
-    Capture,
+    // Note: Manual captures are now handled via the monitor picker UI
 }
 
 struct CaptureData {
@@ -87,13 +87,151 @@ struct CaptureData {
 
 // Find the monitor that contains the given point
 fn get_monitor_at_point(x: f64, y: f64) -> Option<Monitor> {
+    // Primary: Use xcap's built-in method (handles DPI correctly on all platforms)
+    if let Ok(monitor) = Monitor::from_point(x as i32, y as i32) {
+        return Some(monitor);
+    }
+
+    // Fallback: Manual iteration (in case primary fails)
     Monitor::all().ok()?.into_iter().find(|m| {
-        let mx = m.x() as f64;
-        let my = m.y() as f64;
-        let mw = m.width() as f64;
-        let mh = m.height() as f64;
+        let mx = m.x().unwrap_or(0) as f64;
+        let my = m.y().unwrap_or(0) as f64;
+        let mw = m.width().unwrap_or(0) as f64;
+        let mh = m.height().unwrap_or(0) as f64;
         x >= mx && x < mx + mw && y >= my && y < my + mh
     })
+}
+
+// Get the monitor containing the currently focused/foreground window
+// This is more reliable than tracking mouse position for typing events
+#[cfg(target_os = "windows")]
+fn get_monitor_for_foreground_window() -> Option<Monitor> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
+    use windows::Win32::Foundation::RECT;
+
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return None;
+        }
+
+        let mut rect = RECT::default();
+        if GetWindowRect(hwnd, &mut rect).is_err() {
+            return None;
+        }
+
+        // Calculate center point of the window
+        let center_x = (rect.left + rect.right) / 2;
+        let center_y = (rect.top + rect.bottom) / 2;
+
+        get_monitor_at_point(center_x as f64, center_y as f64)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn get_monitor_for_foreground_window() -> Option<Monitor> {
+    use std::process::Command;
+
+    // Use AppleScript to get the frontmost application's window bounds
+    // This is more reliable than using Core Graphics directly
+    let script = r#"
+        tell application "System Events"
+            set frontApp to first application process whose frontmost is true
+            set frontWindow to first window of frontApp
+            set {x, y} to position of frontWindow
+            set {w, h} to size of frontWindow
+            return (x as text) & "," & (y as text) & "," & (w as text) & "," & (h as text)
+        end tell
+    "#;
+
+    if let Ok(output) = Command::new("osascript")
+        .args(["-e", script])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let parts: Vec<&str> = stdout.split(',').collect();
+
+            if parts.len() == 4 {
+                if let (Ok(x), Ok(y), Ok(w), Ok(h)) = (
+                    parts[0].parse::<f64>(),
+                    parts[1].parse::<f64>(),
+                    parts[2].parse::<f64>(),
+                    parts[3].parse::<f64>(),
+                ) {
+                    let center_x = x + w / 2.0;
+                    let center_y = y + h / 2.0;
+
+                    if let Some(monitor) = get_monitor_at_point(center_x, center_y) {
+                        return Some(monitor);
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to primary monitor
+    Monitor::all().ok()?.into_iter().next()
+}
+
+#[cfg(target_os = "linux")]
+fn get_monitor_for_foreground_window() -> Option<Monitor> {
+    // Linux: Try to get active window via D-Bus/AT-SPI or environment
+    // This is complex due to X11/Wayland differences
+
+    // Try reading _NET_ACTIVE_WINDOW via xdotool-like approach
+    // For now, use a simpler approach: check DISPLAY env and try xdotool if available
+    use std::process::Command;
+
+    // Try using xdotool to get active window geometry (works on X11)
+    if let Ok(output) = Command::new("xdotool")
+        .args(["getactivewindow", "getwindowgeometry", "--shell"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut x: Option<i32> = None;
+            let mut y: Option<i32> = None;
+            let mut width: Option<i32> = None;
+            let mut height: Option<i32> = None;
+
+            for line in stdout.lines() {
+                if let Some(val) = line.strip_prefix("X=") {
+                    x = val.parse().ok();
+                } else if let Some(val) = line.strip_prefix("Y=") {
+                    y = val.parse().ok();
+                } else if let Some(val) = line.strip_prefix("WIDTH=") {
+                    width = val.parse().ok();
+                } else if let Some(val) = line.strip_prefix("HEIGHT=") {
+                    height = val.parse().ok();
+                }
+            }
+
+            if let (Some(x), Some(y), Some(w), Some(h)) = (x, y, width, height) {
+                let center_x = x + w / 2;
+                let center_y = y + h / 2;
+
+                if let Some(monitor) = get_monitor_at_point(center_x as f64, center_y as f64) {
+                    return Some(monitor);
+                }
+            }
+        }
+    }
+
+    // Fallback: Try using wmctrl
+    if let Ok(output) = Command::new("wmctrl")
+        .args(["-l", "-G"])
+        .output()
+    {
+        if output.status.success() {
+            // wmctrl output format: window_id desktop x y width height hostname window_name
+            // The active window typically has certain properties, but this is less reliable
+            // For now, just fall back to primary monitor
+        }
+    }
+
+    // Fallback to primary monitor
+    Monitor::all().ok()?.into_iter().next()
 }
 
 pub fn start_listener(
@@ -108,14 +246,8 @@ pub fn start_listener(
 
     let app_clone = app.clone();
 
-    // Listen for capture hotkey event from global shortcut
-    let tx_capture = tx_event.clone();
-    let is_recording_for_capture = is_recording.clone();
-    app.listen("hotkey-capture", move |_| {
-        if *is_recording_for_capture.lock().unwrap() {
-            let _ = tx_capture.send(RecorderEvent::Capture);
-        }
-    });
+    // Note: Capture hotkey is now handled by the frontend (monitor picker UI)
+    // The old capture event listener has been removed
 
     // Thread 3: Encoder/Emitter (Write to temp files - much faster than base64)
     thread::spawn(move || {
@@ -208,8 +340,8 @@ pub fn start_listener(
             // Check if we need to flush text buffer due to timeout
             if let Some(last_time) = last_key_time {
                 if last_time.elapsed() >= text_flush_timeout && !key_buffer.trim().is_empty() {
-                    // Get monitor at last click position (where user is typing)
-                    if let Some(mon) = get_monitor_at_point(last_click_pos.0, last_click_pos.1) {
+                    // Get monitor containing the foreground window (where user is typing)
+                    if let Some(mon) = get_monitor_for_foreground_window() {
                         if let Ok(image) = mon.capture_image() {
                             let _ = tx_encode.send(CaptureData {
                                 x: None,
@@ -265,8 +397,8 @@ pub fn start_listener(
 
                     // Flush on Return or Tab - only if buffer has actual content (not just whitespace)
                     if (is_return || is_tab) && !key_buffer.trim().is_empty() {
-                        // Get monitor at last click position (where user is typing)
-                        if let Some(mon) = get_monitor_at_point(last_click_pos.0, last_click_pos.1) {
+                        // Get monitor containing the foreground window (where user is typing)
+                        if let Some(mon) = get_monitor_for_foreground_window() {
                             if let Ok(image) = mon.capture_image() {
                                 let _ = tx_encode.send(CaptureData {
                                     x: None,
@@ -321,9 +453,14 @@ pub fn start_listener(
                             }
 
                             // 2. Emit Click Step with element info
+                            // Convert absolute screen coordinates to monitor-relative coordinates
+                            // This ensures the click highlight is drawn at the correct position on the captured image
+                            let rel_x = (x - mon.x().unwrap_or(0) as f64).round() as i32;
+                            let rel_y = (y - mon.y().unwrap_or(0) as f64).round() as i32;
+
                             let _ = tx_encode.send(CaptureData {
-                                x: Some(x.round() as i32),
-                                y: Some(y.round() as i32),
+                                x: Some(rel_x),
+                                y: Some(rel_y),
                                 image: image::DynamicImage::ImageRgba8(image), // Move for click step
                                 timestamp,
                                 step_type: "click".to_string(),
@@ -333,41 +470,7 @@ pub fn start_listener(
                         }
                     }
                 }
-                RecorderEvent::Capture => {
-                    // Manual capture - take screenshot of current screen
-                    // Use last click position to determine which monitor
-                    if let Some(mon) = get_monitor_at_point(last_click_pos.0, last_click_pos.1) {
-                        if let Ok(image) = mon.capture_image() {
-                            let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
-
-                            // Flush any pending text first
-                            if !key_buffer.trim().is_empty() {
-                                let _ = tx_encode.send(CaptureData {
-                                    x: None,
-                                    y: None,
-                                    image: image::DynamicImage::ImageRgba8(image.clone()),
-                                    timestamp,
-                                    step_type: "type".to_string(),
-                                    text: Some(key_buffer.trim().to_string()),
-                                    element_info: None,
-                                });
-                                key_buffer.clear();
-                                last_key_time = None;
-                            }
-
-                            // Emit capture step
-                            let _ = tx_encode.send(CaptureData {
-                                x: None,
-                                y: None,
-                                image: image::DynamicImage::ImageRgba8(image),
-                                timestamp,
-                                step_type: "capture".to_string(),
-                                text: None,
-                                element_info: None,
-                            });
-                        }
-                    }
-                }
+                // Note: Manual captures (RecorderEvent::Capture) have been moved to monitor picker UI
             }
         }
     });

@@ -9,6 +9,7 @@ import RecordingsList from "./pages/RecordingsList";
 import RecordingDetail from "./pages/RecordingDetail";
 import Editor from "./pages/Editor";
 import Settings from "./pages/Settings";
+import MonitorPicker from "./pages/MonitorPicker";
 import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
 
@@ -73,9 +74,21 @@ function App() {
       }
     });
 
+    // Listen for capture hotkey - show monitor picker
+    const unlistenCapture = listen("hotkey-capture", async () => {
+      if (isRecording) {
+        try {
+          await invoke("show_monitor_picker");
+        } catch (error) {
+          console.error("Failed to show monitor picker:", error);
+        }
+      }
+    });
+
     return () => {
       unlistenStart.then((f) => f());
       unlistenStop.then((f) => f());
+      unlistenCapture.then((f) => f());
     };
   }, [isRecording, setIsRecording, clearSteps, navigate]);
 
@@ -87,6 +100,8 @@ function App() {
       <Route path="/recordings/:id" element={<RecordingDetail />} />
       <Route path="/editor/:id?" element={<Editor />} />
       <Route path="/settings" element={<Settings />} />
+      {/* Monitor selection route for separate window */}
+      <Route path="/monitor-picker" element={<MonitorPicker />} />
     </Routes>
   );
 }
