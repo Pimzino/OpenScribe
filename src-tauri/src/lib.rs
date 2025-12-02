@@ -419,7 +419,7 @@ async fn capture_monitor(app: AppHandle, index: usize) -> Result<String, String>
 }
 
 
-/// Combined command that closes picker first, waits, then captures
+/// Combined command that hides picker first, captures, then schedules close
 /// This ensures the picker window is not visible in the screenshot
 #[tauri::command]
 async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, RecordingState>, index: usize) -> Result<String, String> {
@@ -433,14 +433,14 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
         eprintln!("Warning: Failed to hide overlay: {}", e);
     }
 
-    // Close the picker window
+    // Hide the picker window (don't close yet - we need it alive for the response)
     *state.is_picker_open.lock().unwrap() = false;
     if let Some(window) = app.get_webview_window("monitor-picker") {
-        let _ = window.close();
+        let _ = window.hide();
     }
 
-    // Wait for picker window to fully close
-    sleep(Duration::from_millis(150)).await;
+    // Wait for picker window to fully hide
+    sleep(Duration::from_millis(100)).await;
 
     // Now capture the monitor
     let monitors = Monitor::all().map_err(|e| e.to_string())?;
@@ -468,6 +468,16 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
 
     // Emit capture event to recorder
     let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+
+    // Schedule the picker window to close after response is sent
+    // This avoids "PostMessage failed" errors from wry when closing during active invoke
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        sleep(Duration::from_millis(50)).await;
+        if let Some(window) = app_clone.get_webview_window("monitor-picker") {
+            let _ = window.close();
+        }
+    });
 
     Ok(file_path.to_string_lossy().to_string())
 }
