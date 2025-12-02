@@ -38,6 +38,7 @@ pub struct HotkeyBinding {
 
 pub struct RecordingState {
     pub is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
+    pub is_picker_open: std::sync::Arc<std::sync::Mutex<bool>>,
     pub start_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
     pub stop_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
     pub capture_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
@@ -47,6 +48,7 @@ impl RecordingState {
     pub fn new() -> Self {
         Self {
             is_recording: std::sync::Arc::new(std::sync::Mutex::new(false)),
+            is_picker_open: std::sync::Arc::new(std::sync::Mutex::new(false)),
             start_hotkey: std::sync::Arc::new(std::sync::Mutex::new(HotkeyBinding {
                 ctrl: true,
                 shift: false,
@@ -237,6 +239,7 @@ fn get_monitor_for_foreground_window() -> Option<Monitor> {
 pub fn start_listener(
     app: AppHandle,
     is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
+    is_picker_open: std::sync::Arc<std::sync::Mutex<bool>>,
 ) {
     // Channel 1: Listener -> Capture Logic
     let (tx_event, rx_event) = mpsc::channel::<RecorderEvent>();
@@ -316,6 +319,7 @@ pub fn start_listener(
 
     // Thread 2: Capture Logic (State machine + Fast Capture)
     let is_recording_capture = is_recording.clone();
+    let is_picker_open_capture = is_picker_open.clone();
     thread::spawn(move || {
         let mut key_buffer = String::new();
         let mut last_key_time: Option<Instant> = None;
@@ -331,10 +335,11 @@ pub fn start_listener(
             let event = rx_event.recv_timeout(Duration::from_millis(100));
 
             let recording = *is_recording_capture.lock().unwrap();
-            if !recording {
+            let picker_open = *is_picker_open_capture.lock().unwrap();
+            if !recording || picker_open {
                 key_buffer.clear();
                 last_key_time = None;
-                continue; // Skip all events when not recording
+                continue; // Skip all events when not recording or when picker is open
             }
 
             // Check if we need to flush text buffer due to timeout

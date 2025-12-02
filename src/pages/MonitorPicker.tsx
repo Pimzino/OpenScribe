@@ -29,10 +29,6 @@ export default function MonitorPicker() {
       if (num >= 1 && num <= monitors.length) {
         handleCapture(num - 1);
       }
-      // 0 or 'a' for all monitors
-      if (e.key === "0" || e.key.toLowerCase() === "a") {
-        handleCaptureAll();
-      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -69,32 +65,23 @@ export default function MonitorPicker() {
   const handleCapture = async (index: number) => {
     if (isCapturing) return;
     setIsCapturing(true);
+    setHoveredIndex(null);
 
     try {
+      // Hide the highlight overlay first
       await invoke("hide_monitor_highlight");
-      await invoke("close_monitor_picker");
-      // Small delay to ensure windows are closed before capture
+      // Wait for the overlay window to be fully destroyed by the OS
       await new Promise(resolve => setTimeout(resolve, 100));
+      // Capture the monitor
       await invoke("capture_monitor", { index });
+      // Close the picker window
+      await invoke("close_monitor_picker");
     } catch (error) {
       console.error("Failed to capture monitor:", error);
-    } finally {
-      setIsCapturing(false);
-    }
-  };
-
-  const handleCaptureAll = async () => {
-    if (isCapturing) return;
-    setIsCapturing(true);
-
-    try {
-      await invoke("hide_monitor_highlight");
-      await invoke("close_monitor_picker");
-      // Small delay to ensure windows are closed before capture
-      await new Promise(resolve => setTimeout(resolve, 100));
-      await invoke("capture_all_monitors");
-    } catch (error) {
-      console.error("Failed to capture all monitors:", error);
+      // Ensure highlight is hidden even on error
+      try {
+        await invoke("hide_monitor_highlight");
+      } catch {}
     } finally {
       setIsCapturing(false);
     }
@@ -179,18 +166,11 @@ export default function MonitorPicker() {
         </div>
       </div>
 
-      {/* Footer with options */}
-      <div className="px-4 py-3 border-t border-zinc-700 flex items-center justify-between">
-        <div className="text-xs text-zinc-500">
-          Press 1-{monitors.length} or click to select
+      {/* Footer hint */}
+      <div className="px-4 py-2 border-t border-zinc-700">
+        <div className="text-xs text-zinc-500 text-center">
+          Press 1-{monitors.length} or click to capture
         </div>
-        <button
-          onClick={handleCaptureAll}
-          onMouseEnter={handleMouseLeave}
-          className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-        >
-          Capture All (0)
-        </button>
       </div>
     </div>
   );

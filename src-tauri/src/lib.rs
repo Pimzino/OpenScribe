@@ -488,8 +488,11 @@ async fn capture_all_monitors(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn show_monitor_picker(app: AppHandle) -> Result<(), String> {
+async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -> Result<(), String> {
     use tauri::{WebviewWindowBuilder, WebviewUrl};
+
+    // Set picker open flag to pause step recording
+    *state.is_picker_open.lock().unwrap() = true;
 
     // Close existing picker if any
     if let Some(window) = app.get_webview_window("monitor-picker") {
@@ -522,7 +525,10 @@ async fn show_monitor_picker(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn close_monitor_picker(app: AppHandle) -> Result<(), String> {
+async fn close_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -> Result<(), String> {
+    // Reset picker open flag to resume step recording
+    *state.is_picker_open.lock().unwrap() = false;
+
     if let Some(window) = app.get_webview_window("monitor-picker") {
         window.close().map_err(|e| e.to_string())?;
     }
@@ -569,6 +575,7 @@ pub fn run() {
 
     let recording_state = RecordingState::new();
     let is_recording_clone = recording_state.is_recording.clone();
+    let is_picker_open_clone = recording_state.is_picker_open.clone();
     let start_hotkey_clone = recording_state.start_hotkey.clone();
     let stop_hotkey_clone = recording_state.stop_hotkey.clone();
     let capture_hotkey_clone = recording_state.capture_hotkey.clone();
@@ -588,7 +595,7 @@ pub fn run() {
                 .expect("Failed to initialize database");
             app.manage(DatabaseState(Mutex::new(db)));
             // Start the global input listener in a background thread (for recording)
-            recorder::start_listener(app.handle().clone(), is_recording_clone);
+            recorder::start_listener(app.handle().clone(), is_recording_clone, is_picker_open_clone);
 
             // Register default hotkeys
             let global_shortcut = app.global_shortcut();

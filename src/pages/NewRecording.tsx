@@ -60,15 +60,8 @@ export default function NewRecording() {
             const screenshotPath = event.payload;
             const captureStep: Step = {
                 type_: "capture",
-                x: null,
-                y: null,
-                text: null,
                 timestamp: Date.now(),
                 screenshot: screenshotPath,
-                element_name: null,
-                element_type: null,
-                element_value: null,
-                app_name: null,
             };
             addStep(captureStep);
         });
