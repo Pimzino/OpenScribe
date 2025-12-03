@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { X, Monitor, AppWindow, Minimize2 } from "lucide-react";
+import { X, Monitor, AppWindow, Minimize2, ChevronDown } from "lucide-react";
 
 interface MonitorInfo {
   index: number;
@@ -27,17 +27,23 @@ export default function MonitorPicker() {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [windows, setWindows] = useState<WindowInfo[]>([]);
   const [hoveredMonitor, setHoveredMonitor] = useState<number | null>(null);
-  const [hoveredWindow, setHoveredWindow] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [windowDropdownOpen, setWindowDropdownOpen] = useState(false);
 
   useEffect(() => {
     loadData();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape") {
+        if (windowDropdownOpen) {
+          setWindowDropdownOpen(false);
+        } else {
+          handleClose();
+        }
+      }
       const num = parseInt(e.key);
-      if (num >= 1 && num <= monitors.length) {
+      if (num >= 1 && num <= monitors.length && !windowDropdownOpen) {
         handleCaptureMonitor(num - 1);
       }
     };
@@ -47,10 +53,9 @@ export default function MonitorPicker() {
     // Cleanup overlay on unmount
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      // Ensure overlay is hidden when component unmounts
       invoke("hide_monitor_highlight").catch(() => {});
     };
-  }, [monitors.length]);
+  }, [monitors.length, windowDropdownOpen]);
 
   const loadData = async () => {
     try {
@@ -58,8 +63,6 @@ export default function MonitorPicker() {
         invoke<MonitorInfo[]>("get_monitors"),
         invoke<WindowInfo[]>("get_windows")
       ]);
-      console.log("Monitors:", monitorsResult);
-      console.log("Windows:", windowsResult);
       setMonitors(monitorsResult);
       setWindows(windowsResult);
     } catch (err) {
@@ -70,9 +73,7 @@ export default function MonitorPicker() {
 
   const handleMonitorEnter = async (index: number) => {
     setHoveredMonitor(index);
-    setHoveredWindow(null);
     try {
-      // Hide any existing border first, then show new one
       await invoke("hide_monitor_highlight");
       await invoke("show_monitor_highlight", { index });
     } catch (err) {
@@ -80,23 +81,27 @@ export default function MonitorPicker() {
     }
   };
 
-  const handleWindowEnter = async (windowId: number, isMinimized: boolean) => {
-    setHoveredWindow(windowId);
+  const handleMonitorLeave = async () => {
     setHoveredMonitor(null);
     try {
-      // Hide any existing border first
       await invoke("hide_monitor_highlight");
-      if (!isMinimized) {
-        await invoke("show_window_highlight", { windowId });
-      }
     } catch (err) {
-      console.error("Failed to show window highlight:", err);
+      console.error("Failed to hide highlight:", err);
     }
   };
 
-  const handleMouseLeave = async () => {
-    setHoveredMonitor(null);
-    setHoveredWindow(null);
+  const handleWindowHover = async (win: WindowInfo) => {
+    if (!win.is_minimized) {
+      try {
+        await invoke("hide_monitor_highlight");
+        await invoke("show_window_highlight", { windowId: win.id });
+      } catch (err) {
+        console.error("Failed to show window highlight:", err);
+      }
+    }
+  };
+
+  const handleWindowLeave = async () => {
     try {
       await invoke("hide_monitor_highlight");
     } catch (err) {
@@ -115,11 +120,12 @@ export default function MonitorPicker() {
     }
   };
 
-  const handleCaptureWindow = async (windowId: number) => {
+  const handleCaptureWindow = async (win: WindowInfo) => {
     if (isCapturing) return;
     setIsCapturing(true);
+    setWindowDropdownOpen(false);
     try {
-      await invoke("capture_window_and_close_picker", { windowId });
+      await invoke("capture_window_and_close_picker", { windowId: win.id });
     } catch (err) {
       console.error("Failed to capture window:", err);
       setIsCapturing(false);
@@ -136,55 +142,55 @@ export default function MonitorPicker() {
   };
 
   return (
-    <div className="h-screen w-screen bg-gray-900/95 flex flex-col select-none overflow-hidden" data-tauri-drag-region>
+    <div className="h-screen w-screen glass-surface-2 flex flex-col select-none overflow-hidden" data-tauri-drag-region>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-gray-800/50" data-tauri-drag-region>
-        <span className="text-sm font-medium text-white">Select Capture Target</span>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/10" data-tauri-drag-region>
+        <span className="text-base font-medium text-white">Select Capture Target</span>
         <button
           onClick={handleClose}
-          className="text-white/60 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+          className="text-white/60 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors"
         >
-          <X size={16} />
+          <X size={18} />
         </button>
       </div>
 
       {error && (
-        <div className="px-4 py-2 bg-red-500/20 text-red-400 text-sm">
+        <div className="px-5 py-3 bg-red-500/20 text-red-400 text-sm border-b border-red-500/20">
           Error: {error}
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 p-5 space-y-5 overflow-y-auto">
         {/* Monitors Section */}
         {monitors.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 text-xs text-white/50 uppercase tracking-wide mb-3">
+            <label className="flex items-center gap-2 text-sm text-white/60 uppercase tracking-wide mb-3">
               <Monitor size={14} />
-              <span>Monitors ({monitors.length})</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
+              <span>Monitors</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
               {monitors.map((monitor, idx) => (
                 <button
                   key={monitor.index}
-                  className={`p-3 rounded-lg border-2 transition-all text-left ${
+                  className={`p-4 rounded-xl border transition-all text-left ${
                     hoveredMonitor === idx
-                      ? "border-green-500 bg-green-500/20 text-white"
-                      : "border-white/20 bg-white/5 text-white/80 hover:border-white/40 hover:bg-white/10"
+                      ? "border-primary bg-primary/20 text-white"
+                      : "border-white/10 glass-surface-3 text-white/80 hover:border-white/20 hover:bg-white/5"
                   }`}
                   onMouseEnter={() => handleMonitorEnter(idx)}
-                  onMouseLeave={handleMouseLeave}
+                  onMouseLeave={handleMonitorLeave}
                   onClick={() => handleCaptureMonitor(idx)}
                 >
-                  <div className="flex items-center gap-2">
-                    <Monitor size={16} className="text-white/60" />
-                    <span className="font-medium">Monitor {idx + 1}</span>
+                  <div className="flex items-center gap-3">
+                    <Monitor size={20} className="text-white/50" />
+                    <span className="font-medium text-base">Monitor {idx + 1}</span>
                     {monitor.is_primary && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/30 text-blue-300 rounded">
+                      <span className="text-xs px-2 py-0.5 bg-[#2721E8]/30 text-[#49B8D3] rounded">
                         Primary
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-white/40 mt-1">
+                  <div className="text-sm text-white/40 mt-2 ml-8">
                     {monitor.width} × {monitor.height}
                   </div>
                 </button>
@@ -193,58 +199,69 @@ export default function MonitorPicker() {
           </div>
         )}
 
-        {/* Windows Section */}
+        {/* Windows Dropdown */}
         <div>
-          <div className="flex items-center gap-2 text-xs text-white/50 uppercase tracking-wide mb-3">
+          <label className="flex items-center gap-2 text-sm text-white/60 uppercase tracking-wide mb-3">
             <AppWindow size={14} />
-            <span>Windows ({windows.length})</span>
-          </div>
+            <span>Window</span>
+          </label>
 
           {windows.length === 0 ? (
-            <div className="text-sm text-white/40 text-center py-6 bg-white/5 rounded-lg">
+            <div className="text-base text-white/40 text-center py-6 glass-surface-3 rounded-xl border border-white/10">
               No capturable windows found
             </div>
           ) : (
-            <div className="space-y-1">
-              {windows.map((win) => (
-                <button
-                  key={win.id}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-all ${
-                    hoveredWindow === win.id
-                      ? "bg-green-500/20 border border-green-500"
-                      : "bg-white/5 border border-transparent hover:bg-white/10 hover:border-white/20"
-                  }`}
-                  onMouseEnter={() => handleWindowEnter(win.id, win.is_minimized)}
-                  onMouseLeave={handleMouseLeave}
-                  onClick={() => handleCaptureWindow(win.id)}
-                >
-                  <div className="flex items-center gap-2">
-                    <AppWindow size={14} className="text-white/40 flex-shrink-0" />
-                    <span className="text-sm text-white truncate flex-1">
-                      {win.title || win.app_name || "Untitled"}
-                    </span>
-                    {win.is_minimized && (
-                      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] rounded flex-shrink-0">
-                        <Minimize2 size={10} />
-                        Minimized
-                      </span>
-                    )}
-                  </div>
-                  {win.app_name && win.title && (
-                    <div className="text-xs text-white/40 truncate mt-0.5 ml-6">
-                      {win.app_name}
-                    </div>
-                  )}
-                </button>
-              ))}
+            <div className="relative">
+              <button
+                onClick={() => setWindowDropdownOpen(!windowDropdownOpen)}
+                className="w-full px-4 py-3.5 glass-surface-3 rounded-xl text-white text-left flex items-center justify-between border border-white/10 hover:border-white/20 transition-colors"
+              >
+                <span className="flex items-center gap-3 truncate">
+                  <AppWindow size={18} className="text-white/50 flex-shrink-0" />
+                  <span className="truncate text-white/70 text-base">Select a window...</span>
+                </span>
+                <ChevronDown size={20} className={`text-white/50 transition-transform flex-shrink-0 ${windowDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {windowDropdownOpen && (
+                <div className="absolute z-10 w-full mt-2 glass-surface-3 rounded-xl shadow-lg max-h-60 overflow-y-auto border border-white/10">
+                  {windows.map((win) => (
+                    <button
+                      key={win.id}
+                      onMouseEnter={() => handleWindowHover(win)}
+                      onMouseLeave={handleWindowLeave}
+                      onClick={() => handleCaptureWindow(win)}
+                      className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors flex items-center gap-3"
+                    >
+                      <AppWindow size={18} className="text-white/40 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-base text-white truncate">
+                          {win.title || win.app_name || "Untitled"}
+                        </div>
+                        {win.app_name && win.title && (
+                          <div className="text-sm text-white/40 truncate">
+                            {win.app_name}
+                          </div>
+                        )}
+                      </div>
+                      {win.is_minimized && (
+                        <span className="flex items-center gap-1 px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded flex-shrink-0">
+                          <Minimize2 size={12} />
+                          Min
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2 border-t border-white/10 bg-gray-800/50">
-        <div className="text-xs text-white/50 text-center">
+      <div className="px-5 py-3 border-t border-white/10">
+        <div className="text-sm text-white/50 text-center">
           {monitors.length > 0 ? `Press 1-${monitors.length} for monitors • ` : ""}
           Click to capture • ESC to cancel
         </div>

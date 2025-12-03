@@ -762,14 +762,14 @@ async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -
     #[cfg(not(debug_assertions))]
     let url = WebviewUrl::App("/#/monitor-picker".into());
 
-    // Taller window for combined UI
+    // Window size for monitor cards + dropdown
     let _window = WebviewWindowBuilder::new(
         &app,
         "monitor-picker",
         url
     )
     .title("Select Capture Target")
-    .inner_size(520.0, 500.0)
+    .inner_size(500.0, 450.0)
     .resizable(false)
     .decorations(false)
     .always_on_top(true)
