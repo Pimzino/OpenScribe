@@ -10,7 +10,6 @@ import RecordingDetail from "./pages/RecordingDetail";
 import Editor from "./pages/Editor";
 import Settings from "./pages/Settings";
 import MonitorPicker from "./pages/MonitorPicker";
-import Toast from "./components/Toast";
 import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
 
@@ -105,7 +104,6 @@ function App() {
         {/* Monitor selection route for separate window */}
         <Route path="/monitor-picker" element={<MonitorPicker />} />
       </Routes>
-      <Toast />
     </>
   );
 }

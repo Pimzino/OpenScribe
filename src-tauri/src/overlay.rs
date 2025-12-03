@@ -8,15 +8,22 @@
 #[cfg(target_os = "windows")]
 mod windows_impl {
     use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+    use std::sync::Mutex;
     use windows::Win32::Foundation::*;
     use windows::Win32::Graphics::Gdi::*;
     use windows::Win32::UI::WindowsAndMessaging::*;
     use windows::core::w;
 
     static CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
+    static TOAST_CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
     static OVERLAY_HWND: AtomicIsize = AtomicIsize::new(0);
+    static TOAST_HWND: AtomicIsize = AtomicIsize::new(0);
+    static TOAST_MESSAGE: Mutex<String> = Mutex::new(String::new());
     const BORDER_WIDTH: i32 = 4;
     const BORDER_COLOR: COLORREF = COLORREF(0x005EC722); // BGR format: green #22c55e
+    const TOAST_BG_COLOR: COLORREF = COLORREF(0x00333333); // Dark gray background
+    const TOAST_TEXT_COLOR: COLORREF = COLORREF(0x00FFFFFF); // White text
+    const TOAST_SUCCESS_COLOR: COLORREF = COLORREF(0x005EC722); // Green accent
 
     pub fn show_border(x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
         unsafe {
@@ -213,6 +220,246 @@ mod windows_impl {
                 let _ = DeleteObject(green_brush);
                 let _ = EndPaint(hwnd, &ps);
 
+                LRESULT(0)
+            }
+            WM_ERASEBKGND => {
+                LRESULT(1)
+            }
+            _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+        }
+    }
+
+    // ============================================================================
+    // Toast Window Implementation
+    // ============================================================================
+
+    const TOAST_WIDTH: i32 = 280;
+    const TOAST_HEIGHT: i32 = 56;
+    const TOAST_MARGIN: i32 = 24;
+    const WM_TOAST_CLOSE: u32 = WM_USER + 1;
+
+    pub fn show_toast(message: &str, duration_ms: u32) -> Result<(), String> {
+        // Store message for painting
+        if let Ok(mut msg) = TOAST_MESSAGE.lock() {
+            *msg = message.to_string();
+        }
+
+        let duration = duration_ms;
+
+        // Spawn a dedicated thread with its own message loop
+        std::thread::spawn(move || {
+            unsafe {
+                // Register toast window class if not already done
+                if !TOAST_CLASS_REGISTERED.swap(true, Ordering::SeqCst) {
+                    if let Err(e) = register_toast_class() {
+                        eprintln!("Failed to register toast class: {}", e);
+                        return;
+                    }
+                }
+
+                // Get primary monitor work area (excludes taskbar)
+                let mut work_area = RECT::default();
+                if SystemParametersInfoW(
+                    SPI_GETWORKAREA,
+                    0,
+                    Some(&mut work_area as *mut _ as *mut std::ffi::c_void),
+                    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+                ).is_err() {
+                    work_area.right = GetSystemMetrics(SM_CXSCREEN);
+                    work_area.bottom = GetSystemMetrics(SM_CYSCREEN);
+                }
+
+                // Position in bottom-right corner
+                let x = work_area.right - TOAST_WIDTH - TOAST_MARGIN;
+                let y = work_area.bottom - TOAST_HEIGHT - TOAST_MARGIN;
+
+                // Create the toast window
+                let hwnd = match CreateWindowExW(
+                    WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                    w!("OpenScribeToast"),
+                    w!(""),
+                    WS_POPUP | WS_VISIBLE,
+                    x,
+                    y,
+                    TOAST_WIDTH,
+                    TOAST_HEIGHT,
+                    HWND::default(),
+                    HMENU::default(),
+                    HINSTANCE::default(),
+                    None,
+                ) {
+                    Ok(h) if !h.0.is_null() => h,
+                    _ => {
+                        eprintln!("Failed to create toast window");
+                        return;
+                    }
+                };
+
+                // Store the handle
+                TOAST_HWND.store(hwnd.0 as isize, Ordering::SeqCst);
+
+                // Set layered window with alpha (semi-transparent)
+                let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 230, LWA_ALPHA);
+
+                // Force initial paint
+                let _ = InvalidateRect(hwnd, None, TRUE);
+                let _ = UpdateWindow(hwnd);
+
+                // Set a timer to close the toast (timer ID = 100)
+                const TOAST_TIMER_ID: usize = 100;
+                SetTimer(hwnd, TOAST_TIMER_ID, duration, None);
+
+                // Run message loop
+                let mut msg = MSG::default();
+                while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
+                    // Check for our specific timer
+                    if msg.message == WM_TIMER && msg.wParam.0 == TOAST_TIMER_ID {
+                        // Timer fired, destroy window and exit loop
+                        let _ = KillTimer(hwnd, TOAST_TIMER_ID);
+                        let _ = DestroyWindow(hwnd);
+                        TOAST_HWND.store(0, Ordering::SeqCst);
+                        break;
+                    }
+                    if msg.message == WM_TOAST_CLOSE {
+                        let _ = KillTimer(hwnd, TOAST_TIMER_ID);
+                        let _ = DestroyWindow(hwnd);
+                        TOAST_HWND.store(0, Ordering::SeqCst);
+                        break;
+                    }
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    pub fn hide_toast() -> Result<(), String> {
+        unsafe {
+            let hwnd_val = TOAST_HWND.load(Ordering::SeqCst);
+            if hwnd_val != 0 {
+                let hwnd = HWND(hwnd_val as *mut std::ffi::c_void);
+                if IsWindow(hwnd).as_bool() {
+                    let _ = PostMessageW(hwnd, WM_TOAST_CLOSE, WPARAM(0), LPARAM(0));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn register_toast_class() -> Result<(), String> {
+        unsafe {
+            let wc = WNDCLASSEXW {
+                cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+                style: CS_HREDRAW | CS_VREDRAW,
+                lpfnWndProc: Some(toast_window_proc),
+                cbClsExtra: 0,
+                cbWndExtra: 0,
+                hInstance: HINSTANCE::default(),
+                hIcon: HICON::default(),
+                hCursor: LoadCursorW(HINSTANCE::default(), IDC_ARROW).unwrap_or_default(),
+                hbrBackground: HBRUSH::default(),
+                lpszMenuName: windows::core::PCWSTR::null(),
+                lpszClassName: w!("OpenScribeToast"),
+                hIconSm: HICON::default(),
+            };
+
+            let result = RegisterClassExW(&wc);
+            if result == 0 {
+                return Err("RegisterClassExW for toast failed".to_string());
+            }
+            Ok(())
+        }
+    }
+
+    unsafe extern "system" fn toast_window_proc(
+        hwnd: HWND,
+        msg: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        match msg {
+            WM_PAINT => {
+                let mut ps = PAINTSTRUCT::default();
+                let hdc = BeginPaint(hwnd, &mut ps);
+
+                // Get window dimensions
+                let mut rect = RECT::default();
+                GetClientRect(hwnd, &mut rect).ok();
+
+                // Draw rounded rectangle background
+                let bg_brush = CreateSolidBrush(TOAST_BG_COLOR);
+                let round_rect = CreateRoundRectRgn(0, 0, rect.right + 1, rect.bottom + 1, 12, 12);
+                let _ = FillRgn(hdc, round_rect, bg_brush);
+                let _ = DeleteObject(round_rect);
+                let _ = DeleteObject(bg_brush);
+
+                // Draw green accent bar on left
+                let accent_brush = CreateSolidBrush(TOAST_SUCCESS_COLOR);
+                // Create rounded region for accent
+                let accent_rgn = CreateRoundRectRgn(0, 0, 8, rect.bottom + 1, 8, 8);
+                let _ = FillRgn(hdc, accent_rgn, accent_brush);
+                let _ = DeleteObject(accent_rgn);
+                let _ = DeleteObject(accent_brush);
+
+                // Draw checkmark icon (simple circle with check)
+                let icon_x = 20;
+                let icon_y = (rect.bottom / 2) - 10;
+                let icon_brush = CreateSolidBrush(TOAST_SUCCESS_COLOR);
+                let icon_rgn = CreateEllipticRgn(icon_x, icon_y, icon_x + 20, icon_y + 20);
+                let _ = FillRgn(hdc, icon_rgn, icon_brush);
+                let _ = DeleteObject(icon_rgn);
+                let _ = DeleteObject(icon_brush);
+
+                // Draw checkmark inside the circle
+                let pen = CreatePen(PS_SOLID, 2, TOAST_TEXT_COLOR);
+                let old_pen = SelectObject(hdc, pen);
+                let _ = MoveToEx(hdc, icon_x + 5, icon_y + 10, None);
+                let _ = LineTo(hdc, icon_x + 9, icon_y + 14);
+                let _ = LineTo(hdc, icon_x + 15, icon_y + 6);
+                SelectObject(hdc, old_pen);
+                let _ = DeleteObject(pen);
+
+                // Draw text
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, TOAST_TEXT_COLOR);
+
+                // Create font
+                let font = CreateFontW(
+                    16, 0, 0, 0,
+                    FW_MEDIUM.0 as i32,
+                    0, 0, 0,
+                    DEFAULT_CHARSET.0 as u32,
+                    OUT_DEFAULT_PRECIS.0 as u32,
+                    CLIP_DEFAULT_PRECIS.0 as u32,
+                    CLEARTYPE_QUALITY.0 as u32,
+                    DEFAULT_PITCH.0 as u32 | FF_SWISS.0 as u32,
+                    w!("Segoe UI"),
+                );
+                let old_font = SelectObject(hdc, font);
+
+                // Get message text
+                let message = TOAST_MESSAGE.lock().map(|m| m.clone()).unwrap_or_default();
+                let mut text: Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
+
+                let mut text_rect = RECT {
+                    left: 50,
+                    top: 0,
+                    right: rect.right - 16,
+                    bottom: rect.bottom,
+                };
+                DrawTextW(
+                    hdc,
+                    &mut text,
+                    &mut text_rect,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+                );
+
+                SelectObject(hdc, old_font);
+                let _ = DeleteObject(font);
+
+                let _ = EndPaint(hwnd, &ps);
                 LRESULT(0)
             }
             WM_ERASEBKGND => {
@@ -634,6 +881,50 @@ pub fn hide_monitor_border() -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         return linux_impl::hide_border();
+    }
+
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
+/// Show a native toast notification
+pub fn show_toast(message: &str, duration_ms: u32) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_impl::show_toast(message, duration_ms);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // TODO: Implement macOS toast
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // TODO: Implement Linux toast
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
+/// Hide the toast notification
+pub fn hide_toast() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_impl::hide_toast();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(());
     }
 
     #[allow(unreachable_code)]

@@ -506,6 +506,9 @@ async fn save_and_emit_capture(app: AppHandle, image: image::RgbaImage, prefix: 
 
     let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
 
+    // Show native toast notification (2.5 seconds)
+    let _ = overlay::show_toast("Screenshot captured", 2500);
+
     // Schedule picker close
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -661,6 +664,9 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
 
     // Emit capture event to recorder
     let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+
+    // Show native toast notification (2.5 seconds)
+    let _ = overlay::show_toast("Screenshot captured", 2500);
 
     // Schedule the picker window to close after response is sent
     // This avoids "PostMessage failed" errors from wry when closing during active invoke
