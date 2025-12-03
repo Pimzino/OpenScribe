@@ -769,7 +769,7 @@ async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -
         url
     )
     .title("Select Capture Target")
-    .inner_size(500.0, 450.0)
+    .inner_size(500.0, 520.0)
     .resizable(false)
     .decorations(false)
     .always_on_top(true)
