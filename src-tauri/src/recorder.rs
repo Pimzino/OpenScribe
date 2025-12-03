@@ -12,6 +12,16 @@ use imageproc::drawing::{draw_filled_circle_mut, draw_hollow_circle_mut};
 use std::sync::mpsc;
 use crate::accessibility::{get_element_at_point, ElementInfo};
 
+/// Check if the given app name indicates this is the OpenScribe application
+fn is_openscribe_app(app_name: &Option<String>) -> bool {
+    if let Some(name) = app_name {
+        let name_lower = name.to_lowercase();
+        name_lower.contains("openscribe")
+    } else {
+        false
+    }
+}
+
 static SCREENSHOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, serde::Serialize)]
@@ -236,6 +246,79 @@ fn get_monitor_for_foreground_window() -> Option<Monitor> {
     Monitor::all().ok()?.into_iter().next()
 }
 
+// Get the app name/title of the foreground window (for filtering self-interactions)
+#[cfg(target_os = "windows")]
+fn get_foreground_window_app_name() -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowTextLengthW};
+
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return None;
+        }
+
+        // Get window title length
+        let len = GetWindowTextLengthW(hwnd);
+        if len == 0 {
+            return None;
+        }
+
+        // Get window title
+        let mut buffer = vec![0u16; (len + 1) as usize];
+        let result = GetWindowTextW(hwnd, &mut buffer);
+        if result == 0 {
+            return None;
+        }
+
+        let title = String::from_utf16_lossy(&buffer[..result as usize]);
+        Some(title)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn get_foreground_window_app_name() -> Option<String> {
+    use std::process::Command;
+
+    let script = r#"
+        tell application "System Events"
+            set frontApp to first application process whose frontmost is true
+            return name of frontApp
+        end tell
+    "#;
+
+    if let Ok(output) = Command::new("osascript")
+        .args(["-e", script])
+        .output()
+    {
+        if output.status.success() {
+            let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn get_foreground_window_app_name() -> Option<String> {
+    use std::process::Command;
+
+    // Try using xdotool to get active window name
+    if let Ok(output) = Command::new("xdotool")
+        .args(["getactivewindow", "getwindowname"])
+        .output()
+    {
+        if output.status.success() {
+            let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+    None
+}
+
 pub fn start_listener(
     app: AppHandle,
     is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
@@ -345,6 +428,14 @@ pub fn start_listener(
             // Check if we need to flush text buffer due to timeout
             if let Some(last_time) = last_key_time {
                 if last_time.elapsed() >= text_flush_timeout && !key_buffer.trim().is_empty() {
+                    // Check if typing is happening in OpenScribe - if so, discard the buffer
+                    let fg_app = get_foreground_window_app_name();
+                    if is_openscribe_app(&fg_app) {
+                        key_buffer.clear();
+                        last_key_time = None;
+                        continue; // Discard - was typing in OpenScribe
+                    }
+
                     // Get monitor containing the foreground window (where user is typing)
                     if let Some(mon) = get_monitor_for_foreground_window() {
                         if let Ok(image) = mon.capture_image() {
@@ -402,6 +493,14 @@ pub fn start_listener(
 
                     // Flush on Return or Tab - only if buffer has actual content (not just whitespace)
                     if (is_return || is_tab) && !key_buffer.trim().is_empty() {
+                        // Check if typing is happening in OpenScribe - if so, discard the buffer
+                        let fg_app = get_foreground_window_app_name();
+                        if is_openscribe_app(&fg_app) {
+                            key_buffer.clear();
+                            last_key_time = None;
+                            continue; // Discard - was typing in OpenScribe
+                        }
+
                         // Get monitor containing the foreground window (where user is typing)
                         if let Some(mon) = get_monitor_for_foreground_window() {
                             if let Ok(image) = mon.capture_image() {
@@ -436,6 +535,30 @@ pub fn start_listener(
 
                     // Get element info at click point using accessibility APIs
                     let element_info = get_element_at_point(x, y);
+
+                    // Skip clicks within OpenScribe windows (but flush pending text first)
+                    if is_openscribe_app(&element_info.as_ref().and_then(|e| e.app_name.clone())) {
+                        // Still flush any pending text buffer - it was typed in another app
+                        if !key_buffer.trim().is_empty() {
+                            if let Some(mon) = get_monitor_for_foreground_window() {
+                                if let Ok(image) = mon.capture_image() {
+                                    let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+                                    let _ = tx_encode.send(CaptureData {
+                                        x: None,
+                                        y: None,
+                                        image: image::DynamicImage::ImageRgba8(image),
+                                        timestamp,
+                                        step_type: "type".to_string(),
+                                        text: Some(key_buffer.trim().to_string()),
+                                        element_info: None,
+                                    });
+                                    key_buffer.clear();
+                                    last_key_time = None;
+                                }
+                            }
+                        }
+                        continue; // Skip the click itself - it's within OpenScribe
+                    }
 
                     // Capture Screenshot from the correct monitor
                     if let Some(mon) = get_monitor_at_point(x, y) {
