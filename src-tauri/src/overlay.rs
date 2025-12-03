@@ -21,9 +21,12 @@ mod windows_impl {
     static TOAST_MESSAGE: Mutex<String> = Mutex::new(String::new());
     const BORDER_WIDTH: i32 = 4;
     const BORDER_COLOR: COLORREF = COLORREF(0x005EC722); // BGR format: green #22c55e
-    const TOAST_BG_COLOR: COLORREF = COLORREF(0x00333333); // Dark gray background
+    // Toast colors matching app design system
+    const TOAST_BG_COLOR: COLORREF = COLORREF(0x00231B1E); // BGR: rgb(30, 27, 35) - glass-surface-2
+    const TOAST_BORDER_COLOR: COLORREF = COLORREF(0x002A2A2A); // Subtle border
     const TOAST_TEXT_COLOR: COLORREF = COLORREF(0x00FFFFFF); // White text
-    const TOAST_SUCCESS_COLOR: COLORREF = COLORREF(0x005EC722); // Green accent
+    const TOAST_ACCENT_COLOR: COLORREF = COLORREF(0x00D3B849); // BGR: #49B8D3 - cyan accent
+    const TOAST_PRIMARY_COLOR: COLORREF = COLORREF(0x00E82127); // BGR: #2721E8 - primary blue
 
     pub fn show_border(x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
         unsafe {
@@ -388,46 +391,55 @@ mod windows_impl {
                 let mut rect = RECT::default();
                 GetClientRect(hwnd, &mut rect).ok();
 
-                // Draw rounded rectangle background
+                // Draw rounded rectangle background (glass-surface-2 style)
                 let bg_brush = CreateSolidBrush(TOAST_BG_COLOR);
-                let round_rect = CreateRoundRectRgn(0, 0, rect.right + 1, rect.bottom + 1, 12, 12);
+                let round_rect = CreateRoundRectRgn(0, 0, rect.right + 1, rect.bottom + 1, 16, 16);
                 let _ = FillRgn(hdc, round_rect, bg_brush);
-                let _ = DeleteObject(round_rect);
                 let _ = DeleteObject(bg_brush);
 
-                // Draw green accent bar on left
-                let accent_brush = CreateSolidBrush(TOAST_SUCCESS_COLOR);
-                // Create rounded region for accent
-                let accent_rgn = CreateRoundRectRgn(0, 0, 8, rect.bottom + 1, 8, 8);
+                // Draw subtle border
+                let border_pen = CreatePen(PS_SOLID, 1, TOAST_BORDER_COLOR);
+                let old_pen = SelectObject(hdc, border_pen);
+                let null_brush = GetStockObject(NULL_BRUSH);
+                let old_brush = SelectObject(hdc, null_brush);
+                let _ = RoundRect(hdc, 0, 0, rect.right, rect.bottom, 16, 16);
+                SelectObject(hdc, old_brush);
+                SelectObject(hdc, old_pen);
+                let _ = DeleteObject(border_pen);
+                let _ = DeleteObject(round_rect);
+
+                // Draw primary color accent bar on left (matching app's left border accent)
+                let accent_brush = CreateSolidBrush(TOAST_PRIMARY_COLOR);
+                let accent_rgn = CreateRoundRectRgn(0, 0, 5, rect.bottom + 1, 4, 4);
                 let _ = FillRgn(hdc, accent_rgn, accent_brush);
                 let _ = DeleteObject(accent_rgn);
                 let _ = DeleteObject(accent_brush);
 
-                // Draw checkmark icon (simple circle with check)
-                let icon_x = 20;
+                // Draw cyan checkmark icon (matching app's cyan accent)
+                let icon_x = 18;
                 let icon_y = (rect.bottom / 2) - 10;
-                let icon_brush = CreateSolidBrush(TOAST_SUCCESS_COLOR);
-                let icon_rgn = CreateEllipticRgn(icon_x, icon_y, icon_x + 20, icon_y + 20);
+                let icon_brush = CreateSolidBrush(TOAST_ACCENT_COLOR);
+                let icon_rgn = CreateEllipticRgn(icon_x, icon_y, icon_x + 22, icon_y + 22);
                 let _ = FillRgn(hdc, icon_rgn, icon_brush);
                 let _ = DeleteObject(icon_rgn);
                 let _ = DeleteObject(icon_brush);
 
-                // Draw checkmark inside the circle
-                let pen = CreatePen(PS_SOLID, 2, TOAST_TEXT_COLOR);
-                let old_pen = SelectObject(hdc, pen);
-                let _ = MoveToEx(hdc, icon_x + 5, icon_y + 10, None);
-                let _ = LineTo(hdc, icon_x + 9, icon_y + 14);
-                let _ = LineTo(hdc, icon_x + 15, icon_y + 6);
-                SelectObject(hdc, old_pen);
-                let _ = DeleteObject(pen);
+                // Draw checkmark inside the circle (dark color for contrast)
+                let check_pen = CreatePen(PS_SOLID, 2, TOAST_BG_COLOR);
+                let old_pen2 = SelectObject(hdc, check_pen);
+                let _ = MoveToEx(hdc, icon_x + 6, icon_y + 11, None);
+                let _ = LineTo(hdc, icon_x + 10, icon_y + 15);
+                let _ = LineTo(hdc, icon_x + 16, icon_y + 7);
+                SelectObject(hdc, old_pen2);
+                let _ = DeleteObject(check_pen);
 
                 // Draw text
                 SetBkMode(hdc, TRANSPARENT);
                 SetTextColor(hdc, TOAST_TEXT_COLOR);
 
-                // Create font
+                // Create font (matching Space Grotesk style - using Segoe UI as fallback)
                 let font = CreateFontW(
-                    16, 0, 0, 0,
+                    15, 0, 0, 0,
                     FW_MEDIUM.0 as i32,
                     0, 0, 0,
                     DEFAULT_CHARSET.0 as u32,
