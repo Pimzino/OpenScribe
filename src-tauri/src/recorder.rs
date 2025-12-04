@@ -10,7 +10,9 @@ use image::codecs::jpeg::JpegEncoder;
 use image::Rgb;
 use imageproc::drawing::{draw_filled_circle_mut, draw_hollow_circle_mut};
 use std::sync::mpsc;
+use uuid::Uuid;
 use crate::accessibility::{get_element_at_point, ElementInfo};
+use crate::ocr::{OcrManager, OcrJob, OcrConfig, get_models_dir};
 
 /// Check if the given app name indicates this is the OpenScribe application
 fn is_openscribe_app(app_name: &Option<String>) -> bool {
@@ -26,6 +28,7 @@ static SCREENSHOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, serde::Serialize)]
 struct Step {
+    id: String, // Unique ID for tracking OCR results
     type_: String,
     x: Option<i32>,
     y: Option<i32>,
@@ -49,6 +52,7 @@ pub struct HotkeyBinding {
 pub struct RecordingState {
     pub is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
     pub is_picker_open: std::sync::Arc<std::sync::Mutex<bool>>,
+    pub ocr_enabled: std::sync::Arc<std::sync::Mutex<bool>>,
     pub start_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
     pub stop_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
     pub capture_hotkey: std::sync::Arc<std::sync::Mutex<HotkeyBinding>>,
@@ -59,6 +63,7 @@ impl RecordingState {
         Self {
             is_recording: std::sync::Arc::new(std::sync::Mutex::new(false)),
             is_picker_open: std::sync::Arc::new(std::sync::Mutex::new(false)),
+            ocr_enabled: std::sync::Arc::new(std::sync::Mutex::new(true)), // Enabled by default
             start_hotkey: std::sync::Arc::new(std::sync::Mutex::new(HotkeyBinding {
                 ctrl: true,
                 shift: false,
@@ -95,6 +100,15 @@ struct CaptureData {
     step_type: String,
     text: Option<String>,
     element_info: Option<ElementInfo>,
+}
+
+/// Data sent to OCR processing thread
+struct OcrData {
+    step_id: String,
+    image: image::DynamicImage,
+    x: Option<i32>,
+    y: Option<i32>,
+    step_type: String,
 }
 
 // Find the monitor that contains the given point
@@ -323,6 +337,7 @@ pub fn start_listener(
     app: AppHandle,
     is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
     is_picker_open: std::sync::Arc<std::sync::Mutex<bool>>,
+    ocr_enabled: std::sync::Arc<std::sync::Mutex<bool>>,
 ) {
     // Channel 1: Listener -> Capture Logic
     let (tx_event, rx_event) = mpsc::channel::<RecorderEvent>();
@@ -330,10 +345,51 @@ pub fn start_listener(
     // Channel 2: Capture Logic -> Encoder
     let (tx_encode, rx_encode) = mpsc::channel::<CaptureData>();
 
+    // Channel 3: Encoder -> OCR Processor
+    let (tx_ocr, rx_ocr) = mpsc::channel::<OcrData>();
+
     let app_clone = app.clone();
+    let app_clone_ocr = app.clone();
+    let ocr_enabled_clone = ocr_enabled.clone();
 
     // Note: Capture hotkey is now handled by the frontend (monitor picker UI)
     // The old capture event listener has been removed
+
+    // Thread 4: OCR Processor (processes screenshots asynchronously)
+    thread::spawn(move || {
+        // Get models directory and initialize OCR engine
+        let models_dir = get_models_dir(&app_clone_ocr);
+        let ocr_manager = match OcrManager::new(models_dir.clone(), OcrConfig::default()) {
+            Ok(m) => {
+                println!("OCR engine initialized successfully from {:?}", models_dir);
+                m
+            }
+            Err(e) => {
+                eprintln!("Failed to initialize OCR engine: {}. OCR will be disabled.", e);
+                OcrManager::disabled()
+            }
+        };
+
+        for ocr_data in rx_ocr {
+            // Check if OCR is enabled
+            if !*ocr_enabled_clone.lock().unwrap() || !ocr_manager.is_enabled() {
+                continue;
+            }
+
+            let job = OcrJob {
+                step_id: ocr_data.step_id.clone(),
+                image: ocr_data.image,
+                x: ocr_data.x,
+                y: ocr_data.y,
+                step_type: ocr_data.step_type,
+            };
+
+            let result = ocr_manager.process_job(&job);
+
+            // Emit OCR result to frontend
+            let _ = app_clone_ocr.emit("ocr-result", &result);
+        }
+    });
 
     // Thread 3: Encoder/Emitter (Write to temp files - much faster than base64)
     thread::spawn(move || {
@@ -364,6 +420,9 @@ pub fn start_listener(
                 }
             }
 
+            // Generate unique step ID for tracking OCR results
+            let step_id = Uuid::new_v4().to_string();
+
             // Generate unique filename
             let counter = SCREENSHOT_COUNTER.fetch_add(1, Ordering::SeqCst);
             let filename = format!("screenshot_{}_{}.jpg", data.timestamp, counter);
@@ -383,7 +442,17 @@ pub fn start_listener(
                 None
             };
 
+            // Send to OCR thread for async processing (non-blocking)
+            let _ = tx_ocr.send(OcrData {
+                step_id: step_id.clone(),
+                image: data.image.clone(),
+                x: data.x,
+                y: data.y,
+                step_type: data.step_type.clone(),
+            });
+
             let step = Step {
+                id: step_id,
                 type_: data.step_type,
                 x: data.x,
                 y: data.y,

@@ -26,6 +26,8 @@ export interface Step {
     order_index: number;
     description?: string;
     is_cropped?: boolean;
+    ocr_text?: string;
+    ocr_status?: string;
 }
 
 export interface RecordingWithSteps {
@@ -73,6 +75,7 @@ interface RecordingsState {
     deleteRecording: (id: string) => Promise<void>;
     updateRecordingName: (id: string, name: string) => Promise<void>;
     reorderRecordingSteps: (recordingId: string, stepIds: string[]) => Promise<void>;
+    updateStepOcr: (stepId: string, ocrText: string | null, ocrStatus: string) => Promise<void>;
     setCurrentRecording: (recording: RecordingWithSteps | null) => void;
     clearError: () => void;
 }
@@ -206,6 +209,29 @@ export const useRecordingsStore = create<RecordingsState>((set, get) => ({
         } catch (error) {
             set({ error: error instanceof Error ? error.message : "Failed to reorder steps" });
             throw error;
+        }
+    },
+
+    updateStepOcr: async (stepId: string, ocrText: string | null, ocrStatus: string) => {
+        try {
+            await invoke('update_step_ocr', { stepId, ocrText, ocrStatus });
+            // Update local state if we have a current recording
+            const currentRecording = get().currentRecording;
+            if (currentRecording) {
+                const updatedSteps = currentRecording.steps.map(step =>
+                    step.id === stepId
+                        ? { ...step, ocr_text: ocrText ?? undefined, ocr_status: ocrStatus }
+                        : step
+                );
+                set({
+                    currentRecording: {
+                        ...currentRecording,
+                        steps: updatedSteps
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to update step OCR:', error);
         }
     },
 

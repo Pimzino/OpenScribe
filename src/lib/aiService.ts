@@ -69,16 +69,18 @@ async function fileToBase64(filePath: string): Promise<string> {
 
 // Generate description for a single step
 async function generateStepDescription(
-    step: Step,
+    step: Step & { ocr_text?: string },
     stepNumber: number,
     totalSteps: number,
-    screenshotBase64: string,
+    screenshotBase64: string | null,
     previousSteps: string[],
     openaiBaseUrl: string,
     openaiApiKey: string,
-    openaiModel: string
+    openaiModel: string,
+    sendScreenshots: boolean
 ): Promise<string> {
-    const systemPrompt = `You are a technical documentation writer creating step-by-step guides.
+    const systemPrompt = sendScreenshots
+        ? `You are a technical documentation writer creating step-by-step guides.
 
 For CLICK actions:
 - Element info (name, type, app) may be provided - use this as the primary source of truth
@@ -100,6 +102,27 @@ Guidelines:
 - Be specific about the UI element or output
 - Keep to 1-2 sentences
 - No step numbers, markdown, or bullet points
+- If a user description is provided, incorporate it into your response`
+        : `You are a technical documentation writer creating step-by-step guides.
+You will NOT receive screenshots. Instead, use the element metadata and OCR text provided to write accurate instructions.
+
+For CLICK actions:
+- Element info (name, type, app) is the primary source of truth
+- OCR text shows what text was visible around the click location
+- Use this information to identify what the user clicked
+
+For TYPE actions:
+- Reference the exact text the user typed
+
+For CAPTURE actions:
+- OCR text describes what was visible on screen
+- Describe what the user should observe
+
+Guidelines:
+- Write in imperative mood (e.g., "Click the Submit button", "Type 'hello' in the search field")
+- Be specific about the UI element based on metadata and OCR
+- Keep to 1-2 sentences
+- No step numbers, markdown, or bullet points
 - If a user description is provided, incorporate it into your response`;
 
     let actionDescription: string;
@@ -110,6 +133,14 @@ Guidelines:
         if (step.element_type) parts.push(`Type: ${step.element_type}`);
         if (step.app_name) parts.push(`App: ${step.app_name}`);
 
+        // Add OCR text if available and not sending screenshots
+        if (step.ocr_text && !sendScreenshots) {
+            const truncatedOcr = step.ocr_text.length > 200
+                ? step.ocr_text.substring(0, 200) + '...'
+                : step.ocr_text;
+            parts.push(`Visible text (OCR): "${truncatedOcr}"`);
+        }
+
         if (parts.length > 0) {
             actionDescription = `User clicked: ${parts.join(', ')}. Coordinates: (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`;
         } else {
@@ -117,9 +148,23 @@ Guidelines:
         }
     } else if (step.type_ === 'type') {
         actionDescription = `User typed exactly: "${step.text}"`;
+        // Add OCR context if available and not sending screenshots
+        if (step.ocr_text && !sendScreenshots) {
+            const truncatedOcr = step.ocr_text.length > 100
+                ? step.ocr_text.substring(0, 100) + '...'
+                : step.ocr_text;
+            actionDescription += `\nContext (OCR): "${truncatedOcr}"`;
+        }
     } else {
         // capture type
         actionDescription = `User took a manual screenshot to capture the current screen state/output`;
+        // Add OCR text if available and not sending screenshots
+        if (step.ocr_text && !sendScreenshots) {
+            const truncatedOcr = step.ocr_text.length > 300
+                ? step.ocr_text.substring(0, 300) + '...'
+                : step.ocr_text;
+            actionDescription += `\nVisible content (OCR): "${truncatedOcr}"`;
+        }
     }
 
     // Add user description if provided
@@ -133,14 +178,19 @@ Guidelines:
         contextText = `\n\nPrevious steps in this workflow:\n${previousSteps.map((desc, i) => `${i + 1}. ${desc}`).join('\n')}\n\nUse this context to understand what the user is trying to accomplish.`;
     }
 
+    const promptText = sendScreenshots
+        ? `This is step ${stepNumber} of ${totalSteps}.\n\nAction: ${actionDescription}${contextText}\n\nAnalyze the screenshot and describe what the user should do in this step.`
+        : `This is step ${stepNumber} of ${totalSteps}.\n\nAction: ${actionDescription}${contextText}\n\nBased on the element metadata and OCR text, describe what the user should do in this step.`;
+
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
         {
             type: "text",
-            text: `This is step ${stepNumber} of ${totalSteps}.\n\nAction: ${actionDescription}${contextText}\n\nAnalyze the screenshot and describe what the user should do in this step.`
+            text: promptText
         }
     ];
 
-    if (screenshotBase64) {
+    // Only include image if sendScreenshots is enabled and we have an image
+    if (sendScreenshots && screenshotBase64) {
         userContent.push({
             type: "image_url",
             image_url: {
@@ -265,6 +315,8 @@ interface StepLike {
     app_name?: string;
     description?: string;
     is_cropped?: boolean;
+    ocr_text?: string;
+    ocr_status?: string;
 }
 
 export async function generateDocumentation(steps: StepLike[], config?: AIConfig): Promise<string> {
@@ -273,7 +325,8 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
     const openaiApiKey = config?.apiKey ?? storeState.openaiApiKey;
     const openaiBaseUrl = config?.baseUrl || storeState.openaiBaseUrl;
     const openaiModel = config?.model || storeState.openaiModel;
-    
+    const sendScreenshotsToAi = storeState.sendScreenshotsToAi;
+
     // Get provider configuration to check if API key is required
     const providerConfig = getProvider(storeState.aiProvider);
     const requiresApiKey = providerConfig?.requiresApiKey ?? true;
@@ -322,11 +375,13 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
 
 
 
-    // Convert all screenshots to base64 first
+    // Convert all screenshots to base64 first (only if sending screenshots)
     const stepsWithBase64 = await Promise.all(
         steps.map(async (step) => ({
             step,
-            screenshotBase64: step.screenshot ? await fileToBase64(step.screenshot) : ""
+            screenshotBase64: sendScreenshotsToAi && step.screenshot
+                ? await fileToBase64(step.screenshot)
+                : null
         }))
     );
 
@@ -339,7 +394,7 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
             // For click steps that haven't been manually cropped, crop image around the click point
             // For manually cropped steps, capture steps, and type steps, use the image as-is
             let imageToSend = screenshotBase64;
-            if (step.type_ === 'click' && step.x && step.y && screenshotBase64 && !step.is_cropped) {
+            if (sendScreenshotsToAi && step.type_ === 'click' && step.x && step.y && screenshotBase64 && !step.is_cropped) {
                 imageToSend = await cropAroundPoint(screenshotBase64, step.x, step.y, 300);
             }
             // For capture steps and manually cropped steps, use full/cropped image as-is
@@ -352,7 +407,8 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
                 stepDescriptions.slice(), // Pass previous step descriptions as context
                 openaiBaseUrl,
                 openaiApiKey,
-                openaiModel
+                openaiModel,
+                sendScreenshotsToAi
             );
             stepDescriptions.push(description);
         }

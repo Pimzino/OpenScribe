@@ -31,6 +31,8 @@ pub struct Step {
     pub order_index: i32,
     pub description: Option<String>,
     pub is_cropped: Option<bool>,
+    pub ocr_text: Option<String>,
+    pub ocr_status: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -144,6 +146,30 @@ impl Database {
         if !has_is_cropped {
             self.conn.execute(
                 "ALTER TABLE steps ADD COLUMN is_cropped INTEGER DEFAULT 0",
+                [],
+            )?;
+        }
+
+        // Migration: Add ocr_text column if it doesn't exist
+        let has_ocr_text: bool = self.conn
+            .prepare("SELECT ocr_text FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_ocr_text {
+            self.conn.execute(
+                "ALTER TABLE steps ADD COLUMN ocr_text TEXT",
+                [],
+            )?;
+        }
+
+        // Migration: Add ocr_status column if it doesn't exist
+        let has_ocr_status: bool = self.conn
+            .prepare("SELECT ocr_status FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_ocr_status {
+            self.conn.execute(
+                "ALTER TABLE steps ADD COLUMN ocr_status TEXT DEFAULT 'pending'",
                 [],
             )?;
         }
@@ -411,7 +437,8 @@ impl Database {
             Some(rec) => {
                 let mut stmt = self.conn.prepare(
                     "SELECT id, recording_id, type_, x, y, text, timestamp, screenshot_path,
-                            element_name, element_type, element_value, app_name, order_index, description, is_cropped
+                            element_name, element_type, element_value, app_name, order_index, description, is_cropped,
+                            ocr_text, ocr_status
                      FROM steps WHERE recording_id = ?1 ORDER BY order_index"
                 )?;
 
@@ -432,6 +459,8 @@ impl Database {
                         order_index: row.get(12)?,
                         description: row.get(13)?,
                         is_cropped: row.get::<_, Option<i32>>(14)?.map(|v| v != 0),
+                        ocr_text: row.get(15)?,
+                        ocr_status: row.get(16)?,
                     })
                 })?.collect::<Result<Vec<_>>>()?;
 
@@ -591,6 +620,14 @@ impl Database {
             params![step_id],
         )?;
 
+        Ok(())
+    }
+
+    pub fn update_step_ocr(&self, step_id: &str, ocr_text: Option<&str>, ocr_status: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE steps SET ocr_text = ?1, ocr_status = ?2 WHERE id = ?3",
+            params![ocr_text, ocr_status, step_id],
+        )?;
         Ok(())
     }
 }

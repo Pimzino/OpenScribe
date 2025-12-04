@@ -3,6 +3,7 @@ mod recorder;
 mod accessibility;
 mod database;
 mod overlay;
+mod ocr;
 
 use std::sync::Mutex;
 use std::path::PathBuf;
@@ -825,6 +826,30 @@ async fn hide_monitor_highlight(_app: AppHandle) -> Result<(), String> {
     overlay::hide_monitor_border()
 }
 
+// OCR commands
+#[tauri::command]
+fn set_ocr_enabled(state: State<'_, RecordingState>, enabled: bool) {
+    *state.ocr_enabled.lock().unwrap() = enabled;
+}
+
+#[tauri::command]
+fn get_ocr_enabled(state: State<'_, RecordingState>) -> bool {
+    *state.ocr_enabled.lock().unwrap()
+}
+
+#[tauri::command]
+fn update_step_ocr(
+    db: State<'_, DatabaseState>,
+    step_id: String,
+    ocr_text: Option<String>,
+    ocr_status: String,
+) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .update_step_ocr(&step_id, ocr_text.as_deref(), &ocr_status)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize DPI awareness BEFORE any window/monitor operations (Windows only)
@@ -842,6 +867,7 @@ pub fn run() {
     let recording_state = RecordingState::new();
     let is_recording_clone = recording_state.is_recording.clone();
     let is_picker_open_clone = recording_state.is_picker_open.clone();
+    let ocr_enabled_clone = recording_state.ocr_enabled.clone();
     let start_hotkey_clone = recording_state.start_hotkey.clone();
     let stop_hotkey_clone = recording_state.stop_hotkey.clone();
     let capture_hotkey_clone = recording_state.capture_hotkey.clone();
@@ -861,7 +887,7 @@ pub fn run() {
                 .expect("Failed to initialize database");
             app.manage(DatabaseState(Mutex::new(db)));
             // Start the global input listener in a background thread (for recording)
-            recorder::start_listener(app.handle().clone(), is_recording_clone, is_picker_open_clone);
+            recorder::start_listener(app.handle().clone(), is_recording_clone, is_picker_open_clone, ocr_enabled_clone);
 
             // Register default hotkeys
             let global_shortcut = app.global_shortcut();
@@ -931,7 +957,11 @@ pub fn run() {
             // Window capture commands
             get_windows,
             show_window_highlight,
-            capture_window_and_close_picker
+            capture_window_and_close_picker,
+            // OCR commands
+            set_ocr_enabled,
+            get_ocr_enabled,
+            update_step_ocr
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

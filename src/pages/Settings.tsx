@@ -18,6 +18,7 @@ export default function Settings() {
         openaiApiKey,
         openaiModel,
         screenshotPath,
+        sendScreenshotsToAi,
         startRecordingHotkey,
         stopRecordingHotkey,
         captureHotkey,
@@ -26,6 +27,7 @@ export default function Settings() {
         setOpenaiApiKey,
         setOpenaiModel,
         setScreenshotPath,
+        setSendScreenshotsToAi,
         setStartRecordingHotkey,
         setStopRecordingHotkey,
         setCaptureHotkey,
@@ -548,6 +550,32 @@ export default function Settings() {
                                     {connectionStatus.message}
                                 </div>
                             )}
+                        </div>
+
+                        {/* Send Screenshots to AI Toggle */}
+                        <div className="mt-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <label className="block text-sm font-medium text-white/80">
+                                        Send Screenshots to AI
+                                    </label>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        When disabled, AI receives OCR text and metadata only (no images)
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setSendScreenshotsToAi(!sendScreenshotsToAi)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                        sendScreenshotsToAi ? 'bg-[#2721E8]' : 'bg-white/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            sendScreenshotsToAi ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Hotkeys Section */}

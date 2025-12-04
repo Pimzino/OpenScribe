@@ -16,6 +16,7 @@ interface SettingsState {
     openaiApiKey: string;
     openaiModel: string;
     screenshotPath: string;
+    sendScreenshotsToAi: boolean;
     startRecordingHotkey: HotkeyBinding;
     stopRecordingHotkey: HotkeyBinding;
     captureHotkey: HotkeyBinding;
@@ -25,6 +26,7 @@ interface SettingsState {
     setOpenaiApiKey: (key: string) => void;
     setOpenaiModel: (model: string) => void;
     setScreenshotPath: (path: string) => void;
+    setSendScreenshotsToAi: (enabled: boolean) => void;
     setStartRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setStopRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setCaptureHotkey: (hotkey: HotkeyBinding) => void;
@@ -52,6 +54,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     openaiApiKey: "",
     openaiModel: getDefaultProvider().defaultModel || "",
     screenshotPath: "",
+    sendScreenshotsToAi: true, // Default: send screenshots to AI
     startRecordingHotkey: defaultStartHotkey,
     stopRecordingHotkey: defaultStopHotkey,
     captureHotkey: defaultCaptureHotkey,
@@ -75,6 +78,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     setOpenaiApiKey: (key) => set({ openaiApiKey: key }),
     setOpenaiModel: (model) => set({ openaiModel: model }),
     setScreenshotPath: (path) => set({ screenshotPath: path }),
+    setSendScreenshotsToAi: (enabled) => set({ sendScreenshotsToAi: enabled }),
     setStartRecordingHotkey: (hotkey) => set({ startRecordingHotkey: hotkey }),
     setStopRecordingHotkey: (hotkey) => set({ stopRecordingHotkey: hotkey }),
     setCaptureHotkey: (hotkey) => set({ captureHotkey: hotkey }),
@@ -96,6 +100,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             const apiKey = await store.get<string>("openaiApiKey");
             const model = await store.get<string>("openaiModel");
             const screenshotPath = await store.get<string>("screenshotPath");
+            const sendScreenshotsToAi = await store.get<boolean>("sendScreenshotsToAi");
             const startHotkey = await store.get<HotkeyBinding>("startRecordingHotkey");
             const stopHotkey = await store.get<HotkeyBinding>("stopRecordingHotkey");
             const captureHotkey = await store.get<HotkeyBinding>("captureHotkey");
@@ -123,12 +128,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             const providerConfig = getProvider(aiProvider || getDefaultProvider().id);
             const defaultProvider = getDefaultProvider();
 
+            // Sync OCR enabled state with Rust backend
+            const ocrEnabled = sendScreenshotsToAi !== false; // Default to true if not set
+            try {
+                await invoke("set_ocr_enabled", { enabled: ocrEnabled });
+            } catch (error) {
+                console.error("Failed to sync OCR state with backend:", error);
+            }
+
             set({
                 aiProvider: aiProvider || defaultProvider.id,
                 openaiBaseUrl: baseUrl || providerConfig?.defaultBaseUrl || defaultProvider.defaultBaseUrl,
                 openaiApiKey: apiKey || "",
                 openaiModel: model || providerConfig?.defaultModel || "",
                 screenshotPath: finalScreenshotPath,
+                sendScreenshotsToAi: ocrEnabled,
                 startRecordingHotkey: startHotkey || defaultStartHotkey,
                 stopRecordingHotkey: stopHotkey || defaultStopHotkey,
                 captureHotkey: captureHotkey || defaultCaptureHotkey,
@@ -143,17 +157,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     saveSettings: async () => {
         try {
             const store = await getStore();
-            const { aiProvider, openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
+            const { aiProvider, openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, sendScreenshotsToAi, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
 
             await store.set("aiProvider", aiProvider);
             await store.set("openaiBaseUrl", openaiBaseUrl);
             await store.set("openaiApiKey", openaiApiKey);
             await store.set("openaiModel", openaiModel);
             await store.set("screenshotPath", screenshotPath);
+            await store.set("sendScreenshotsToAi", sendScreenshotsToAi);
             await store.set("startRecordingHotkey", startRecordingHotkey);
             await store.set("stopRecordingHotkey", stopRecordingHotkey);
             await store.set("captureHotkey", captureHotkey);
             await store.save();
+
+            // Sync OCR enabled state with Rust backend
+            try {
+                await invoke("set_ocr_enabled", { enabled: sendScreenshotsToAi });
+            } catch (error) {
+                console.error("Failed to sync OCR state with backend:", error);
+            }
 
             // Register the new screenshot path with asset protocol scope
             if (screenshotPath) {

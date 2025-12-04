@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 export interface Step {
+    id?: string; // Unique ID from backend (for OCR tracking)
     type_: string;
     x?: number;
     y?: number;
@@ -13,6 +14,8 @@ export interface Step {
     app_name?: string;
     description?: string;
     is_cropped?: boolean;
+    ocr_text?: string;
+    ocr_status?: string;
 }
 
 interface RecorderState {
@@ -24,6 +27,7 @@ interface RecorderState {
     clearSteps: () => void;
     updateStepDescription: (index: number, description: string) => void;
     updateStepScreenshot: (index: number, screenshot: string, is_cropped: boolean) => void;
+    updateStepOcr: (stepId: string, ocrText: string | null, ocrStatus: string) => void;
     reorderSteps: (sourceIndex: number, destinationIndex: number) => void;
 }
 
@@ -42,6 +46,13 @@ export const useRecorderStore = create<RecorderState>((set) => ({
     updateStepScreenshot: (index, screenshot, is_cropped) => set((state) => ({
         steps: state.steps.map((step, i) =>
             i === index ? { ...step, screenshot, is_cropped } : step
+        )
+    })),
+    updateStepOcr: (stepId, ocrText, ocrStatus) => set((state) => ({
+        steps: state.steps.map((step) =>
+            step.id === stepId
+                ? { ...step, ocr_text: ocrText ?? undefined, ocr_status: ocrStatus }
+                : step
         )
     })),
     reorderSteps: (sourceIndex, destinationIndex) => set((state) => {
