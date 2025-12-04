@@ -2,6 +2,7 @@ import { Step } from "../store/recorderStore";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { useSettingsStore } from "../store/settingsStore";
 import { getProvider } from "./providers";
+import { buildSystemPrompt } from "./promptConstants";
 
 // Default timeout for AI requests (in milliseconds)
 const DEFAULT_TIMEOUT = 120000; // 2 minutes for local models which can be slow
@@ -79,51 +80,9 @@ async function generateStepDescription(
     openaiModel: string,
     sendScreenshots: boolean
 ): Promise<string> {
-    const systemPrompt = sendScreenshots
-        ? `You are a technical documentation writer creating step-by-step guides.
-
-For CLICK actions:
-- Element info (name, type, app) may be provided - use this as the primary source of truth
-- The image shows the click location with an ORANGE-RED CIRCLE marker
-- If element info is provided, use it to write accurate instructions
-- If no element info, identify the UI element from the image
-
-For TYPE actions:
-- Reference the exact text the user typed
-
-For CAPTURE actions:
-- These are manual screenshots taken to show results or output
-- Describe what is visible on the screen (e.g., command output, results, confirmation messages)
-- Focus on explaining what the user should observe or verify
-
-Guidelines:
-- Write in imperative mood (e.g., "Click the Submit button", "Type 'hello' in the search field")
-- For capture steps, describe observations (e.g., "Observe the ping results showing 4 successful replies")
-- Be specific about the UI element or output
-- Keep to 1-2 sentences
-- No step numbers, markdown, or bullet points
-- If a user description is provided, incorporate it into your response`
-        : `You are a technical documentation writer creating step-by-step guides.
-You will NOT receive screenshots. Instead, use the element metadata and OCR text provided to write accurate instructions.
-
-For CLICK actions:
-- Element info (name, type, app) is the primary source of truth
-- OCR text shows what text was visible around the click location
-- Use this information to identify what the user clicked
-
-For TYPE actions:
-- Reference the exact text the user typed
-
-For CAPTURE actions:
-- OCR text describes what was visible on screen
-- Describe what the user should observe
-
-Guidelines:
-- Write in imperative mood (e.g., "Click the Submit button", "Type 'hello' in the search field")
-- Be specific about the UI element based on metadata and OCR
-- Keep to 1-2 sentences
-- No step numbers, markdown, or bullet points
-- If a user description is provided, incorporate it into your response`;
+    // Get custom guidelines from settings (empty = use default)
+    const styleGuidelines = useSettingsStore.getState().styleGuidelines;
+    const systemPrompt = buildSystemPrompt(sendScreenshots, styleGuidelines);
 
     let actionDescription: string;
     if (step.type_ === 'click') {

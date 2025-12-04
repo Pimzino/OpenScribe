@@ -17,6 +17,7 @@ interface SettingsState {
     openaiModel: string;
     screenshotPath: string;
     sendScreenshotsToAi: boolean;
+    styleGuidelines: string; // Custom AI style guidelines (empty = use default)
     startRecordingHotkey: HotkeyBinding;
     stopRecordingHotkey: HotkeyBinding;
     captureHotkey: HotkeyBinding;
@@ -27,6 +28,7 @@ interface SettingsState {
     setOpenaiModel: (model: string) => void;
     setScreenshotPath: (path: string) => void;
     setSendScreenshotsToAi: (enabled: boolean) => void;
+    setStyleGuidelines: (guidelines: string) => void;
     setStartRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setStopRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setCaptureHotkey: (hotkey: HotkeyBinding) => void;
@@ -55,6 +57,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     openaiModel: getDefaultProvider().defaultModel || "",
     screenshotPath: "",
     sendScreenshotsToAi: true, // Default: send screenshots to AI
+    styleGuidelines: "", // Empty = use default guidelines
     startRecordingHotkey: defaultStartHotkey,
     stopRecordingHotkey: defaultStopHotkey,
     captureHotkey: defaultCaptureHotkey,
@@ -79,6 +82,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     setOpenaiModel: (model) => set({ openaiModel: model }),
     setScreenshotPath: (path) => set({ screenshotPath: path }),
     setSendScreenshotsToAi: (enabled) => set({ sendScreenshotsToAi: enabled }),
+    setStyleGuidelines: (guidelines) => set({ styleGuidelines: guidelines }),
     setStartRecordingHotkey: (hotkey) => set({ startRecordingHotkey: hotkey }),
     setStopRecordingHotkey: (hotkey) => set({ stopRecordingHotkey: hotkey }),
     setCaptureHotkey: (hotkey) => set({ captureHotkey: hotkey }),
@@ -101,6 +105,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             const model = await store.get<string>("openaiModel");
             const screenshotPath = await store.get<string>("screenshotPath");
             const sendScreenshotsToAi = await store.get<boolean>("sendScreenshotsToAi");
+            const styleGuidelines = await store.get<string>("styleGuidelines");
             const startHotkey = await store.get<HotkeyBinding>("startRecordingHotkey");
             const stopHotkey = await store.get<HotkeyBinding>("stopRecordingHotkey");
             const captureHotkey = await store.get<HotkeyBinding>("captureHotkey");
@@ -143,6 +148,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 openaiModel: model || providerConfig?.defaultModel || "",
                 screenshotPath: finalScreenshotPath,
                 sendScreenshotsToAi: ocrEnabled,
+                styleGuidelines: styleGuidelines || "",
                 startRecordingHotkey: startHotkey || defaultStartHotkey,
                 stopRecordingHotkey: stopHotkey || defaultStopHotkey,
                 captureHotkey: captureHotkey || defaultCaptureHotkey,
@@ -157,7 +163,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     saveSettings: async () => {
         try {
             const store = await getStore();
-            const { aiProvider, openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, sendScreenshotsToAi, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
+            const { aiProvider, openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, sendScreenshotsToAi, styleGuidelines, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
 
             await store.set("aiProvider", aiProvider);
             await store.set("openaiBaseUrl", openaiBaseUrl);
@@ -165,6 +171,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             await store.set("openaiModel", openaiModel);
             await store.set("screenshotPath", screenshotPath);
             await store.set("sendScreenshotsToAi", sendScreenshotsToAi);
+            await store.set("styleGuidelines", styleGuidelines);
             await store.set("startRecordingHotkey", startRecordingHotkey);
             await store.set("stopRecordingHotkey", stopRecordingHotkey);
             await store.set("captureHotkey", captureHotkey);

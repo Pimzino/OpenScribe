@@ -9,6 +9,7 @@ import Sidebar from "../components/Sidebar";
 import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
 import { PROVIDERS, getProvider, testConnection, fetchModels } from "../lib/providers";
+import { DEFAULT_STYLE_GUIDELINES } from "../lib/promptConstants";
 
 export default function Settings() {
     const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function Settings() {
         openaiModel,
         screenshotPath,
         sendScreenshotsToAi,
+        styleGuidelines,
         startRecordingHotkey,
         stopRecordingHotkey,
         captureHotkey,
@@ -28,6 +30,7 @@ export default function Settings() {
         setOpenaiModel,
         setScreenshotPath,
         setSendScreenshotsToAi,
+        setStyleGuidelines,
         setStartRecordingHotkey,
         setStopRecordingHotkey,
         setCaptureHotkey,
@@ -49,6 +52,7 @@ export default function Settings() {
     const [availableModels, setAvailableModels] = useState<string[]>([]);
     const [fetchingModels, setFetchingModels] = useState(false);
     const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+    const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
 
     const currentProvider = getProvider(aiProvider);
 
@@ -576,6 +580,62 @@ export default function Settings() {
                                     />
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Writing Style Guidelines - Collapsible Section */}
+                        <div className="mt-6 border-t border-white/8 pt-6">
+                            <button
+                                onClick={() => setGuidelinesExpanded(!guidelinesExpanded)}
+                                className="w-full flex items-center justify-between text-left"
+                            >
+                                <div>
+                                    <h4 className="text-sm font-medium text-white/80">
+                                        Writing Style Guidelines
+                                    </h4>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        Customize how the AI writes step descriptions
+                                    </p>
+                                </div>
+                                <ChevronDown
+                                    size={16}
+                                    className={`text-white/50 transition-transform ${guidelinesExpanded ? 'rotate-180' : ''}`}
+                                />
+                            </button>
+
+                            {guidelinesExpanded && (
+                                <div className="mt-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-sm font-medium text-white/60">
+                                            Custom Guidelines
+                                        </label>
+                                        <button
+                                            onClick={() => setStyleGuidelines("")}
+                                            className="text-xs text-[#49B8D3] hover:text-[#5fc5e0] transition-colors"
+                                        >
+                                            Reset to Default
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        value={styleGuidelines || DEFAULT_STYLE_GUIDELINES}
+                                        onChange={(e) => {
+                                            const newValue = e.target.value;
+                                            // Store empty string if it matches default exactly
+                                            if (newValue === DEFAULT_STYLE_GUIDELINES) {
+                                                setStyleGuidelines("");
+                                            } else {
+                                                setStyleGuidelines(newValue);
+                                            }
+                                        }}
+                                        placeholder={DEFAULT_STYLE_GUIDELINES}
+                                        rows={8}
+                                        className="w-full px-4 py-3 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white text-sm font-mono placeholder-white/30 focus:outline-none focus:border-[#2721E8] transition-colors resize-y"
+                                    />
+                                    <p className="mt-2 text-xs text-white/50">
+                                        These guidelines tell the AI how to write step descriptions.
+                                        Technical instructions for handling clicks, typing, and screenshots are applied automatically.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Hotkeys Section */}
