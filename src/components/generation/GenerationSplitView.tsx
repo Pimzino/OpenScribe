@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react';
 import { XCircle, CheckCircle2 } from 'lucide-react';
 import { useGenerationStore } from '../../store/generationStore';
 import StepProgressCard from './StepProgressCard';
@@ -25,9 +26,22 @@ export default function GenerationSplitView({ steps, onCancel, onClose }: Genera
         totalSteps,
     } = useGenerationStore();
 
+    const stepsContainerRef = useRef<HTMLDivElement>(null);
+    const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
+
     const completedCount = stepProgress.filter(sp => sp.status === 'completed').length;
     const progressPercent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
     const isComplete = !isGenerating && completedCount === totalSteps && totalSteps > 0;
+
+    // Auto-scroll to current step
+    useEffect(() => {
+        if (currentStepIndex >= 0 && stepRefs.current[currentStepIndex]) {
+            stepRefs.current[currentStepIndex]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest',
+            });
+        }
+    }, [currentStepIndex]);
 
     return (
         <div className="flex h-full gap-4">
@@ -51,14 +65,18 @@ export default function GenerationSplitView({ steps, onCancel, onClose }: Genera
                 </div>
 
                 {/* Step cards */}
-                <div className="flex-1 overflow-y-auto space-y-3 p-1 mr-1">
+                <div ref={stepsContainerRef} className="flex-1 overflow-y-auto space-y-3 p-1 mr-1">
                     {stepProgress.map((sp, index) => (
-                        <StepProgressCard
+                        <div
                             key={index}
-                            step={steps[index] || { type_: 'unknown' }}
-                            progress={sp}
-                            isActive={index === currentStepIndex && isGenerating}
-                        />
+                            ref={el => { stepRefs.current[index] = el; }}
+                        >
+                            <StepProgressCard
+                                step={steps[index] || { type_: 'unknown' }}
+                                progress={sp}
+                                isActive={index === currentStepIndex && isGenerating}
+                            />
+                        </div>
                     ))}
                 </div>
 
