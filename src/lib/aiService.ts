@@ -181,27 +181,27 @@ async function generateStepDescription(
 
     let actionDescription: string;
     if (step.type_ === 'click') {
-        // Build description with element info if available
-        const parts: string[] = [];
-        if (step.element_name) parts.push(`Element: "${step.element_name}"`);
-        if (step.element_type) parts.push(`Type: ${step.element_type}`);
-        if (step.app_name) parts.push(`App: ${step.app_name}`);
+        // Build structured description with element info
+        const parts: string[] = [`ACTION: CLICK`];
+        if (step.element_name) parts.push(`Target Element: "${step.element_name}"`);
+        if (step.element_type) parts.push(`Element Type: ${step.element_type}`);
+        if (step.app_name) parts.push(`Application: ${step.app_name}`);
 
         // Add OCR text if available and not sending screenshots
         if (step.ocr_text && !sendScreenshots) {
             const truncatedOcr = step.ocr_text.length > 200
                 ? step.ocr_text.substring(0, 200) + '...'
                 : step.ocr_text;
-            parts.push(`Visible text (OCR): "${truncatedOcr}"`);
+            parts.push(`Nearby visible text: "${truncatedOcr}"`);
         }
 
-        if (parts.length > 0) {
-            actionDescription = `User clicked: ${parts.join(', ')}. Coordinates: (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`;
-        } else {
-            actionDescription = `User clicked at coordinates (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`;
-        }
+        parts.push(`Click location: (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`);
+        parts.push(`Write an instruction telling the user to click this element.`);
+        actionDescription = parts.join('\n');
     } else if (step.type_ === 'type') {
-        actionDescription = `User typed exactly: "${step.text}"`;
+        actionDescription = `ACTION: TYPE
+Text to include in instruction: "${step.text}"
+Write an instruction telling the user to type this exact text.`;
         // Add OCR context if available and not sending screenshots
         if (step.ocr_text && !sendScreenshots) {
             const truncatedOcr = step.ocr_text.length > 100
@@ -211,7 +211,9 @@ async function generateStepDescription(
         }
     } else {
         // capture type
-        actionDescription = `User took a manual screenshot to capture the current screen state/output`;
+        actionDescription = `ACTION: CAPTURE (Verification Step)
+This is an observation/verification step. The user captured the screen to document a result.
+Write a VERIFICATION instruction (e.g., "Verify that..." or "Observe the...")`;
         // Add OCR text if available and not sending screenshots
         if (step.ocr_text && !sendScreenshots) {
             const truncatedOcr = step.ocr_text.length > 300
@@ -233,8 +235,8 @@ async function generateStepDescription(
     }
 
     const promptText = sendScreenshots
-        ? `This is step ${stepNumber} of ${totalSteps}.\n\nAction: ${actionDescription}${contextText}\n\nAnalyze the screenshot and describe what the user should do in this step.`
-        : `This is step ${stepNumber} of ${totalSteps}.\n\nAction: ${actionDescription}${contextText}\n\nBased on the element metadata and OCR text, describe what the user should do in this step.`;
+        ? `Step ${stepNumber} of ${totalSteps}\n\n${actionDescription}${contextText}\n\nTASK: Write ONE clear instruction sentence for this step. Use the screenshot to identify UI elements accurately.`
+        : `Step ${stepNumber} of ${totalSteps}\n\n${actionDescription}${contextText}\n\nTASK: Write ONE clear instruction sentence for this step based on the metadata provided.`;
 
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
         {
