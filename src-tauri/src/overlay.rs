@@ -9,10 +9,10 @@
 mod windows_impl {
     use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
     use std::sync::Mutex;
+    use windows::core::w;
     use windows::Win32::Foundation::*;
     use windows::Win32::Graphics::Gdi::*;
     use windows::Win32::UI::WindowsAndMessaging::*;
-    use windows::core::w;
 
     static CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
     static TOAST_CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
@@ -21,7 +21,7 @@ mod windows_impl {
     static TOAST_MESSAGE: Mutex<String> = Mutex::new(String::new());
     const BORDER_WIDTH: i32 = 4;
     const BORDER_COLOR: COLORREF = COLORREF(0x005EC722); // BGR format: green #22c55e
-    // Toast colors matching app design system
+                                                         // Toast colors matching app design system
     const TOAST_BG_COLOR: COLORREF = COLORREF(0x00231B1E); // BGR: rgb(30, 27, 35) - glass-surface-2
     const TOAST_BORDER_COLOR: COLORREF = COLORREF(0x002A2A2A); // Subtle border
     const TOAST_TEXT_COLOR: COLORREF = COLORREF(0x00FFFFFF); // White text
@@ -49,7 +49,8 @@ mod windows_impl {
                         width as i32,
                         height as i32,
                         SWP_NOACTIVATE | SWP_SHOWWINDOW,
-                    ).map_err(|e| format!("SetWindowPos failed: {}", e))?;
+                    )
+                    .map_err(|e| format!("SetWindowPos failed: {}", e))?;
 
                     let _ = InvalidateRect(hwnd, None, TRUE);
                     let _ = UpdateWindow(hwnd);
@@ -65,7 +66,11 @@ mod windows_impl {
 
             // Create the overlay window
             let hwnd = CreateWindowExW(
-                WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                WS_EX_LAYERED
+                    | WS_EX_TRANSPARENT
+                    | WS_EX_TOPMOST
+                    | WS_EX_TOOLWINDOW
+                    | WS_EX_NOACTIVATE,
                 w!("OpenScribeOverlay"),
                 w!(""),
                 WS_POPUP | WS_VISIBLE,
@@ -77,7 +82,8 @@ mod windows_impl {
                 HMENU::default(),
                 HINSTANCE::default(),
                 None,
-            ).map_err(|e| format!("CreateWindowExW failed: {}", e))?;
+            )
+            .map_err(|e| format!("CreateWindowExW failed: {}", e))?;
 
             if hwnd.0.is_null() {
                 return Err("CreateWindowExW returned null".to_string());
@@ -225,9 +231,7 @@ mod windows_impl {
 
                 LRESULT(0)
             }
-            WM_ERASEBKGND => {
-                LRESULT(1)
-            }
+            WM_ERASEBKGND => LRESULT(1),
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
@@ -267,7 +271,9 @@ mod windows_impl {
                     0,
                     Some(&mut work_area as *mut _ as *mut std::ffi::c_void),
                     SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-                ).is_err() {
+                )
+                .is_err()
+                {
                     work_area.right = GetSystemMetrics(SM_CXSCREEN);
                     work_area.bottom = GetSystemMetrics(SM_CYSCREEN);
                 }
@@ -335,19 +341,6 @@ mod windows_impl {
             }
         });
 
-        Ok(())
-    }
-
-    pub fn hide_toast() -> Result<(), String> {
-        unsafe {
-            let hwnd_val = TOAST_HWND.load(Ordering::SeqCst);
-            if hwnd_val != 0 {
-                let hwnd = HWND(hwnd_val as *mut std::ffi::c_void);
-                if IsWindow(hwnd).as_bool() {
-                    let _ = PostMessageW(hwnd, WM_TOAST_CLOSE, WPARAM(0), LPARAM(0));
-                }
-            }
-        }
         Ok(())
     }
 
@@ -439,9 +432,14 @@ mod windows_impl {
 
                 // Create font (matching Space Grotesk style - using Segoe UI as fallback)
                 let font = CreateFontW(
-                    15, 0, 0, 0,
+                    15,
+                    0,
+                    0,
+                    0,
                     FW_MEDIUM.0 as i32,
-                    0, 0, 0,
+                    0,
+                    0,
+                    0,
                     DEFAULT_CHARSET.0 as u32,
                     OUT_DEFAULT_PRECIS.0 as u32,
                     CLIP_DEFAULT_PRECIS.0 as u32,
@@ -474,9 +472,7 @@ mod windows_impl {
                 let _ = EndPaint(hwnd, &ps);
                 LRESULT(0)
             }
-            WM_ERASEBKGND => {
-                LRESULT(1)
-            }
+            WM_ERASEBKGND => LRESULT(1),
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
@@ -488,15 +484,15 @@ mod windows_impl {
 
 #[cfg(target_os = "macos")]
 mod macos_impl {
-    use std::sync::Mutex;
     use objc2::rc::Retained;
     use objc2::runtime::ProtocolObject;
     use objc2::{class, msg_send, msg_send_id, ClassType};
-    use objc2_foundation::{CGFloat, CGPoint, CGRect, CGSize, MainThreadMarker, NSObject};
     use objc2_app_kit::{
-        NSApplication, NSBackingStoreType, NSBezierPath, NSColor, NSGraphicsContext,
-        NSView, NSWindow, NSWindowLevel, NSWindowStyleMask,
+        NSApplication, NSBackingStoreType, NSBezierPath, NSColor, NSGraphicsContext, NSView,
+        NSWindow, NSWindowLevel, NSWindowStyleMask,
     };
+    use objc2_foundation::{CGFloat, CGPoint, CGRect, CGSize, MainThreadMarker, NSObject};
+    use std::sync::Mutex;
 
     static OVERLAY_WINDOW: Mutex<Option<Retained<NSWindow>>> = Mutex::new(None);
     const BORDER_WIDTH: CGFloat = 4.0;
@@ -669,14 +665,7 @@ mod linux_impl {
         unsafe {
             if let Some(ref state) = *guard {
                 // Move existing window
-                XMoveResizeWindow(
-                    state.display,
-                    state.window,
-                    x,
-                    y,
-                    width,
-                    height,
-                );
+                XMoveResizeWindow(state.display, state.window, x, y, width, height);
                 XMapRaised(state.display, state.window);
                 XFlush(state.display);
 
@@ -821,7 +810,15 @@ mod linux_impl {
             BORDER_WIDTH as u32,
         );
         // Left
-        XFillRectangle(display, window, gc, 0, 0, BORDER_WIDTH as u32, height as u32);
+        XFillRectangle(
+            display,
+            window,
+            gc,
+            0,
+            0,
+            BORDER_WIDTH as u32,
+            height as u32,
+        );
         // Right
         XFillRectangle(
             display,
@@ -915,27 +912,6 @@ pub fn show_toast(message: &str, duration_ms: u32) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         // TODO: Implement Linux toast
-        return Ok(());
-    }
-
-    #[allow(unreachable_code)]
-    Ok(())
-}
-
-/// Hide the toast notification
-pub fn hide_toast() -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_impl::hide_toast();
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        return Ok(());
-    }
-
-    #[cfg(target_os = "linux")]
-    {
         return Ok(());
     }
 
