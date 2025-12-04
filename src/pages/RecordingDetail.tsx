@@ -34,6 +34,7 @@ export default function RecordingDetail() {
         completeStep,
         setStepError,
         updateDocument,
+        finishGeneration,
         cancelGeneration,
         resetGeneration,
     } = useGenerationStore();
@@ -129,8 +130,7 @@ export default function RecordingDetail() {
             onComplete: async (finalMarkdown) => {
                 await saveDocumentation(id, finalMarkdown);
                 await getRecording(id);
-                setShowRegenerationModal(false);
-                resetGeneration();
+                finishGeneration();
             },
         };
 
@@ -161,6 +161,11 @@ export default function RecordingDetail() {
 
     const handleCancelRegeneration = () => {
         cancelGeneration();
+        setShowRegenerationModal(false);
+    };
+
+    const handleCloseRegeneration = () => {
+        resetGeneration();
         setShowRegenerationModal(false);
     };
 
@@ -442,6 +447,7 @@ export default function RecordingDetail() {
                         <GenerationSplitView
                             steps={stepsForRegeneration}
                             onCancel={handleCancelRegeneration}
+                            onClose={handleCloseRegeneration}
                         />
                     </div>
                 </div>

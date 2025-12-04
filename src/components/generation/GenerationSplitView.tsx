@@ -1,4 +1,4 @@
-import { XCircle } from 'lucide-react';
+import { XCircle, CheckCircle2 } from 'lucide-react';
 import { useGenerationStore } from '../../store/generationStore';
 import StepProgressCard from './StepProgressCard';
 import StreamingMarkdownViewer from './StreamingMarkdownViewer';
@@ -13,9 +13,10 @@ interface StepLike {
 interface GenerationSplitViewProps {
     steps: StepLike[];
     onCancel: () => void;
+    onClose?: () => void;
 }
 
-export default function GenerationSplitView({ steps, onCancel }: GenerationSplitViewProps) {
+export default function GenerationSplitView({ steps, onCancel, onClose }: GenerationSplitViewProps) {
     const {
         isGenerating,
         stepProgress,
@@ -26,6 +27,7 @@ export default function GenerationSplitView({ steps, onCancel }: GenerationSplit
 
     const completedCount = stepProgress.filter(sp => sp.status === 'completed').length;
     const progressPercent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
+    const isComplete = !isGenerating && completedCount === totalSteps && totalSteps > 0;
 
     return (
         <div className="flex h-full gap-4">
@@ -60,8 +62,8 @@ export default function GenerationSplitView({ steps, onCancel }: GenerationSplit
                     ))}
                 </div>
 
-                {/* Cancel button */}
-                {isGenerating && (
+                {/* Action button */}
+                {isGenerating ? (
                     <button
                         onClick={onCancel}
                         className="mt-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors flex-shrink-0"
@@ -69,7 +71,15 @@ export default function GenerationSplitView({ steps, onCancel }: GenerationSplit
                         <XCircle size={18} />
                         <span>Cancel Generation</span>
                     </button>
-                )}
+                ) : isComplete && onClose ? (
+                    <button
+                        onClick={onClose}
+                        className="mt-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg transition-colors flex-shrink-0"
+                    >
+                        <CheckCircle2 size={18} />
+                        <span>Done</span>
+                    </button>
+                ) : null}
             </div>
 
             {/* Divider */}

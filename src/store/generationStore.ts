@@ -32,6 +32,7 @@ interface GenerationState {
     completeStep: (index: number, finalText: string) => void;
     setStepError: (index: number, error: string) => void;
     updateDocument: (markdown: string) => void;
+    finishGeneration: () => void;
     cancelGeneration: () => void;
     resetGeneration: () => void;
 }
@@ -100,6 +101,10 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
     updateDocument: (markdown: string) => {
         set({ accumulatedMarkdown: markdown });
+    },
+
+    finishGeneration: () => {
+        set({ isGenerating: false });
     },
 
     cancelGeneration: () => {

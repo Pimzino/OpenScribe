@@ -20,13 +20,14 @@ export default function Editor() {
     const { getRecording, saveDocumentation } = useRecordingsStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel } = useSettingsStore();
     const {
-        isGenerating,
+        stepProgress,
         startGeneration,
         updateStepStatus,
         appendStreamingText,
         completeStep,
         setStepError,
         updateDocument,
+        finishGeneration,
         cancelGeneration,
         resetGeneration,
     } = useGenerationStore();
@@ -100,7 +101,7 @@ export default function Editor() {
                     onComplete: async (finalMarkdown) => {
                         setMarkdown(finalMarkdown);
                         setLoading(false);
-                        resetGeneration();
+                        finishGeneration();
                         if (recordingId) {
                             await saveDocumentation(recordingId, finalMarkdown);
                         }
@@ -140,6 +141,11 @@ export default function Editor() {
     const handleCancelGeneration = () => {
         cancelGeneration();
         navigate(-1);
+    };
+
+    const handleCloseGeneration = () => {
+        resetGeneration();
+        // Stay on the page to show the completed documentation
     };
 
     const handleEdit = () => {
@@ -228,11 +234,12 @@ export default function Editor() {
                         )}
                     </div>
                 </div>
-                {isGenerating ? (
+                {stepProgress.length > 0 ? (
                     <div className="h-[calc(100vh-120px)]">
                         <GenerationSplitView
                             steps={stepsForGeneration}
                             onCancel={handleCancelGeneration}
+                            onClose={handleCloseGeneration}
                         />
                     </div>
                 ) : loading ? (
