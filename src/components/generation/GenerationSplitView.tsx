@@ -49,7 +49,7 @@ export default function GenerationSplitView({ steps, onCancel }: GenerationSplit
                 </div>
 
                 {/* Step cards */}
-                <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                <div className="flex-1 overflow-y-auto space-y-3 p-1 mr-1">
                     {stepProgress.map((sp, index) => (
                         <StepProgressCard
                             key={index}
