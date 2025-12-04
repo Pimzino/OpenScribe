@@ -21,6 +21,11 @@ export default function Settings() {
         screenshotPath,
         sendScreenshotsToAi,
         styleGuidelines,
+        enableAutoRetry,
+        maxRetryAttempts,
+        initialRetryDelayMs,
+        enableRequestThrottling,
+        throttleDelayMs,
         startRecordingHotkey,
         stopRecordingHotkey,
         captureHotkey,
@@ -31,6 +36,11 @@ export default function Settings() {
         setScreenshotPath,
         setSendScreenshotsToAi,
         setStyleGuidelines,
+        setEnableAutoRetry,
+        setMaxRetryAttempts,
+        setInitialRetryDelayMs,
+        setEnableRequestThrottling,
+        setThrottleDelayMs,
         setStartRecordingHotkey,
         setStopRecordingHotkey,
         setCaptureHotkey,
@@ -580,6 +590,134 @@ export default function Settings() {
                                     />
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Rate Limit Mitigation Section */}
+                        <div className="mt-6 border-t border-white/8 pt-6">
+                            <h4 className="text-sm font-medium text-white/80 mb-2">
+                                Rate Limit Mitigation
+                            </h4>
+                            <p className="text-xs text-white/50 mb-4">
+                                Configure how the app handles API rate limits during documentation generation.
+                            </p>
+
+                            {/* Auto-Retry Toggle */}
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-white/80">
+                                        Auto-Retry on Rate Limit
+                                    </label>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        Automatically retry requests when rate limited (HTTP 429)
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setEnableAutoRetry(!enableAutoRetry)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                        enableAutoRetry ? 'bg-[#2721E8]' : 'bg-white/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            enableAutoRetry ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {/* Auto-Retry Settings (shown when enabled) */}
+                            {enableAutoRetry && (
+                                <div className="ml-4 space-y-4 mb-6 p-4 bg-white/5 rounded-lg">
+                                    {/* Max Retry Attempts */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/60 mb-2">
+                                            Max Retry Attempts
+                                        </label>
+                                        <div className="flex items-center gap-4">
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="10"
+                                                value={maxRetryAttempts}
+                                                onChange={(e) => setMaxRetryAttempts(parseInt(e.target.value))}
+                                                className="flex-1 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#2721E8]"
+                                            />
+                                            <span className="text-sm text-white/80 w-8 text-center">{maxRetryAttempts}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Initial Retry Delay */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/60 mb-2">
+                                            Initial Retry Delay
+                                        </label>
+                                        <div className="flex items-center gap-4">
+                                            <input
+                                                type="range"
+                                                min="100"
+                                                max="5000"
+                                                step="100"
+                                                value={initialRetryDelayMs}
+                                                onChange={(e) => setInitialRetryDelayMs(parseInt(e.target.value))}
+                                                className="flex-1 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#2721E8]"
+                                            />
+                                            <span className="text-sm text-white/80 w-16 text-right">{initialRetryDelayMs}ms</span>
+                                        </div>
+                                        <p className="text-xs text-white/40 mt-1">
+                                            Delay doubles with each retry (exponential backoff)
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Request Throttling Toggle */}
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-white/80">
+                                        Request Throttling
+                                    </label>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        Add delay between API calls to prevent hitting rate limits
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setEnableRequestThrottling(!enableRequestThrottling)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                        enableRequestThrottling ? 'bg-[#2721E8]' : 'bg-white/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            enableRequestThrottling ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {/* Throttle Delay Settings (shown when enabled) */}
+                            {enableRequestThrottling && (
+                                <div className="ml-4 p-4 bg-white/5 rounded-lg">
+                                    <label className="block text-sm font-medium text-white/60 mb-2">
+                                        Delay Between Requests
+                                    </label>
+                                    <div className="flex items-center gap-4">
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="5000"
+                                            step="100"
+                                            value={throttleDelayMs}
+                                            onChange={(e) => setThrottleDelayMs(parseInt(e.target.value))}
+                                            className="flex-1 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#2721E8]"
+                                        />
+                                        <span className="text-sm text-white/80 w-16 text-right">{throttleDelayMs}ms</span>
+                                    </div>
+                                    <p className="text-xs text-white/40 mt-1">
+                                        {throttleDelayMs === 0 ? 'No delay between requests' :
+                                         `Adds ${(throttleDelayMs / 1000).toFixed(1)}s between each API call`}
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Writing Style Guidelines - Collapsible Section */}

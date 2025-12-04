@@ -7,6 +7,101 @@ import { buildSystemPrompt } from "./promptConstants";
 // Default timeout for AI requests (in milliseconds)
 const DEFAULT_TIMEOUT = 120000; // 2 minutes for local models which can be slow
 
+// Sleep utility for delays
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Rate limit mitigation configuration
+interface RateLimitConfig {
+    enableAutoRetry: boolean;
+    maxRetryAttempts: number;
+    initialRetryDelayMs: number;
+    enableRequestThrottling: boolean;
+    throttleDelayMs: number;
+}
+
+function getRateLimitConfig(): RateLimitConfig {
+    const state = useSettingsStore.getState();
+    return {
+        enableAutoRetry: state.enableAutoRetry ?? true,
+        maxRetryAttempts: state.maxRetryAttempts ?? 3,
+        initialRetryDelayMs: state.initialRetryDelayMs ?? 1000,
+        enableRequestThrottling: state.enableRequestThrottling ?? false,
+        throttleDelayMs: state.throttleDelayMs ?? 500,
+    };
+}
+
+// Execute fetch with retry logic for rate limits
+async function fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    config: RateLimitConfig
+): Promise<Response> {
+    let lastError: Error | null = null;
+    let attempt = 0;
+    const maxAttempts = config.enableAutoRetry ? config.maxRetryAttempts : 0;
+
+    while (attempt <= maxAttempts) {
+        try {
+            const response = await fetch(url, options);
+
+            // If rate limited and retries enabled, wait and retry
+            if (response.status === 429 && config.enableAutoRetry && attempt < maxAttempts) {
+                // Try to get retry-after header
+                const retryAfter = response.headers.get('Retry-After');
+                let delayMs: number;
+
+                if (retryAfter) {
+                    // Retry-After can be seconds or a date
+                    const retrySeconds = parseInt(retryAfter, 10);
+                    if (!isNaN(retrySeconds)) {
+                        delayMs = retrySeconds * 1000;
+                    } else {
+                        // Parse as date
+                        const retryDate = new Date(retryAfter);
+                        delayMs = Math.max(0, retryDate.getTime() - Date.now());
+                    }
+                } else {
+                    // Exponential backoff: initialDelay * 2^attempt
+                    delayMs = config.initialRetryDelayMs * Math.pow(2, attempt);
+                }
+
+                // Cap maximum delay at 60 seconds
+                delayMs = Math.min(delayMs, 60000);
+
+                console.log(`Rate limited (429). Retry ${attempt + 1}/${maxAttempts} in ${delayMs}ms`);
+                await sleep(delayMs);
+                attempt++;
+                continue;
+            }
+
+            return response;
+        } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+
+            // Don't retry on timeout or abort errors
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                throw error;
+            }
+
+            // For network errors, retry if configured
+            if (config.enableAutoRetry && attempt < maxAttempts) {
+                const delayMs = config.initialRetryDelayMs * Math.pow(2, attempt);
+                console.log(`Network error. Retry ${attempt + 1}/${maxAttempts} in ${delayMs}ms`);
+                await sleep(delayMs);
+                attempt++;
+                continue;
+            }
+
+            throw error;
+        }
+    }
+
+    // Should only reach here if we exhausted retries on a 429
+    throw lastError || new Error('Request failed after retries');
+}
+
 // Crop image around a point (for click steps)
 async function cropAroundPoint(
     base64Image: string,
@@ -161,30 +256,35 @@ async function generateStepDescription(
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
     };
-    
+
     // Only add Authorization header if API key is provided
     if (openaiApiKey) {
         headers["Authorization"] = `Bearer ${openaiApiKey}`;
     }
 
-    const response = await fetch(`${openaiBaseUrl}/chat/completions`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-            model: openaiModel,
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userContent }
-            ],
-            max_tokens: 256,
-            temperature: 0.3,
-        }),
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
-    });
+    const rateLimitConfig = getRateLimitConfig();
+    const response = await fetchWithRetry(
+        `${openaiBaseUrl}/chat/completions`,
+        {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                model: openaiModel,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userContent }
+                ],
+                max_tokens: 256,
+                temperature: 0.3,
+            }),
+            signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
+        },
+        rateLimitConfig
+    );
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        
+
         // Provide user-friendly error messages
         if (response.status === 401) {
             throw new Error("Authentication failed. Please check your API key in Settings.");
@@ -193,12 +293,13 @@ async function generateStepDescription(
             throw new Error(`Model "${openaiModel}" not found. Please verify the model name in Settings.`);
         }
         if (response.status === 429) {
-            throw new Error("Rate limit exceeded. Please wait a moment and try again.");
+            // If we get here, retries were exhausted or disabled
+            throw new Error("Rate limit exceeded after all retries. Try increasing retry settings or wait before trying again.");
         }
         if (response.status >= 500) {
             throw new Error("The AI server is experiencing issues. Please try again later.");
         }
-        
+
         throw new Error(
             `AI request failed: ${response.status} ${response.statusText}${
                 errorData.error?.message ? ` - ${errorData.error.message}` : ""
@@ -226,26 +327,31 @@ Example: "How to Test Network Connectivity Using Ping"`;
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
     };
-    
+
     // Only add Authorization header if API key is provided
     if (openaiApiKey) {
         headers["Authorization"] = `Bearer ${openaiApiKey}`;
     }
 
-    const response = await fetch(`${openaiBaseUrl}/chat/completions`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-            model: openaiModel,
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: `Generate a title for this how-to guide based on these steps:\n\n${stepsText}` }
-            ],
-            max_tokens: 64,
-            temperature: 0.3,
-        }),
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
-    });
+    const rateLimitConfig = getRateLimitConfig();
+    const response = await fetchWithRetry(
+        `${openaiBaseUrl}/chat/completions`,
+        {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                model: openaiModel,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: `Generate a title for this how-to guide based on these steps:\n\n${stepsText}` }
+                ],
+                max_tokens: 64,
+                temperature: 0.3,
+            }),
+            signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
+        },
+        rateLimitConfig
+    );
 
     if (!response.ok) {
         return "Step-by-Step Guide";
@@ -346,9 +452,15 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
 
     // Generate description for each step with context from previous steps
     const stepDescriptions: string[] = [];
+    const rateLimitConfig = getRateLimitConfig();
     try {
         for (let i = 0; i < stepsWithBase64.length; i++) {
             const { step, screenshotBase64 } = stepsWithBase64[i];
+
+            // Apply throttling delay between requests (not before the first one)
+            if (i > 0 && rateLimitConfig.enableRequestThrottling && rateLimitConfig.throttleDelayMs > 0) {
+                await sleep(rateLimitConfig.throttleDelayMs);
+            }
 
             // For click steps that haven't been manually cropped, crop image around the click point
             // For manually cropped steps, capture steps, and type steps, use the image as-is
