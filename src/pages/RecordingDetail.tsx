@@ -4,14 +4,16 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { useRecordingsStore, Step as DBStep } from "../store/recordingsStore";
-import { generateDocumentation } from "../lib/aiService";
+import { generateDocumentationStreaming, StreamingCallbacks } from "../lib/aiService";
 import { useSettingsStore } from "../store/settingsStore";
+import { useGenerationStore } from "../store/generationStore";
 import { ArrowLeft, Wand2, Check, Pencil, X, Save, XCircle, Play, Square, MapPin } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
 import MarkdownViewer from "../components/MarkdownViewer";
 import Spinner from "../components/Spinner";
+import { GenerationSplitView } from "../components/generation";
 import { mapStepsForAI } from "../lib/stepMapper";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from "@dnd-kit/sortable";
@@ -24,8 +26,21 @@ export default function RecordingDetail() {
     const { id } = useParams<{ id: string }>();
     const { currentRecording, getRecording, saveDocumentation, loading } = useRecordingsStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel, screenshotPath } = useSettingsStore();
+    const {
+        isGenerating,
+        startGeneration,
+        updateStepStatus,
+        appendStreamingText,
+        completeStep,
+        setStepError,
+        updateDocument,
+        cancelGeneration,
+        resetGeneration,
+    } = useGenerationStore();
+
     const [activeTab, setActiveTab] = useState<"steps" | "docs">("docs");
-    const [regenerating, setRegenerating] = useState(false);
+    const [showRegenerationModal, setShowRegenerationModal] = useState(false);
+    const [stepsForRegeneration, setStepsForRegeneration] = useState<ReturnType<typeof mapStepsForAI>>([]);
     const [isEditing, setIsEditing] = useState(false);
     const [editedContent, setEditedContent] = useState("");
     const [error, setError] = useState<string | null>(null);
@@ -96,27 +111,57 @@ export default function RecordingDetail() {
     }, [isRecordingMore, insertPosition]);
 
     const handleRegenerate = async () => {
-        if (!currentRecording || !openaiApiKey || !id) return;
+        if (!currentRecording || !id) return;
 
-        setRegenerating(true);
         setError(null);
+        const steps = mapStepsForAI(currentRecording.steps);
+        setStepsForRegeneration(steps);
+        setShowRegenerationModal(true);
+
+        const abortController = startGeneration(steps.length);
+
+        const callbacks: StreamingCallbacks = {
+            onStepStart: (index) => updateStepStatus(index, 'generating'),
+            onTextChunk: (index, text) => appendStreamingText(index, text),
+            onStepComplete: (index, text) => completeStep(index, text),
+            onDocumentUpdate: (md) => updateDocument(md),
+            onError: (index, err) => setStepError(index, err.message),
+            onComplete: async (finalMarkdown) => {
+                await saveDocumentation(id, finalMarkdown);
+                await getRecording(id);
+                setShowRegenerationModal(false);
+                resetGeneration();
+            },
+        };
+
         try {
-            const steps = mapStepsForAI(currentRecording.steps);
-
-            const markdown = await generateDocumentation(steps, {
-                apiKey: openaiApiKey,
-                baseUrl: openaiBaseUrl,
-                model: openaiModel,
-            });
-
-            await saveDocumentation(id, markdown);
-            await getRecording(id);
+            await generateDocumentationStreaming(
+                steps,
+                {
+                    apiKey: openaiApiKey,
+                    baseUrl: openaiBaseUrl,
+                    model: openaiModel,
+                },
+                callbacks,
+                abortController.signal
+            );
         } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                // User cancelled
+                setShowRegenerationModal(false);
+                resetGeneration();
+                return;
+            }
             const errorMessage = error instanceof Error ? error.message : "Failed to regenerate documentation";
             setError(errorMessage);
-        } finally {
-            setRegenerating(false);
+            setShowRegenerationModal(false);
+            resetGeneration();
         }
+    };
+
+    const handleCancelRegeneration = () => {
+        cancelGeneration();
+        setShowRegenerationModal(false);
     };
 
     const handleStartEdit = () => {
@@ -390,6 +435,18 @@ export default function RecordingDetail() {
                 />
             )}
 
+            {/* Regeneration Modal with Split View */}
+            {showRegenerationModal && (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-8">
+                    <div className="w-full max-w-6xl h-[80vh] glass-surface-1 rounded-xl p-6">
+                        <GenerationSplitView
+                            steps={stepsForRegeneration}
+                            onCancel={handleCancelRegeneration}
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* Main Content */}
             <main className="flex-1 p-8 overflow-auto">
                 <div className="flex justify-between items-center mb-6">
@@ -525,10 +582,10 @@ export default function RecordingDetail() {
                             <Tooltip content="Regenerate documentation">
                                 <button
                                     onClick={handleRegenerate}
-                                    disabled={regenerating || !openaiApiKey}
+                                    disabled={isGenerating}
                                     className="p-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors disabled:opacity-50"
                                 >
-                                    {regenerating ? <Spinner size="sm" className="!border-white !border-t-transparent" /> : <Wand2 size={18} />}
+                                    <Wand2 size={18} />
                                 </button>
                             </Tooltip>
                         )}
@@ -586,17 +643,11 @@ export default function RecordingDetail() {
                                 <p>No documentation generated yet</p>
                                 <button
                                     onClick={handleRegenerate}
-                                    disabled={regenerating || !openaiApiKey}
+                                    disabled={isGenerating}
                                     className="mt-4 text-purple-500 hover:text-purple-400 disabled:opacity-50 flex items-center gap-2 mx-auto"
                                 >
-                                    {regenerating && <Spinner size="sm" />}
-                                    {regenerating ? "Generating..." : "Generate documentation"}
+                                    Generate documentation
                                 </button>
-                                {!openaiApiKey && (
-                                    <p className="mt-2 text-sm text-red-500">
-                                        Configure your API key in Settings first
-                                    </p>
-                                )}
                             </div>
                         )}
                     </div>

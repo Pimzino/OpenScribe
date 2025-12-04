@@ -1,29 +1,44 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useRecorderStore } from "../store/recorderStore";
 import { useRecordingsStore } from "../store/recordingsStore";
 import { useSettingsStore } from "../store/settingsStore";
-import { generateDocumentation } from "../lib/aiService";
+import { useGenerationStore } from "../store/generationStore";
+import { generateDocumentationStreaming, StreamingCallbacks } from "../lib/aiService";
 import { ArrowLeft, Save, Edit3, X } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import Tooltip from "../components/Tooltip";
 import MarkdownViewer from "../components/MarkdownViewer";
-import Spinner from "../components/Spinner";
+import { GenerationSplitView } from "../components/generation";
 import { mapStepsForAI } from "../lib/stepMapper";
 import { TiptapEditor } from "../components/editor";
 
 export default function Editor() {
     const navigate = useNavigate();
     const { id: recordingId } = useParams<{ id: string }>();
-    const { steps } = useRecorderStore();
-    const { getRecording, saveDocumentation, currentRecording } = useRecordingsStore();
+    const { steps: recorderSteps } = useRecorderStore();
+    const { getRecording, saveDocumentation } = useRecordingsStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel } = useSettingsStore();
+    const {
+        isGenerating,
+        startGeneration,
+        updateStepStatus,
+        appendStreamingText,
+        completeStep,
+        setStepError,
+        updateDocument,
+        cancelGeneration,
+        resetGeneration,
+    } = useGenerationStore();
+
     const [markdown, setMarkdown] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [editedMarkdown, setEditedMarkdown] = useState("");
+    const [stepsForGeneration, setStepsForGeneration] = useState<ReturnType<typeof mapStepsForAI>>([]);
+    const generationStarted = useRef(false);
 
     const handleBack = () => {
         if (window.history.length > 1) {
@@ -34,43 +49,98 @@ export default function Editor() {
     };
 
     useEffect(() => {
+        // Prevent double generation in strict mode
+        if (generationStarted.current) return;
+        generationStarted.current = true;
+
         const generate = async () => {
             try {
                 setError(null);
 
-                // If we have a recordingId, use steps from the database
+                // Get steps from the appropriate source
+                let steps: ReturnType<typeof mapStepsForAI>;
                 if (recordingId) {
                     const recording = await getRecording(recordingId);
-                    if (recording) {
-                        const dbSteps = mapStepsForAI(recording.steps);
-
-                        const docs = await generateDocumentation(dbSteps, {
-                            apiKey: openaiApiKey,
-                            baseUrl: openaiBaseUrl,
-                            model: openaiModel,
-                        });
-                        setMarkdown(docs);
-
-                        // Save to database
-                        await saveDocumentation(recordingId, docs);
+                    if (!recording) {
+                        setError("Recording not found");
+                        setLoading(false);
+                        return;
                     }
+                    steps = mapStepsForAI(recording.steps);
                 } else {
-                    // Use steps from recorder store (new recording flow)
-                    const docs = await generateDocumentation(steps, {
+                    steps = recorderSteps.map(s => ({
+                        type_: s.type_,
+                        x: s.x,
+                        y: s.y,
+                        text: s.text,
+                        timestamp: s.timestamp,
+                        screenshot: s.screenshot,
+                        element_name: s.element_name,
+                        element_type: s.element_type,
+                        element_value: s.element_value,
+                        app_name: s.app_name,
+                        description: s.description,
+                        is_cropped: s.is_cropped,
+                        ocr_text: s.ocr_text,
+                        ocr_status: s.ocr_status,
+                    }));
+                }
+
+                setStepsForGeneration(steps);
+
+                // Start generation with streaming
+                const abortController = startGeneration(steps.length);
+
+                const callbacks: StreamingCallbacks = {
+                    onStepStart: (index) => updateStepStatus(index, 'generating'),
+                    onTextChunk: (index, text) => appendStreamingText(index, text),
+                    onStepComplete: (index, text) => completeStep(index, text),
+                    onDocumentUpdate: (md) => updateDocument(md),
+                    onError: (index, err) => setStepError(index, err.message),
+                    onComplete: async (finalMarkdown) => {
+                        setMarkdown(finalMarkdown);
+                        setLoading(false);
+                        resetGeneration();
+                        if (recordingId) {
+                            await saveDocumentation(recordingId, finalMarkdown);
+                        }
+                    },
+                };
+
+                await generateDocumentationStreaming(
+                    steps,
+                    {
                         apiKey: openaiApiKey,
                         baseUrl: openaiBaseUrl,
                         model: openaiModel,
-                    });
-                    setMarkdown(docs);
-                }
+                    },
+                    callbacks,
+                    abortController.signal
+                );
             } catch (err) {
+                if (err instanceof DOMException && err.name === 'AbortError') {
+                    // User cancelled - navigate back
+                    resetGeneration();
+                    navigate(-1);
+                    return;
+                }
                 setError(err instanceof Error ? err.message : "Failed to generate documentation");
-            } finally {
+                resetGeneration();
                 setLoading(false);
             }
         };
         generate();
-    }, [recordingId, steps, getRecording, saveDocumentation, openaiApiKey, openaiBaseUrl, openaiModel]);
+
+        return () => {
+            // Cleanup on unmount
+            cancelGeneration();
+        };
+    }, []);
+
+    const handleCancelGeneration = () => {
+        cancelGeneration();
+        navigate(-1);
+    };
 
     const handleEdit = () => {
         setEditedMarkdown(markdown);
@@ -158,13 +228,16 @@ export default function Editor() {
                         )}
                     </div>
                 </div>
-                {loading ? (
+                {isGenerating ? (
+                    <div className="h-[calc(100vh-120px)]">
+                        <GenerationSplitView
+                            steps={stepsForGeneration}
+                            onCancel={handleCancelGeneration}
+                        />
+                    </div>
+                ) : loading ? (
                     <div className="flex flex-col items-center justify-center h-full text-white/50 gap-4">
-                        <Spinner size="lg" />
-                        <p>Generating documentation with AI...</p>
-                        <p className="text-xs">
-                            Processing {recordingId ? currentRecording?.steps.length || 0 : steps.length} steps...
-                        </p>
+                        <p>Preparing generation...</p>
                     </div>
                 ) : error ? (
                     <div className="flex flex-col items-center justify-center h-full gap-4">
