@@ -616,8 +616,9 @@ async fn capture_monitor(app: AppHandle, index: usize) -> Result<String, String>
 }
 
 
-/// Combined command that hides picker first, captures, then schedules close
-/// This ensures the picker window is not visible in the screenshot
+/// Combined command that closes picker first, then captures the monitor
+/// The picker window is closed (not just hidden) to ensure it's fully removed
+/// from the screen before capturing, preventing "ghost window" artifacts
 #[tauri::command]
 async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, RecordingState>, index: usize) -> Result<String, String> {
     use xcap::Monitor;
@@ -630,14 +631,15 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
         eprintln!("Warning: Failed to hide overlay: {}", e);
     }
 
-    // Hide the picker window (don't close yet - we need it alive for the response)
+    // Close the picker window entirely to ensure it's not captured in the screenshot
+    // (hiding alone is not reliable - Windows compositor may not update in time)
     *state.is_picker_open.lock().unwrap() = false;
     if let Some(window) = app.get_webview_window("monitor-picker") {
-        let _ = window.hide();
+        let _ = window.close();
     }
 
-    // Wait for picker window to fully hide
-    sleep(Duration::from_millis(100)).await;
+    // Wait for picker window to fully close and compositor to update
+    sleep(Duration::from_millis(200)).await;
 
     // Now capture the monitor
     let monitors = Monitor::all().map_err(|e| e.to_string())?;
@@ -668,16 +670,6 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
 
     // Show native toast notification (2.5 seconds)
     let _ = overlay::show_toast("Screenshot captured", 2500);
-
-    // Schedule the picker window to close after response is sent
-    // This avoids "PostMessage failed" errors from wry when closing during active invoke
-    let app_clone = app.clone();
-    tauri::async_runtime::spawn(async move {
-        sleep(Duration::from_millis(50)).await;
-        if let Some(window) = app_clone.get_webview_window("monitor-picker") {
-            let _ = window.close();
-        }
-    });
 
     Ok(file_path.to_string_lossy().to_string())
 }
