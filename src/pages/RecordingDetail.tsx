@@ -4,6 +4,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { useRecordingsStore, Step as DBStep } from "../store/recordingsStore";
+import { useRecorderStore } from "../store/recorderStore";
 import { generateDocumentationStreaming, StreamingCallbacks } from "../lib/aiService";
 import { useSettingsStore } from "../store/settingsStore";
 import { useGenerationStore } from "../store/generationStore";
@@ -25,6 +26,7 @@ export default function RecordingDetail() {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
     const { currentRecording, getRecording, saveDocumentation, loading } = useRecordingsStore();
+    const { isRecording, setIsRecording } = useRecorderStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel, screenshotPath } = useSettingsStore();
     const {
         isGenerating,
@@ -53,7 +55,8 @@ export default function RecordingDetail() {
     const [deletedStepIds, setDeletedStepIds] = useState<Set<string>>(new Set());
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [insertPosition, setInsertPosition] = useState<number | null>(null);
-    const [isRecordingMore, setIsRecordingMore] = useState(false);
+    // Use global isRecording state from recorderStore instead of local state
+    // This prevents the global hotkey handler in App.tsx from navigating away
     const [isSelectingPosition, setIsSelectingPosition] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deletingStepId, setDeletingStepId] = useState<string | null>(null);
@@ -83,7 +86,7 @@ export default function RecordingDetail() {
 
     // Listen for new-step events when recording more steps
     useEffect(() => {
-        if (!isRecordingMore) return;
+        if (!isRecording) return;
 
         const unlisten = listen<any>("new-step", (event) => {
             const newStep = event.payload;
@@ -109,7 +112,19 @@ export default function RecordingDetail() {
         });
 
         return () => { unlisten.then(f => f()); };
-    }, [isRecordingMore, insertPosition]);
+    }, [isRecording, insertPosition]);
+
+    // Listen for hotkey-stop event to stop recording from this page
+    // This handles the case when user presses the stop hotkey while recording more steps
+    useEffect(() => {
+        const unlisten = listen("hotkey-stop", async () => {
+            if (isRecording) {
+                await stopRecordingMore();
+            }
+        });
+
+        return () => { unlisten.then(f => f()); };
+    }, [isRecording]);
 
     const handleRegenerate = async () => {
         if (!currentRecording || !id) return;
@@ -248,7 +263,7 @@ export default function RecordingDetail() {
 
         try {
             await invoke("start_recording");
-            setIsRecordingMore(true);
+            setIsRecording(true);  // Use global state to prevent App.tsx hotkey handler from navigating
             setIsSelectingPosition(false);
             // Minimize window
             await getCurrentWindow().minimize();
@@ -261,7 +276,7 @@ export default function RecordingDetail() {
     const stopRecordingMore = async () => {
         try {
             await invoke("stop_recording");
-            setIsRecordingMore(false);
+            setIsRecording(false);  // Use global state
             // Restore window
             await getCurrentWindow().unminimize();
             await getCurrentWindow().setFocus();
@@ -504,7 +519,7 @@ export default function RecordingDetail() {
                                         </Tooltip>
                                     </>
                                 )}
-                                {!isRecordingMore && !hasUnsavedChanges && (
+                                {!isRecording && !hasUnsavedChanges && (
                                     <Tooltip content={isSelectingPosition ? "Cancel position selection" : "Select where to insert new steps"}>
                                         <button
                                             onClick={togglePositionSelection}
@@ -521,7 +536,7 @@ export default function RecordingDetail() {
                                         </button>
                                     </Tooltip>
                                 )}
-                                {insertPosition !== null && !isRecordingMore && (
+                                {insertPosition !== null && !isRecording && (
                                     <Tooltip content="Start recording more steps">
                                         <button
                                             onClick={startRecordingMore}
@@ -532,7 +547,7 @@ export default function RecordingDetail() {
                                         </button>
                                     </Tooltip>
                                 )}
-                                {isRecordingMore && (
+                                {isRecording && (
                                     <Tooltip content="Stop recording">
                                         <button
                                             onClick={stopRecordingMore}
