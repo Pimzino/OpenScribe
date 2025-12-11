@@ -84,12 +84,48 @@ export default function RecordingDetail() {
         }
     }, [currentRecording?.recording.id]);
 
+    // Helper to copy screenshot to permanent location and register asset scope
+    const copyScreenshotToPermanent = async (tempPath: string): Promise<string> => {
+        if (!id || !currentRecording) return tempPath;
+
+        try {
+            // Copy to permanent location
+            const permanentPath = await invoke<string>("copy_screenshot_to_permanent", {
+                tempPath,
+                recordingId: id,
+                recordingName: currentRecording.recording.name,
+                customScreenshotPath: screenshotPath || null
+            });
+
+            // Register asset scope so the image can be displayed
+            // Handle both forward and backward slashes (Windows paths)
+            const lastBackslash = permanentPath.lastIndexOf('\\');
+            const lastForwardSlash = permanentPath.lastIndexOf('/');
+            const lastSlash = Math.max(lastBackslash, lastForwardSlash);
+            const screenshotDir = lastSlash > 0 ? permanentPath.substring(0, lastSlash) : permanentPath;
+            await invoke("register_asset_scope", { path: screenshotDir });
+
+            return permanentPath;
+        } catch (error) {
+            console.error("Failed to copy screenshot to permanent location:", error);
+            // Return original path as fallback
+            return tempPath;
+        }
+    };
+
     // Listen for new-step events when recording more steps
     useEffect(() => {
         if (!isRecording) return;
 
-        const unlisten = listen<any>("new-step", (event) => {
+        const unlisten = listen<any>("new-step", async (event) => {
             const newStep = event.payload;
+            const tempId = `temp-${Date.now()}-${Math.random()}`;
+
+            // Copy screenshot to permanent location immediately so it displays
+            let finalScreenshotPath = newStep.screenshot;
+            if (newStep.screenshot) {
+                finalScreenshotPath = await copyScreenshotToPermanent(newStep.screenshot);
+            }
 
             // Insert at selected position
             setLocalSteps(prev => {
@@ -97,8 +133,10 @@ export default function RecordingDetail() {
                 const insertIdx = insertPosition !== null ? insertPosition : prev.length;
                 newSteps.splice(insertIdx, 0, {
                     ...newStep,
-                    id: `temp-${Date.now()}-${Math.random()}`, // Temporary ID
-                    screenshot_path: newStep.screenshot // Map screenshot to screenshot_path
+                    id: tempId,
+                    recording_id: id!, // Will be associated on save
+                    screenshot_path: finalScreenshotPath,
+                    order_index: insertIdx, // Temporary, will be set correctly on save
                 });
                 return newSteps;
             });
@@ -112,18 +150,24 @@ export default function RecordingDetail() {
         });
 
         // Listen for manual captures from the monitor picker
-        const unlistenManualCapture = listen<string>("manual-capture-complete", (event) => {
-            const screenshotPath = event.payload;
+        const unlistenManualCapture = listen<string>("manual-capture-complete", async (event) => {
+            const tempScreenshotPath = event.payload;
+            const tempId = `temp-${Date.now()}-${Math.random()}`;
+
+            // Copy screenshot to permanent location immediately so it displays
+            const finalScreenshotPath = await copyScreenshotToPermanent(tempScreenshotPath);
 
             // Insert at selected position
             setLocalSteps(prev => {
                 const newSteps = [...prev];
                 const insertIdx = insertPosition !== null ? insertPosition : prev.length;
                 newSteps.splice(insertIdx, 0, {
-                    id: `temp-${Date.now()}-${Math.random()}`, // Temporary ID
+                    id: tempId,
+                    recording_id: id!, // Will be associated on save
                     type_: "capture",
                     timestamp: Date.now(),
-                    screenshot_path: screenshotPath,
+                    screenshot_path: finalScreenshotPath,
+                    order_index: insertIdx, // Temporary, will be set correctly on save
                 });
                 return newSteps;
             });
@@ -140,7 +184,7 @@ export default function RecordingDetail() {
             unlisten.then(f => f());
             unlistenManualCapture.then(f => f());
         };
-    }, [isRecording, insertPosition]);
+    }, [isRecording, insertPosition, id, currentRecording, screenshotPath]);
 
     // Listen for hotkey-stop event to stop recording from this page
     // This handles the case when user presses the stop hotkey while recording more steps
@@ -235,15 +279,33 @@ export default function RecordingDetail() {
         setEditedContent("");
     };
 
-    const handleNavigate = (page: "dashboard" | "recordings" | "settings") => {
+    const handleNavigate = async (page: "dashboard" | "recordings" | "settings") => {
         if (hasUnsavedChanges) {
             const confirmed = window.confirm("You have unsaved changes. Do you want to discard them?");
             if (!confirmed) return;
+
+            // Clean up temp step screenshots before navigating
+            await cleanupTempScreenshots();
         }
 
         if (page === "dashboard") navigate('/');
         else if (page === "recordings") navigate('/recordings');
         else if (page === "settings") navigate('/settings');
+    };
+
+    // Helper to clean up screenshot files for unsaved temp steps
+    const cleanupTempScreenshots = async () => {
+        const tempStepsWithScreenshots = localSteps.filter(
+            s => s.id.startsWith('temp-') && s.screenshot_path
+        );
+
+        for (const step of tempStepsWithScreenshots) {
+            try {
+                await invoke("delete_screenshot", { path: step.screenshot_path });
+            } catch (error) {
+                console.error("Failed to delete temp screenshot:", error);
+            }
+        }
     };
 
     const handleDragEnd = async (event: DragEndEvent) => {
@@ -264,8 +326,22 @@ export default function RecordingDetail() {
         }
     };
 
-    const handleDeleteStep = (stepId: string) => {
+    const handleDeleteStep = async (stepId: string) => {
         setDeletingStepId(stepId);
+
+        // Find the step to check if it's a temp step with a screenshot
+        const stepToDelete = localSteps.find(s => s.id === stepId);
+
+        // If it's a temp step (not yet saved to DB), delete the screenshot file immediately
+        // since it won't be cleaned up by delete_step (which looks up path from DB)
+        if (stepToDelete?.id.startsWith('temp-') && stepToDelete.screenshot_path) {
+            try {
+                await invoke("delete_screenshot", { path: stepToDelete.screenshot_path });
+            } catch (error) {
+                console.error("Failed to delete temp screenshot:", error);
+            }
+        }
+
         setLocalSteps(prev => prev.filter(s => s.id !== stepId));
         setDeletedStepIds(prev => new Set(prev).add(stepId));
         setHasUnsavedChanges(true);
@@ -330,10 +406,12 @@ export default function RecordingDetail() {
             const recording = currentRecording?.recording;
             if (!recording) throw new Error("Recording not found");
 
-            // 3. Prepare new steps for saving
+            // 3. Prepare new steps for saving with their correct order_index
+            // Find the position of each new step in the localSteps array
             const stepsToSave = localSteps
-                .filter(step => step.id.startsWith('temp-'))
-                .map(step => ({
+                .map((step, index) => ({ step, index }))
+                .filter(({ step }) => step.id.startsWith('temp-'))
+                .map(({ step, index }) => ({
                     type_: step.type_,
                     x: step.x,
                     y: step.y,
@@ -346,9 +424,11 @@ export default function RecordingDetail() {
                     app_name: step.app_name,
                     description: step.description,
                     is_cropped: step.is_cropped,
+                    order_index: index, // Use position in localSteps as the order_index
+                    screenshot_is_permanent: true, // Screenshots were already copied to permanent location
                 }));
 
-            // 4. Save new steps
+            // 4. Save new steps with their correct order indices
             if (stepsToSave.length > 0) {
                 await invoke("save_steps_with_path", {
                     recordingId: id,
@@ -358,22 +438,50 @@ export default function RecordingDetail() {
                 });
             }
 
-            // 5. Reorder all steps based on localSteps order (only existing steps)
-            const existingStepIds = localSteps
-                .filter(s => !s.id.startsWith('temp-'))
-                .map(s => s.id);
+            // 5. Reorder existing steps based on their position in localSteps
+            // Build the reorder list with position-based indices
+            const existingStepsWithIndex = localSteps
+                .map((step, index) => ({ step, index }))
+                .filter(({ step }) => !step.id.startsWith('temp-'));
 
-            if (existingStepIds.length > 0) {
+            if (existingStepsWithIndex.length > 0) {
+                // Reorder existing steps to their new positions
+                const stepIds = existingStepsWithIndex.map(({ step }) => step.id);
                 await invoke("reorder_steps", {
                     recordingId: id,
-                    stepIds: existingStepIds
+                    stepIds: stepIds
                 });
+
+                // Now we need to update their order_index to match their position in localSteps
+                // The reorder_steps function assigns indices 0, 1, 2... based on array order
+                // But we need indices that account for new steps interspersed
+                // So we need to call reorder with the full list after new steps are saved
             }
 
-            // 6. Refresh recording
+            // 6. Refresh recording to get the newly saved step IDs
             await getRecording(id);
 
-            // 7. Reset state
+            // 7. Final reorder: now that new steps have real IDs, reorder ALL steps
+            // Get the fresh recording data
+            const refreshedRecording = useRecordingsStore.getState().currentRecording;
+            if (refreshedRecording) {
+                // Map temp IDs to the order they should be in
+                // Build the complete ordered list of step IDs
+                const allStepIds = refreshedRecording.steps
+                    .sort((a, b) => a.order_index - b.order_index)
+                    .map(s => s.id);
+
+                // Reorder all steps to ensure consistent ordering
+                await invoke("reorder_steps", {
+                    recordingId: id,
+                    stepIds: allStepIds
+                });
+
+                // Refresh one more time to get final state
+                await getRecording(id);
+            }
+
+            // 8. Reset state
             setDeletedStepIds(new Set());
             setHasUnsavedChanges(false);
             setInsertPosition(null);
@@ -387,8 +495,11 @@ export default function RecordingDetail() {
         }
     };
 
-    const handleDiscardChanges = () => {
+    const handleDiscardChanges = async () => {
         if (currentRecording?.steps) {
+            // Delete screenshot files for any temp steps that won't be saved
+            await cleanupTempScreenshots();
+
             setLocalSteps(currentRecording.steps);
             setDeletedStepIds(new Set());
             setHasUnsavedChanges(false);
@@ -502,10 +613,12 @@ export default function RecordingDetail() {
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
                             <button
-                                onClick={() => {
+                                onClick={async () => {
                                     if (hasUnsavedChanges) {
                                         const confirmed = window.confirm("You have unsaved changes. Do you want to discard them?");
                                         if (!confirmed) return;
+                                        // Clean up temp step screenshots before navigating
+                                        await cleanupTempScreenshots();
                                     }
                                     navigate('/recordings');
                                 }}

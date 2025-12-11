@@ -304,6 +304,52 @@ fn save_cropped_image(path: String, base64_data: String) -> Result<String, Strin
     Ok(path)
 }
 
+/// Copy a screenshot from temp location to permanent storage immediately.
+/// Used when recording additional steps for an existing recording so images display immediately.
+#[tauri::command]
+fn copy_screenshot_to_permanent(
+    db: State<'_, DatabaseState>,
+    temp_path: String,
+    recording_id: String,
+    recording_name: String,
+    custom_screenshot_path: Option<String>
+) -> Result<String, String> {
+    use uuid::Uuid;
+
+    let temp_path_buf = PathBuf::from(&temp_path);
+    if !temp_path_buf.exists() {
+        return Err(format!("Temp screenshot not found: {}", temp_path));
+    }
+
+    // Get the base directory (custom path or default)
+    let base_dir = match custom_screenshot_path {
+        Some(ref path) if !path.is_empty() => PathBuf::from(path),
+        _ => db.0.lock()
+            .map_err(|e| e.to_string())?
+            .screenshots_dir(),
+    };
+
+    // Create recording-specific subfolder with sanitized name
+    let sanitized_name = database::Database::sanitize_dirname_public(&recording_name);
+    let screenshots_dir = base_dir.join(&sanitized_name);
+    std::fs::create_dir_all(&screenshots_dir)
+        .map_err(|e| format!("Failed to create screenshots directory: {}", e))?;
+
+    // Generate unique filename
+    let step_id = Uuid::new_v4().to_string();
+    let filename = format!("{}_{}.jpg", recording_id, step_id);
+    let dest_path = screenshots_dir.join(&filename);
+
+    // Copy the file
+    std::fs::copy(&temp_path_buf, &dest_path)
+        .map_err(|e| format!("Failed to copy screenshot: {}", e))?;
+
+    // Delete the temp file
+    let _ = std::fs::remove_file(&temp_path_buf);
+
+    Ok(dest_path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn update_step_screenshot(db: State<'_, DatabaseState>, step_id: String, screenshot_path: String, is_cropped: bool) -> Result<(), String> {
     db.0.lock()
@@ -933,6 +979,7 @@ pub fn run() {
             validate_screenshot_path,
             register_asset_scope,
             save_cropped_image,
+            copy_screenshot_to_permanent,
             update_step_screenshot,
             reorder_steps,
             update_step_description,

@@ -49,6 +49,9 @@ pub struct StepInput {
     pub app_name: Option<String>,
     pub description: Option<String>,
     pub is_cropped: Option<bool>,
+    pub order_index: Option<i32>,
+    /// If true, the screenshot path is already in permanent storage (no copy needed)
+    pub screenshot_is_permanent: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -185,6 +188,11 @@ impl Database {
 
     pub fn get_default_screenshot_path(&self) -> PathBuf {
         self.data_dir.join("screenshots")
+    }
+
+    /// Sanitize a string to be safe for use as a directory name (public version)
+    pub fn sanitize_dirname_public(name: &str) -> String {
+        Self::sanitize_dirname(name)
     }
 
     /// Sanitize a string to be safe for use as a directory name
@@ -331,8 +339,12 @@ impl Database {
         for (index, step) in steps.into_iter().enumerate() {
             let step_id = Uuid::new_v4().to_string();
 
-            // Copy screenshot to persistent storage if exists
-            let persistent_screenshot = if let Some(temp_path) = &step.screenshot {
+            // Handle screenshot: either use existing permanent path or copy from temp
+            let persistent_screenshot = if step.screenshot_is_permanent.unwrap_or(false) {
+                // Screenshot is already in permanent storage, use it directly
+                step.screenshot.clone()
+            } else if let Some(temp_path) = &step.screenshot {
+                // Copy screenshot from temp to persistent storage
                 let temp_path = PathBuf::from(temp_path);
                 if temp_path.exists() {
                     let filename = format!("{}_{}.jpg", recording_id, step_id);
@@ -351,6 +363,9 @@ impl Database {
                 None
             };
 
+            // Use provided order_index if available, otherwise use enumeration index
+            let final_order_index = step.order_index.unwrap_or(index as i32);
+
             self.conn.execute(
                 "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
@@ -367,7 +382,7 @@ impl Database {
                     step.element_type,
                     step.element_value,
                     step.app_name,
-                    index as i32,
+                    final_order_index,
                     step.description,
                     step.is_cropped.unwrap_or(false) as i32
                 ],
