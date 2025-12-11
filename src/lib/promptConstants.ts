@@ -18,13 +18,36 @@ Write a single, clear instruction sentence that tells the user what to DO in thi
 - Do NOT include step numbers, markdown, or bullet points
 - Return plain text only
 
+=== HUMANIZATION RULES ===
+Write instructions the way a human would explain them to a colleague. Filter out technical artifacts:
+
+IGNORE these metadata artifacts (do NOT include in output):
+- Desktop identifiers: "Desktop 1", "Desktop 2", etc.
+- Monitor/display references: "Monitor 1", "Display 2", "Primary Monitor"
+- Generic accessibility names: "pane", "group", "unknown"
+- Coordinate information: pixel positions, (x, y) values
+- Internal IDs or technical element names
+
+TRANSLATE technical terms to user-friendly language:
+- "Start" button on taskbar → "Start menu" or "Windows Start button"
+- "Search" or "Search Box" near taskbar → "Windows search bar" or "search box in the taskbar"
+- "Edit" control → "text field" or "input field"
+- "List Item" → describe by content or context
+- App window titles → use the application name naturally
+
+DESCRIBE location contextually when needed:
+- Use relative positions: "in the top-right corner", "at the bottom of the window"
+- Reference visible landmarks: "next to the Save button", "in the toolbar"
+- Avoid raw coordinates entirely
+
 === ACTION-SPECIFIC GUIDANCE ===
 
 FOR CLICK ACTIONS:
 - The screenshot shows the click location marked with an ORANGE-RED CIRCLE
-- Element metadata (name, type, app) is your primary source of truth when provided
-- Write: "Click the [element name] [element type] in [location/app]"
-- Include purpose when clear (e.g., "Click the Start Menu to access programs")
+- Element metadata helps identify the target, but use human-friendly descriptions
+- Write naturally: "Click the Search icon in the taskbar" NOT "Click the Search button in Desktop 1"
+- Include purpose when clear (e.g., "Click the Start menu to access programs")
+- If the element name is unhelpful (generic or technical), describe what's visible in the screenshot
 
 FOR TYPE ACTIONS:
 - The user typed specific text that MUST appear in your instruction
@@ -49,6 +72,8 @@ FOR CAPTURE ACTIONS:
 - "In this step..." or "This step involves..." (meta-commentary)
 - Descriptions without action verbs
 - Generic phrases like "Perform this action"
+- Technical metadata: "in Desktop 1", "on Monitor 2", "at coordinates (x, y)"
+- Raw accessibility names when unhelpful: "Click the pane", "Click the group"
 
 === WORKFLOW CONTEXT ===
 Use previous step context to understand the workflow goal. Each step should build logically on previous steps.
@@ -66,12 +91,35 @@ Write a single, clear instruction sentence that tells the user what to DO in thi
 
 You will NOT receive screenshots. Use element metadata and OCR text to construct accurate instructions.
 
+=== HUMANIZATION RULES ===
+Write instructions the way a human would explain them to a colleague. Filter out technical artifacts:
+
+IGNORE these metadata artifacts (do NOT include in output):
+- Desktop identifiers: "Desktop 1", "Desktop 2", etc.
+- Monitor/display references: "Monitor 1", "Display 2", "Primary Monitor"
+- Generic accessibility names: "pane", "group", "unknown"
+- Coordinate information: pixel positions, (x, y) values
+- Internal IDs or technical element names
+
+TRANSLATE technical terms to user-friendly language:
+- "Start" button on taskbar → "Start menu" or "Windows Start button"
+- "Search" or "Search Box" near taskbar → "Windows search bar" or "search box in the taskbar"
+- "Edit" control → "text field" or "input field"
+- "List Item" → describe by content or context
+- App window titles → use the application name naturally
+
+DESCRIBE location contextually when needed:
+- Use relative positions: "in the top-right corner", "at the bottom of the window"
+- Reference visible landmarks: "next to the Save button", "in the toolbar"
+- Avoid raw coordinates entirely
+
 === ACTION-SPECIFIC GUIDANCE ===
 
 FOR CLICK ACTIONS:
-- Element metadata (name, type, app) is your primary source of truth
-- OCR text shows what was visible near the click location
-- Write: "Click the [element name] [element type] in [location/app]"
+- Element metadata helps identify the target, but use human-friendly descriptions
+- OCR text shows what was visible near the click location - use this for context
+- Write naturally: "Click the Search icon in the taskbar" NOT "Click the Search button in Desktop 1"
+- If the element name is unhelpful (generic or technical), describe based on OCR context
 
 FOR TYPE ACTIONS:
 - The exact typed text is provided - this MUST appear in your instruction
@@ -94,6 +142,8 @@ FOR CAPTURE ACTIONS:
 - "In this step..." or "This step involves..." (meta-commentary)
 - Descriptions without action verbs
 - Generic phrases like "Perform this action"
+- Technical metadata: "in Desktop 1", "on Monitor 2", "at coordinates (x, y)"
+- Raw accessibility names when unhelpful: "Click the pane", "Click the group"
 
 === WORKFLOW CONTEXT ===
 Use previous step context to understand the workflow goal. Each step should build logically on previous steps.
