@@ -78,7 +78,26 @@ FOR CAPTURE ACTIONS:
 === WORKFLOW CONTEXT ===
 Use previous step context to understand the workflow goal. Each step should build logically on previous steps.
 
-If a user description/note is provided, incorporate it naturally into your instruction.`;
+=== INTENT UNDERSTANDING (CRITICAL) ===
+Your job is to understand WHAT THE USER IS TRYING TO ACCOMPLISH, not just describe raw actions.
+
+COMBINE ALL SIGNALS to infer intent:
+1. WORKFLOW GOAL (title) - The overall objective of this guide
+2. USER CONTEXT (step descriptions) - Critical hints about what this step achieves
+3. PREVIOUS STEPS - What came before helps explain what comes next
+4. SCREENSHOT/METADATA - What's visible on screen
+
+FOR TYPE ACTIONS WITH PARTIAL TEXT:
+- Users often type partial text for autocomplete (e.g., "portal" to get "portal.azure.com")
+- If user context mentions a URL/destination, use that instead of the literal typed text
+- Example: User types "portal", context says "navigate to portal.azure.com"
+  BAD: "Type 'portal' into the address bar to search for the portal site"
+  GOOD: "Navigate to portal.azure.com in the browser address bar"
+
+PRIORITIZE INTENT OVER LITERAL ACTIONS:
+- If user context provides specific information (URLs, file names, etc.), USE IT
+- The user's description tells you what they MEANT to do
+- Write instructions that achieve the user's goal, not just replay their keystrokes`;
 
 export const TECHNICAL_INSTRUCTIONS_WITHOUT_SCREENSHOTS = `You are a technical documentation writer creating step-by-step user guides. Your output will be read by end-users following instructions.
 
@@ -148,7 +167,26 @@ FOR CAPTURE ACTIONS:
 === WORKFLOW CONTEXT ===
 Use previous step context to understand the workflow goal. Each step should build logically on previous steps.
 
-If a user description/note is provided, incorporate it naturally into your instruction.`;
+=== INTENT UNDERSTANDING (CRITICAL) ===
+Your job is to understand WHAT THE USER IS TRYING TO ACCOMPLISH, not just describe raw actions.
+
+COMBINE ALL SIGNALS to infer intent:
+1. WORKFLOW GOAL (title) - The overall objective of this guide
+2. USER CONTEXT (step descriptions) - Critical hints about what this step achieves
+3. PREVIOUS STEPS - What came before helps explain what comes next
+4. METADATA/OCR - Element information and visible text on screen
+
+FOR TYPE ACTIONS WITH PARTIAL TEXT:
+- Users often type partial text for autocomplete (e.g., "portal" to get "portal.azure.com")
+- If user context mentions a URL/destination, use that instead of the literal typed text
+- Example: User types "portal", context says "navigate to portal.azure.com"
+  BAD: "Type 'portal' into the address bar to search for the portal site"
+  GOOD: "Navigate to portal.azure.com in the browser address bar"
+
+PRIORITIZE INTENT OVER LITERAL ACTIONS:
+- If user context provides specific information (URLs, file names, etc.), USE IT
+- The user's description tells you what they MEANT to do
+- Write instructions that achieve the user's goal, not just replay their keystrokes`;
 
 /**
  * Builds the complete system prompt by combining hardcoded technical instructions

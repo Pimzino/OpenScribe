@@ -228,6 +228,7 @@ export default function RecordingDetail() {
                     apiKey: openaiApiKey,
                     baseUrl: openaiBaseUrl,
                     model: openaiModel,
+                    workflowTitle: currentRecording.recording.name,
                 },
                 callbacks,
                 abortController.signal

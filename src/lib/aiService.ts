@@ -173,7 +173,8 @@ async function generateStepDescription(
     openaiBaseUrl: string,
     openaiApiKey: string,
     openaiModel: string,
-    sendScreenshots: boolean
+    sendScreenshots: boolean,
+    workflowTitle?: string
 ): Promise<string> {
     // Get custom guidelines from settings (empty = use default)
     const styleGuidelines = useSettingsStore.getState().styleGuidelines;
@@ -200,8 +201,9 @@ async function generateStepDescription(
         actionDescription = parts.join('\n');
     } else if (step.type_ === 'type') {
         actionDescription = `ACTION: TYPE
-Text to include in instruction: "${step.text}"
-Write an instruction telling the user to type this exact text.`;
+Typed text: "${step.text}"
+NOTE: The typed text may be partial (for autocomplete) or abbreviated. If user context provides more specific information (like a full URL, file path, or complete value), use that instead of the literal typed text.
+Write an instruction that achieves the user's intent.`;
         // Add OCR context if available and not sending screenshots
         if (step.ocr_text && !sendScreenshots) {
             const truncatedOcr = step.ocr_text.length > 100
@@ -223,15 +225,19 @@ Write a VERIFICATION instruction (e.g., "Verify that..." or "Observe the...")`;
         }
     }
 
-    // Add user description if provided
+    // Add user description if provided - emphasize it as critical intent context
     if (step.description) {
-        actionDescription += `\n\nUser note: "${step.description}"`;
+        actionDescription += `\n\nIMPORTANT USER CONTEXT: "${step.description}"
+This description reveals the user's INTENT. Incorporate this information into your instruction - don't just describe the literal action.`;
     }
 
-    // Build context from previous steps
+    // Build context from workflow title and previous steps
     let contextText = "";
+    if (workflowTitle) {
+        contextText += `\n\nWORKFLOW GOAL: "${workflowTitle}"\nThis is the overall objective. Each step should contribute to achieving this goal.`;
+    }
     if (previousSteps.length > 0) {
-        contextText = `\n\nPrevious steps in this workflow:\n${previousSteps.map((desc, i) => `${i + 1}. ${desc}`).join('\n')}\n\nUse this context to understand what the user is trying to accomplish.`;
+        contextText += `\n\nPrevious steps in this workflow:\n${previousSteps.map((desc, i) => `${i + 1}. ${desc}`).join('\n')}\n\nUse this context to understand what the user is trying to accomplish.`;
     }
 
     const promptText = sendScreenshots
@@ -367,6 +373,7 @@ interface AIConfig {
     apiKey?: string;
     baseUrl?: string;
     model?: string;
+    workflowTitle?: string;
 }
 
 interface StepLike {
@@ -421,7 +428,7 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
             headers: openaiApiKey ? { 'Authorization': `Bearer ${openaiApiKey}` } : {},
             signal: AbortSignal.timeout(10000),
         }).catch(() => null);
-        
+
         // If /models fails, that's okay - some providers don't support it
         // But if we get a connection refused error, throw a helpful message
         if (!testResponse && !openaiBaseUrl.includes('api.openai.com')) {
@@ -481,7 +488,8 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
                 openaiBaseUrl,
                 openaiApiKey,
                 openaiModel,
-                sendScreenshotsToAi
+                sendScreenshotsToAi,
+                config?.workflowTitle
             );
             stepDescriptions.push(description);
         }
@@ -602,7 +610,8 @@ async function generateStepDescriptionStreaming(
     openaiModel: string,
     sendScreenshots: boolean,
     onChunk: (text: string) => void,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    workflowTitle?: string
 ): Promise<string> {
     const styleGuidelines = useSettingsStore.getState().styleGuidelines;
     const systemPrompt = buildSystemPrompt(sendScreenshots, styleGuidelines);
@@ -626,8 +635,9 @@ async function generateStepDescriptionStreaming(
         actionDescription = parts.join('\n');
     } else if (step.type_ === 'type') {
         actionDescription = `ACTION: TYPE
-Text to include in instruction: "${step.text}"
-Write an instruction telling the user to type this exact text.`;
+Typed text: "${step.text}"
+NOTE: The typed text may be partial (for autocomplete) or abbreviated. If user context provides more specific information (like a full URL, file path, or complete value), use that instead of the literal typed text.
+Write an instruction that achieves the user's intent.`;
         if (step.ocr_text && !sendScreenshots) {
             const truncatedOcr = step.ocr_text.length > 100
                 ? step.ocr_text.substring(0, 100) + '...'
@@ -647,12 +657,17 @@ Write a VERIFICATION instruction (e.g., "Verify that..." or "Observe the...")`;
     }
 
     if (step.description) {
-        actionDescription += `\n\nUser note: "${step.description}"`;
+        actionDescription += `\n\nIMPORTANT USER CONTEXT: "${step.description}"
+This description reveals the user's INTENT. Incorporate this information into your instruction - don't just describe the literal action.`;
     }
 
+    // Build context from workflow title and previous steps
     let contextText = "";
+    if (workflowTitle) {
+        contextText += `\n\nWORKFLOW GOAL: "${workflowTitle}"\nThis is the overall objective. Each step should contribute to achieving this goal.`;
+    }
     if (previousSteps.length > 0) {
-        contextText = `\n\nPrevious steps in this workflow:\n${previousSteps.map((desc, i) => `${i + 1}. ${desc}`).join('\n')}\n\nUse this context to understand what the user is trying to accomplish.`;
+        contextText += `\n\nPrevious steps in this workflow:\n${previousSteps.map((desc, i) => `${i + 1}. ${desc}`).join('\n')}\n\nUse this context to understand what the user is trying to accomplish.`;
     }
 
     const promptText = sendScreenshots
@@ -860,7 +875,8 @@ export async function generateDocumentationStreaming(
                     openaiModel,
                     sendScreenshotsToAi,
                     (chunk) => callbacks.onTextChunk?.(i, chunk),
-                    abortSignal
+                    abortSignal,
+                    config?.workflowTitle
                 );
 
                 stepDescriptions.push(description);

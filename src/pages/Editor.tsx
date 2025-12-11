@@ -60,6 +60,7 @@ export default function Editor() {
 
                 // Get steps from the appropriate source
                 let steps: ReturnType<typeof mapStepsForAI>;
+                let workflowTitle: string | undefined;
                 if (recordingId) {
                     const recording = await getRecording(recordingId);
                     if (!recording) {
@@ -68,6 +69,7 @@ export default function Editor() {
                         return;
                     }
                     steps = mapStepsForAI(recording.steps);
+                    workflowTitle = recording.recording.name;
                 } else {
                     steps = recorderSteps.map(s => ({
                         type_: s.type_,
@@ -114,6 +116,7 @@ export default function Editor() {
                         apiKey: openaiApiKey,
                         baseUrl: openaiBaseUrl,
                         model: openaiModel,
+                        workflowTitle,
                     },
                     callbacks,
                     abortController.signal
