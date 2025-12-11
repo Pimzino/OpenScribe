@@ -111,7 +111,35 @@ export default function RecordingDetail() {
             setHasUnsavedChanges(true);
         });
 
-        return () => { unlisten.then(f => f()); };
+        // Listen for manual captures from the monitor picker
+        const unlistenManualCapture = listen<string>("manual-capture-complete", (event) => {
+            const screenshotPath = event.payload;
+
+            // Insert at selected position
+            setLocalSteps(prev => {
+                const newSteps = [...prev];
+                const insertIdx = insertPosition !== null ? insertPosition : prev.length;
+                newSteps.splice(insertIdx, 0, {
+                    id: `temp-${Date.now()}-${Math.random()}`, // Temporary ID
+                    type_: "capture",
+                    timestamp: Date.now(),
+                    screenshot_path: screenshotPath,
+                });
+                return newSteps;
+            });
+
+            // Increment insert position so next step goes after
+            if (insertPosition !== null) {
+                setInsertPosition(prev => prev! + 1);
+            }
+
+            setHasUnsavedChanges(true);
+        });
+
+        return () => {
+            unlisten.then(f => f());
+            unlistenManualCapture.then(f => f());
+        };
     }, [isRecording, insertPosition]);
 
     // Listen for hotkey-stop event to stop recording from this page
