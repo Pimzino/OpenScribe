@@ -11,6 +11,7 @@ pub struct Recording {
     pub created_at: i64,
     pub updated_at: i64,
     pub documentation: Option<String>,
+    pub documentation_generated_at: Option<i64>,
     pub step_count: i32,
 }
 
@@ -176,6 +177,26 @@ impl Database {
                 [],
             )?;
         }
+
+        // Migration: Add documentation_generated_at column to recordings if it doesn't exist
+        let has_doc_generated_at: bool = self.conn
+            .prepare("SELECT documentation_generated_at FROM recordings LIMIT 1")
+            .is_ok();
+
+        if !has_doc_generated_at {
+            self.conn.execute(
+                "ALTER TABLE recordings ADD COLUMN documentation_generated_at INTEGER",
+                [],
+            )?;
+        }
+
+        // Backfill: For existing recordings with documentation but no documentation_generated_at,
+        // set it to updated_at (assumes docs were in sync at last update)
+        self.conn.execute(
+            "UPDATE recordings SET documentation_generated_at = updated_at
+             WHERE documentation IS NOT NULL AND documentation_generated_at IS NULL",
+            [],
+        )?;
 
         Ok(())
     }
@@ -402,15 +423,15 @@ impl Database {
     pub fn save_documentation(&self, recording_id: &str, documentation: &str) -> Result<()> {
         let now = chrono::Utc::now().timestamp_millis();
         self.conn.execute(
-            "UPDATE recordings SET documentation = ?1, updated_at = ?2 WHERE id = ?3",
-            params![documentation, now, recording_id],
+            "UPDATE recordings SET documentation = ?1, updated_at = ?2, documentation_generated_at = ?3 WHERE id = ?4",
+            params![documentation, now, now, recording_id],
         )?;
         Ok(())
     }
 
     pub fn list_recordings(&self) -> Result<Vec<Recording>> {
         let mut stmt = self.conn.prepare(
-            "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation,
+            "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation, r.documentation_generated_at,
                     (SELECT COUNT(*) FROM steps WHERE recording_id = r.id) as step_count
              FROM recordings r
              ORDER BY r.updated_at DESC"
@@ -423,7 +444,8 @@ impl Database {
                 created_at: row.get(2)?,
                 updated_at: row.get(3)?,
                 documentation: row.get(4)?,
-                step_count: row.get(5)?,
+                documentation_generated_at: row.get(5)?,
+                step_count: row.get(6)?,
             })
         })?;
 
@@ -432,7 +454,7 @@ impl Database {
 
     pub fn get_recording(&self, id: &str) -> Result<Option<RecordingWithSteps>> {
         let mut stmt = self.conn.prepare(
-            "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation,
+            "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation, r.documentation_generated_at,
                     (SELECT COUNT(*) FROM steps WHERE recording_id = r.id) as step_count
              FROM recordings r WHERE r.id = ?1"
         )?;
@@ -444,7 +466,8 @@ impl Database {
                 created_at: row.get(2)?,
                 updated_at: row.get(3)?,
                 documentation: row.get(4)?,
-                step_count: row.get(5)?,
+                documentation_generated_at: row.get(5)?,
+                step_count: row.get(6)?,
             })
         }).optional()?;
 
@@ -555,7 +578,7 @@ impl Database {
         )?;
 
         let mut stmt = self.conn.prepare(
-            "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation,
+            "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation, r.documentation_generated_at,
                     (SELECT COUNT(*) FROM steps WHERE recording_id = r.id) as step_count
              FROM recordings r
              ORDER BY r.updated_at DESC
@@ -569,7 +592,8 @@ impl Database {
                 created_at: row.get(2)?,
                 updated_at: row.get(3)?,
                 documentation: row.get(4)?,
-                step_count: row.get(5)?,
+                documentation_generated_at: row.get(5)?,
+                step_count: row.get(6)?,
             })
         })?.collect::<Result<Vec<_>>>()?;
 

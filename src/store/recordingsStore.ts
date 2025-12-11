@@ -7,6 +7,7 @@ export interface Recording {
     created_at: number;
     updated_at: number;
     documentation: string | null;
+    documentation_generated_at: number | null;
     step_count: number;
 }
 

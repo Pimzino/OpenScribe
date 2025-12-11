@@ -8,7 +8,7 @@ import { useRecorderStore } from "../store/recorderStore";
 import { generateDocumentationStreaming, StreamingCallbacks } from "../lib/aiService";
 import { useSettingsStore } from "../store/settingsStore";
 import { useGenerationStore } from "../store/generationStore";
-import { ArrowLeft, Wand2, Check, Pencil, X, Save, XCircle, Play, Square, MapPin } from "lucide-react";
+import { ArrowLeft, Wand2, Check, Pencil, X, Save, XCircle, Play, Square, MapPin, AlertTriangle } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
@@ -557,6 +557,11 @@ export default function RecordingDetail() {
 
     const croppingStep = croppingStepId ? currentRecording?.steps.find(s => s.id === croppingStepId) : null;
 
+    // Check if documentation is stale (steps modified after documentation was generated)
+    const isDocumentationStale = currentRecording?.recording.documentation &&
+        currentRecording.recording.documentation_generated_at &&
+        currentRecording.recording.updated_at > currentRecording.recording.documentation_generated_at;
+
     if (!id) {
         return (
             <div className="flex h-screen text-white items-center justify-center">
@@ -787,6 +792,25 @@ export default function RecordingDetail() {
 
                 {activeTab === "docs" ? (
                     <div className={`glass-surface-2 rounded-xl print-content ${isEditing ? '' : 'p-6'}`}>
+                        {/* Stale documentation warning */}
+                        {isDocumentationStale && !isEditing && (
+                            <div className="mb-4 p-3 bg-amber-500/20 border border-amber-500/50 rounded-lg flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <AlertTriangle size={18} className="text-amber-400" />
+                                    <span className="text-sm text-amber-200">
+                                        Steps have been modified since documentation was generated.
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={handleRegenerate}
+                                    disabled={isGenerating}
+                                    className="px-3 py-1 text-sm bg-amber-500/30 hover:bg-amber-500/40 text-amber-200 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                    <Wand2 size={14} />
+                                    Regenerate
+                                </button>
+                            </div>
+                        )}
                         {currentRecording.recording.documentation ? (
                             isEditing ? (
                                 <TiptapEditor
