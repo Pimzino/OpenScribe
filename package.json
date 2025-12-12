@@ -45,6 +45,7 @@
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "docx": "^9.5.1",
+    "fabric": "^6.9.0",
     "html2pdf.js": "^0.12.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.554.0",

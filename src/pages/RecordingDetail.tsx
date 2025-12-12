@@ -20,7 +20,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from "@dnd-kit/sortable";
 import DraggableStepCard from "../components/DraggableStepCard";
 import { TiptapEditor } from '../components/editor';
-import ImageCropper from "../components/ImageCropper";
+import ImageEditor from "../components/ImageEditor";
 
 export default function RecordingDetail() {
     const navigate = useNavigate();
@@ -591,9 +591,9 @@ export default function RecordingDetail() {
         <div className="flex h-screen text-white">
             <Sidebar activePage="recording-detail" onNavigate={handleNavigate} />
 
-            {/* Image Cropper Modal */}
+            {/* Image Editor Modal */}
             {croppingStep?.screenshot_path && (
-                <ImageCropper
+                <ImageEditor
                     imageSrc={convertFileSrc(croppingStep.screenshot_path)}
                     onSave={handleCropSave}
                     onCancel={() => setCroppingStepId(null)}

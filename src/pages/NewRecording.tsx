@@ -10,7 +10,7 @@ import { Play, Square, Wand2, Save, ArrowLeft, RotateCcw } from "lucide-react";
 import RecorderOverlay from "../features/recorder/RecorderOverlay";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
-import ImageCropper from "../components/ImageCropper";
+import ImageEditor from "../components/ImageEditor";
 import DraggableStepCard from "../components/DraggableStepCard";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from "@dnd-kit/sortable";
@@ -193,9 +193,9 @@ export default function NewRecording() {
         <div className="flex h-screen text-white relative">
             <RecorderOverlay />
 
-            {/* Image Cropper Modal */}
+            {/* Image Editor Modal */}
             {croppingIndex !== null && steps[croppingIndex]?.screenshot && (
-                <ImageCropper
+                <ImageEditor
                     imageSrc={convertFileSrc(steps[croppingIndex].screenshot!)}
                     onSave={handleCropSave}
                     onCancel={() => setCroppingIndex(null)}
