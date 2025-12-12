@@ -2,7 +2,7 @@ import { useState, useMemo, memo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { X, Pencil, GripVertical, ImageOff, Expand } from "lucide-react";
+import { X, Pencil, GripVertical, ImageOff } from "lucide-react";
 import Tooltip from "./Tooltip";
 import Spinner from "./Spinner";
 import ImageViewer from "./ImageViewer";
@@ -94,16 +94,6 @@ const DraggableStepCard = memo(function DraggableStepCard({
 
             {/* Action Buttons */}
             <div className="absolute top-2 right-2 z-10 flex gap-1">
-                {hasScreenshot && (
-                    <Tooltip content="View full size">
-                        <button
-                            onClick={() => setIsViewerOpen(true)}
-                            className="p-1 bg-white/10 hover:bg-white/15 rounded-full flex items-center justify-center transition-colors"
-                        >
-                            <Expand size={14} />
-                        </button>
-                    </Tooltip>
-                )}
                 {hasScreenshot && onCrop && (
                     <Tooltip content="Edit screenshot">
                         <button
@@ -144,7 +134,7 @@ const DraggableStepCard = memo(function DraggableStepCard({
                         </div>
                         {step.is_cropped && (
                             <div className="absolute bottom-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs">
-                                Cropped
+                                Edited
                             </div>
                         )}
                     </>
