@@ -93,8 +93,7 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
 // macOS implementation using Accessibility API
 #[cfg(target_os = "macos")]
 pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
-    use core_foundation::base::{CFRelease, TCFType};
-    use core_graphics::display::CGPoint;
+    use core_foundation::base::CFRelease;
     use std::ptr;
 
     // macOS accessibility requires AXUIElementCopyElementAtPosition

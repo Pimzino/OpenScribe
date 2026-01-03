@@ -46,9 +46,19 @@ windows = { version = "0.58", features = ["Win32_UI_Accessibility", "Win32_Found
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.9"
 core-graphics = "0.23"
-objc2 = "0.5"
-objc2-foundation = { version = "0.2", features = ["NSThread", "NSGeometry"] }
-objc2-app-kit = { version = "0.2", features = ["NSWindow", "NSColor", "NSView", "NSGraphicsContext", "NSBezierPath", "NSResponder", "NSApplication", "NSRunningApplication"] }
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSThread", "NSGeometry", "NSArray"] }
+objc2-app-kit = { version = "0.3", features = [
+    "NSWindow",
+    "NSColor",
+    "NSView",
+    "NSGraphicsContext",
+    "NSBezierPath",
+    "NSResponder",
+    "NSApplication",
+    "NSRunningApplication",
+    "NSScreen"
+] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 atspi = "0.21"

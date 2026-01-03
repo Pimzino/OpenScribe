@@ -485,19 +485,27 @@ mod windows_impl {
 #[cfg(target_os = "macos")]
 mod macos_impl {
     use objc2::rc::Retained;
-    use objc2::runtime::ProtocolObject;
-    use objc2::{class, msg_send, msg_send_id, ClassType};
+    use objc2::{msg_send, msg_send_id, AllocAnyThread};
     use objc2_app_kit::{
-        NSApplication, NSBackingStoreType, NSBezierPath, NSColor, NSGraphicsContext, NSView,
-        NSWindow, NSWindowLevel, NSWindowStyleMask,
+        NSBezierPath, NSColor, NSGraphicsContext, NSScreen, NSView, NSWindow, NSWindowStyleMask,
     };
-    use objc2_foundation::{CGFloat, CGPoint, CGRect, CGSize, MainThreadMarker, NSObject};
-    use std::sync::Mutex;
+    use objc2_foundation::{CGFloat, CGPoint, CGRect, CGSize, MainThreadMarker};
+    use std::cell::RefCell;
 
-    static OVERLAY_WINDOW: Mutex<Option<Retained<NSWindow>>> = Mutex::new(None);
+    // NSWindow is main-thread-only, so we use thread_local storage instead of Mutex
+    thread_local! {
+        static OVERLAY_WINDOW: RefCell<Option<Retained<NSWindow>>> = const { RefCell::new(None) };
+    }
     const BORDER_WIDTH: CGFloat = 4.0;
 
+    // NSBackingStoreBuffered = 2 (raw value for backing store type)
+    const NS_BACKING_STORE_BUFFERED: u64 = 2;
+
+    // NSScreenSaverWindowLevel = 1000, we want above that
+    const OVERLAY_WINDOW_LEVEL: i64 = 1001;
+
     // Custom view that draws the green border
+    #[allow(dead_code)]
     fn draw_border_in_rect(rect: CGRect) {
         unsafe {
             // Get current graphics context
@@ -555,84 +563,86 @@ mod macos_impl {
             None => return Err("Must be called from main thread".to_string()),
         };
 
-        let mut guard = OVERLAY_WINDOW.lock().map_err(|e| e.to_string())?;
+        OVERLAY_WINDOW.with(|window_cell| {
+            let mut guard = window_cell.borrow_mut();
 
-        // macOS uses bottom-left origin, so we need to flip Y coordinate
-        // Get screen height to flip Y
-        let screen_height: CGFloat = unsafe {
-            let screens: Retained<objc2_foundation::NSArray<objc2_app_kit::NSScreen>> =
-                msg_send_id![class!(NSScreen), screens];
-            if let Some(main_screen) = screens.firstObject() {
-                let frame: CGRect = msg_send![&main_screen, frame];
-                frame.size.height
-            } else {
-                1080.0 // fallback
-            }
-        };
+            // macOS uses bottom-left origin, so we need to flip Y coordinate
+            // Get screen height to flip Y
+            let screen_height: CGFloat = unsafe {
+                if let Some(main_screen) = NSScreen::mainScreen(mtm) {
+                    main_screen.frame().size.height
+                } else {
+                    1080.0 // fallback
+                }
+            };
 
-        let flipped_y = screen_height - y as CGFloat - height as CGFloat;
-        let frame = CGRect::new(
-            CGPoint::new(x as CGFloat, flipped_y),
-            CGSize::new(width as CGFloat, height as CGFloat),
-        );
-
-        if let Some(ref window) = *guard {
-            // Move existing window
-            unsafe {
-                window.setFrame_display(frame, true);
-            }
-            return Ok(());
-        }
-
-        // Create new window
-        unsafe {
-            let style = NSWindowStyleMask::Borderless;
-            let backing = NSBackingStoreType::NSBackingStoreBuffered;
-
-            let window = NSWindow::initWithContentRect_styleMask_backing_defer(
-                mtm.alloc::<NSWindow>(),
-                frame,
-                style,
-                backing,
-                false,
+            let flipped_y = screen_height - y as CGFloat - height as CGFloat;
+            let frame = CGRect::new(
+                CGPoint::new(x as CGFloat, flipped_y),
+                CGSize::new(width as CGFloat, height as CGFloat),
             );
 
-            // Configure window properties
-            window.setOpaque(false);
-            window.setBackgroundColor(Some(&NSColor::clearColor()));
-            window.setHasShadow(false);
-            window.setIgnoresMouseEvents(true);
-            window.setLevel(NSWindowLevel(
-                objc2_app_kit::NSScreenSaverWindowLevel as isize + 1,
-            ));
+            if let Some(ref window) = *guard {
+                // Move existing window
+                unsafe {
+                    window.setFrame_display(frame, true);
+                }
+                return Ok(());
+            }
 
-            // Create content view that draws the border
-            let content_view = NSView::initWithFrame(mtm.alloc::<NSView>(), frame);
+            // Create new window
+            unsafe {
+                let style = NSWindowStyleMask::Borderless;
 
-            // We need to draw the border - for now, use a simple approach
-            // by setting up a display link or using layer-backed view
-            // For simplicity, we'll use setWantsLayer and draw via CALayer
+                // Use msg_send_id! for window initialization with new API
+                let window: Retained<NSWindow> = msg_send_id![
+                    NSWindow::alloc(),
+                    initWithContentRect: frame,
+                    styleMask: style,
+                    backing: NS_BACKING_STORE_BUFFERED,
+                    defer: false,
+                ];
 
-            window.setContentView(Some(&content_view));
-            window.makeKeyAndOrderFront(None);
+                // Configure window properties
+                window.setOpaque(false);
+                window.setBackgroundColor(Some(&NSColor::clearColor()));
+                window.setHasShadow(false);
+                window.setIgnoresMouseEvents(true);
+                window.setLevel(OVERLAY_WINDOW_LEVEL);
 
-            // Store window reference
-            *guard = Some(window);
-        }
+                // Create content view that draws the border
+                let content_view: Retained<NSView> = msg_send_id![
+                    NSView::alloc(),
+                    initWithFrame: frame,
+                ];
 
-        Ok(())
+                // We need to draw the border - for now, use a simple approach
+                // by setting up a display link or using layer-backed view
+                // For simplicity, we'll use setWantsLayer and draw via CALayer
+
+                window.setContentView(Some(&content_view));
+                window.makeKeyAndOrderFront(None);
+
+                // Store window reference
+                *guard = Some(window);
+            }
+
+            Ok(())
+        })
     }
 
     pub fn hide_border() -> Result<(), String> {
-        let mut guard = OVERLAY_WINDOW.lock().map_err(|e| e.to_string())?;
+        OVERLAY_WINDOW.with(|window_cell| {
+            let mut guard = window_cell.borrow_mut();
 
-        if let Some(window) = guard.take() {
-            unsafe {
-                window.close();
+            if let Some(window) = guard.take() {
+                unsafe {
+                    window.close();
+                }
             }
-        }
 
-        Ok(())
+            Ok(())
+        })
     }
 }
 
