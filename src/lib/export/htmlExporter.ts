@@ -28,7 +28,10 @@ async function processMarkdownToHtml(markdown: string, fileName: string): Promis
         pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; border-radius: 4px; }
         code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 2px; font-family: monospace; }
         pre code { background: none; padding: 0; }
-        h1, h2, h3 { margin-top: 1.5em; }
+        h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; }
+        h4 { font-size: 1.1em; }
+        h5 { font-size: 1em; }
+        h6 { font-size: 0.9em; color: #555; }
         table { border-collapse: collapse; width: 100%; margin: 1em 0; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }

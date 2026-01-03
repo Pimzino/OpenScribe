@@ -144,6 +144,9 @@ export async function exportToPdf(markdown: string, fileName: string): Promise<v
             header1: { fontSize: 22, bold: true, margin: [0, 20, 0, 10] },
             header2: { fontSize: 18, bold: true, margin: [0, 15, 0, 8] },
             header3: { fontSize: 16, bold: true, margin: [0, 10, 0, 5] },
+            header4: { fontSize: 14, bold: true, margin: [0, 8, 0, 4] },
+            header5: { fontSize: 12, bold: true, margin: [0, 6, 0, 3] },
+            header6: { fontSize: 11, bold: true, margin: [0, 5, 0, 3], color: '#555555' },
             code: { font: 'Courier', fontSize: 10 }
         },
         defaultStyle: {

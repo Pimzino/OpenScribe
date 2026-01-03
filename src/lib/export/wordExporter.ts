@@ -23,9 +23,15 @@ export async function exportToWord(markdown: string, fileName: string): Promise<
 
         if (node.type === 'heading') {
             const text = node.children.map((c: any) => c.value).join('');
-            let headingLevel: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1;
-            if (node.depth === 2) headingLevel = HeadingLevel.HEADING_2;
-            if (node.depth === 3) headingLevel = HeadingLevel.HEADING_3;
+            const headingLevelMap: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
+                1: HeadingLevel.HEADING_1,
+                2: HeadingLevel.HEADING_2,
+                3: HeadingLevel.HEADING_3,
+                4: HeadingLevel.HEADING_4,
+                5: HeadingLevel.HEADING_5,
+                6: HeadingLevel.HEADING_6,
+            };
+            const headingLevel = headingLevelMap[node.depth] || HeadingLevel.HEADING_1;
 
             return [new Paragraph({
                 text: text,

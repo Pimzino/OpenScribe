@@ -11,6 +11,9 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
   List,
   ListOrdered,
   Quote,
@@ -86,12 +89,14 @@ export function TiptapToolbar({
       forceUpdate((n) => n + 1);
     };
 
-    // Only listen to selectionUpdate - transaction fires too frequently
-    // and causes unnecessary re-renders during scroll/typing
+    // Listen to selectionUpdate for cursor movement
+    // and update for content/formatting changes (e.g., toggling headings)
     editor.on('selectionUpdate', handleUpdate);
+    editor.on('update', handleUpdate);
 
     return () => {
       editor.off('selectionUpdate', handleUpdate);
+      editor.off('update', handleUpdate);
     };
   }, [editor]);
 
@@ -234,6 +239,36 @@ export function TiptapToolbar({
               tooltip="Heading 3"
             >
               <Heading3 size={16} />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() =>
+                editor.chain().focus().toggleHeading({ level: 4 }).run()
+              }
+              isActive={editor.isActive('heading', { level: 4 })}
+              disabled={disabled}
+              tooltip="Heading 4"
+            >
+              <Heading4 size={16} />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() =>
+                editor.chain().focus().toggleHeading({ level: 5 }).run()
+              }
+              isActive={editor.isActive('heading', { level: 5 })}
+              disabled={disabled}
+              tooltip="Heading 5"
+            >
+              <Heading5 size={16} />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() =>
+                editor.chain().focus().toggleHeading({ level: 6 }).run()
+              }
+              isActive={editor.isActive('heading', { level: 6 })}
+              disabled={disabled}
+              tooltip="Heading 6"
+            >
+              <Heading6 size={16} />
             </ToolbarButton>
           </div>
         );

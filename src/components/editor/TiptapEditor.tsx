@@ -61,7 +61,7 @@ export function TiptapEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
+        heading: { levels: [1, 2, 3, 4, 5, 6] },
         codeBlock: false, // Using CodeBlockLowlight instead
       }),
       // Add Link and Underline BEFORE Markdown so Markdown uses our configured versions

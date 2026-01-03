@@ -226,6 +226,33 @@ body {
     line-height: 1.4;
 }
 
+.tiptap-editor-dark .ProseMirror h4 {
+    font-size: 1.125rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    margin-top: 0.875rem;
+    color: white;
+    line-height: 1.4;
+}
+
+.tiptap-editor-dark .ProseMirror h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.375rem;
+    margin-top: 0.75rem;
+    color: rgba(255, 255, 255, 0.95);
+    line-height: 1.5;
+}
+
+.tiptap-editor-dark .ProseMirror h6 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.375rem;
+    margin-top: 0.75rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.5;
+}
+
 /* Typography - Body */
 .tiptap-editor-dark .ProseMirror p {
     margin-bottom: 1rem;
@@ -462,6 +489,9 @@ body {
     .print-content h1,
     .print-content h2,
     .print-content h3,
+    .print-content h4,
+    .print-content h5,
+    .print-content h6,
     .print-content p,
     .print-content li,
     .print-content code {
