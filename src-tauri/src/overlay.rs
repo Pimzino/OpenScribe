@@ -736,12 +736,10 @@ mod macos_impl {
                     initWithFrame: content_frame,
                 ];
 
-                // Enable layer-backing for rounded corners
+                // Enable layer-backing
                 content_view.setWantsLayer(true);
-                if let Some(layer) = content_view.layer() {
-                    layer.setCornerRadius(8.0);
-                    layer.setMasksToBounds(true);
-                }
+                // Note: Rounded corners would require objc2-quartz-core CALayer features
+                // For now, toast will have square corners
 
                 window.setContentView(Some(&content_view));
                 window.makeKeyAndOrderFront(None);
