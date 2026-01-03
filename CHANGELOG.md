@@ -7,16 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.4-test1] - 2026-01-03
-
-### Fixed
-- Resolved macOS build failures with objc2 0.6 API changes
-- Fixed Linux build failures with libspa/PipeWire compatibility
-- Added missing Linux build dependencies (libspa-0.2-dev, clang, pkg-config)
-
-### Changed
-- Upgraded xcap from 0.7 to 0.8 for better PipeWire compatibility
-
 ## [0.0.3] - 2026-01-03
 
 ### Added
