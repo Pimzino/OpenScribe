@@ -95,7 +95,7 @@ export default function Tooltip({
             {isVisible && (
                 <div
                     ref={tooltipRef}
-                    className={`fixed z-50 px-2 py-1 text-xs font-medium text-white glass-surface-3 rounded-lg shadow-lg whitespace-nowrap transition-opacity duration-150 ${isPositioned ? 'opacity-100' : 'opacity-0'}`}
+                    className={`fixed z-50 px-2 py-1 text-xs font-medium text-white glass-surface-3 rounded-lg shadow-lg whitespace-nowrap transition-opacity duration-150 pointer-events-none ${isPositioned ? 'opacity-100' : 'opacity-0 invisible'}`}
                     style={{ top: coords.top, left: coords.left }}
                 >
                     {content}

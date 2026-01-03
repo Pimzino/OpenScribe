@@ -134,9 +134,9 @@ body {
   }
 
   /* Scroll container optimization - promotes to compositor layer */
+  /* Note: avoid 'contain: strict' as it creates a containing block for fixed elements */
   .scroll-container {
     will-change: scroll-position;
-    contain: strict;
     -webkit-overflow-scrolling: touch;
   }
 

@@ -614,7 +614,7 @@ export default function RecordingDetail() {
             )}
 
             {/* Main Content */}
-            <main className="flex-1 p-8 overflow-auto scroll-container">
+            <main className="flex-1 p-8 overflow-y-auto overflow-x-hidden scroll-container">
                 <div className="flex justify-between items-center mb-6">
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
