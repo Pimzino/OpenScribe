@@ -747,9 +747,7 @@ mod macos_impl {
                 // Store window reference
                 *guard = Some(window);
             }
-
-            Ok(())
-        })?;
+        });
 
         // Schedule auto-dismiss using a background thread
         std::thread::spawn(move || {
