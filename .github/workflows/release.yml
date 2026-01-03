@@ -100,6 +100,10 @@ jobs:
             name: Windows-x64
             args: ''
             rust-targets: ''
+          - platform: windows-11-arm
+            name: Windows-ARM64
+            args: '--target aarch64-pc-windows-msvc --bundles nsis'
+            rust-targets: 'aarch64-pc-windows-msvc'
           - platform: macos-latest
             name: macOS-ARM64
             args: '--target aarch64-apple-darwin'
