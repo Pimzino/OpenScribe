@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, ReactNode } from "react";
+import { useState, useRef, useLayoutEffect, useEffect, ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface TooltipProps {
     children: ReactNode;
@@ -36,7 +37,8 @@ export default function Tooltip({
         setIsPositioned(false);
     };
 
-    useEffect(() => {
+    // Use useLayoutEffect for synchronous positioning before paint
+    useLayoutEffect(() => {
         if (isVisible && triggerRef.current && tooltipRef.current) {
             const triggerRect = triggerRef.current.getBoundingClientRect();
             const tooltipRect = tooltipRef.current.getBoundingClientRect();
@@ -92,14 +94,15 @@ export default function Tooltip({
             >
                 {children}
             </div>
-            {isVisible && (
+            {isVisible && createPortal(
                 <div
                     ref={tooltipRef}
-                    className={`fixed z-50 px-2 py-1 text-xs font-medium text-white glass-surface-3 rounded-lg shadow-lg whitespace-nowrap transition-opacity duration-150 pointer-events-none ${isPositioned ? 'opacity-100' : 'opacity-0 invisible'}`}
+                    className={`fixed z-[9999] px-2 py-1 text-xs font-medium text-white glass-surface-3 rounded-lg shadow-lg whitespace-nowrap transition-opacity duration-150 pointer-events-none ${isPositioned ? 'opacity-100' : 'opacity-0 invisible'}`}
                     style={{ top: coords.top, left: coords.left }}
                 >
                     {content}
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );

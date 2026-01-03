@@ -22,13 +22,14 @@ import {
 } from 'lucide-react';
 import type { ToolbarGroup } from './TiptapEditor';
 import { ImageModal } from './ImageModal';
+import Tooltip from '../Tooltip';
 
 interface ToolbarButtonProps {
   onClick: () => void;
   isActive?: boolean;
   disabled?: boolean;
   children: React.ReactNode;
-  title: string;
+  tooltip: string;
 }
 
 function ToolbarButton({
@@ -36,22 +37,23 @@ function ToolbarButton({
   isActive,
   disabled,
   children,
-  title,
+  tooltip,
 }: ToolbarButtonProps) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      type="button"
-      className={`p-1.5 rounded transition-colors ${
-        isActive
-          ? 'bg-[rgba(39,33,232,0.3)] text-white'
-          : 'text-white/70 hover:text-white hover:bg-white/10'
-      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-    >
-      {children}
-    </button>
+    <Tooltip content={tooltip} position="top">
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        type="button"
+        className={`p-1.5 rounded transition-colors ${
+          isActive
+            ? 'bg-[rgba(39,33,232,0.3)] text-white'
+            : 'text-white/70 hover:text-white hover:bg-white/10'
+        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -186,14 +188,14 @@ export function TiptapToolbar({
             <ToolbarButton
               onClick={() => editor.chain().focus().undo().run()}
               disabled={disabled || !editor.can().undo()}
-              title="Undo (Ctrl+Z)"
+              tooltip="Undo (Ctrl+Z)"
             >
               <Undo2 size={16} />
             </ToolbarButton>
             <ToolbarButton
               onClick={() => editor.chain().focus().redo().run()}
               disabled={disabled || !editor.can().redo()}
-              title="Redo (Ctrl+Y)"
+              tooltip="Redo (Ctrl+Y)"
             >
               <Redo2 size={16} />
             </ToolbarButton>
@@ -209,7 +211,7 @@ export function TiptapToolbar({
               }
               isActive={editor.isActive('heading', { level: 1 })}
               disabled={disabled}
-              title="Heading 1"
+              tooltip="Heading 1"
             >
               <Heading1 size={16} />
             </ToolbarButton>
@@ -219,7 +221,7 @@ export function TiptapToolbar({
               }
               isActive={editor.isActive('heading', { level: 2 })}
               disabled={disabled}
-              title="Heading 2"
+              tooltip="Heading 2"
             >
               <Heading2 size={16} />
             </ToolbarButton>
@@ -229,7 +231,7 @@ export function TiptapToolbar({
               }
               isActive={editor.isActive('heading', { level: 3 })}
               disabled={disabled}
-              title="Heading 3"
+              tooltip="Heading 3"
             >
               <Heading3 size={16} />
             </ToolbarButton>
@@ -243,7 +245,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleBold().run()}
               isActive={editor.isActive('bold')}
               disabled={disabled}
-              title="Bold (Ctrl+B)"
+              tooltip="Bold (Ctrl+B)"
             >
               <Bold size={16} />
             </ToolbarButton>
@@ -251,7 +253,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleItalic().run()}
               isActive={editor.isActive('italic')}
               disabled={disabled}
-              title="Italic (Ctrl+I)"
+              tooltip="Italic (Ctrl+I)"
             >
               <Italic size={16} />
             </ToolbarButton>
@@ -259,7 +261,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleUnderline().run()}
               isActive={editor.isActive('underline')}
               disabled={disabled}
-              title="Underline (Ctrl+U)"
+              tooltip="Underline (Ctrl+U)"
             >
               <UnderlineIcon size={16} />
             </ToolbarButton>
@@ -267,7 +269,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleStrike().run()}
               isActive={editor.isActive('strike')}
               disabled={disabled}
-              title="Strikethrough"
+              tooltip="Strikethrough"
             >
               <Strikethrough size={16} />
             </ToolbarButton>
@@ -275,7 +277,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleCode().run()}
               isActive={editor.isActive('code')}
               disabled={disabled}
-              title="Inline Code"
+              tooltip="Inline Code"
             >
               <Code size={16} />
             </ToolbarButton>
@@ -289,7 +291,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleBulletList().run()}
               isActive={editor.isActive('bulletList')}
               disabled={disabled}
-              title="Bullet List"
+              tooltip="Bullet List"
             >
               <List size={16} />
             </ToolbarButton>
@@ -297,7 +299,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleOrderedList().run()}
               isActive={editor.isActive('orderedList')}
               disabled={disabled}
-              title="Numbered List"
+              tooltip="Numbered List"
             >
               <ListOrdered size={16} />
             </ToolbarButton>
@@ -305,7 +307,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleBlockquote().run()}
               isActive={editor.isActive('blockquote')}
               disabled={disabled}
-              title="Block Quote"
+              tooltip="Block Quote"
             >
               <Quote size={16} />
             </ToolbarButton>
@@ -319,7 +321,7 @@ export function TiptapToolbar({
               onClick={addLink}
               isActive={editor.isActive('link')}
               disabled={disabled}
-              title="Insert/Edit Link"
+              tooltip="Insert/Edit Link"
             >
               <LinkIcon size={16} />
             </ToolbarButton>
@@ -327,17 +329,17 @@ export function TiptapToolbar({
               onClick={openImageModal}
               isActive={editor.isActive('image') || editor.isActive('tauriImage')}
               disabled={disabled}
-              title="Insert/Edit Image"
+              tooltip="Insert/Edit Image"
             >
               <ImageIcon size={16} />
             </ToolbarButton>
-            <ToolbarButton onClick={addTable} disabled={disabled} title="Insert Table">
+            <ToolbarButton onClick={addTable} disabled={disabled} tooltip="Insert Table">
               <TableIcon size={16} />
             </ToolbarButton>
             <ToolbarButton
               onClick={() => editor.chain().focus().setHorizontalRule().run()}
               disabled={disabled}
-              title="Horizontal Rule"
+              tooltip="Horizontal Rule"
             >
               <Minus size={16} />
             </ToolbarButton>
@@ -351,7 +353,7 @@ export function TiptapToolbar({
               onClick={() => editor.chain().focus().toggleCodeBlock().run()}
               isActive={editor.isActive('codeBlock')}
               disabled={disabled}
-              title="Code Block"
+              tooltip="Code Block"
             >
               <FileCode size={16} />
             </ToolbarButton>
