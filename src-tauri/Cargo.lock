@@ -4045,6 +4045,7 @@ dependencies = [
  "imageproc",
  "objc2 0.6.3",
  "objc2-app-kit",
+ "objc2-core-foundation",
  "objc2-foundation 0.3.2",
  "pure-onnx-ocr",
  "rdev",

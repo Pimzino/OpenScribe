@@ -485,11 +485,12 @@ mod windows_impl {
 #[cfg(target_os = "macos")]
 mod macos_impl {
     use objc2::rc::Retained;
-    use objc2::{msg_send, msg_send_id, AllocAnyThread};
+    use objc2::{msg_send, MainThreadOnly};
     use objc2_app_kit::{
         NSBezierPath, NSColor, NSGraphicsContext, NSScreen, NSView, NSWindow, NSWindowStyleMask,
     };
-    use objc2_foundation::{CGFloat, CGPoint, CGRect, CGSize, MainThreadMarker};
+    use objc2_core_foundation::{CGFloat, CGPoint, CGRect, CGSize};
+    use objc2_foundation::MainThreadMarker;
     use std::cell::RefCell;
 
     // NSWindow is main-thread-only, so we use thread_local storage instead of Mutex
@@ -502,7 +503,7 @@ mod macos_impl {
     const NS_BACKING_STORE_BUFFERED: u64 = 2;
 
     // NSScreenSaverWindowLevel = 1000, we want above that
-    const OVERLAY_WINDOW_LEVEL: i64 = 1001;
+    const OVERLAY_WINDOW_LEVEL: isize = 1001;
 
     // Custom view that draws the green border
     #[allow(dead_code)]
@@ -590,13 +591,13 @@ mod macos_impl {
                 return Ok(());
             }
 
-            // Create new window
+            // Create new window using MainThreadOnly alloc pattern
             unsafe {
                 let style = NSWindowStyleMask::Borderless;
 
-                // Use msg_send_id! for window initialization with new API
-                let window: Retained<NSWindow> = msg_send_id![
-                    NSWindow::alloc(),
+                // Use mtm.alloc() for main-thread-only types
+                let window: Retained<NSWindow> = msg_send![
+                    mtm.alloc::<NSWindow>(),
                     initWithContentRect: frame,
                     styleMask: style,
                     backing: NS_BACKING_STORE_BUFFERED,
@@ -611,8 +612,8 @@ mod macos_impl {
                 window.setLevel(OVERLAY_WINDOW_LEVEL);
 
                 // Create content view that draws the border
-                let content_view: Retained<NSView> = msg_send_id![
-                    NSView::alloc(),
+                let content_view: Retained<NSView> = msg_send![
+                    mtm.alloc::<NSView>(),
                     initWithFrame: frame,
                 ];
 
@@ -636,9 +637,7 @@ mod macos_impl {
             let mut guard = window_cell.borrow_mut();
 
             if let Some(window) = guard.take() {
-                unsafe {
-                    window.close();
-                }
+                window.close();
             }
 
             Ok(())
