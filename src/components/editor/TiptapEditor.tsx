@@ -57,11 +57,21 @@ export function TiptapEditor({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
+    // Prevent React 18 Strict Mode from causing duplicate extension warnings
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         codeBlock: false, // Using CodeBlockLowlight instead
       }),
+      // Add Link and Underline BEFORE Markdown so Markdown uses our configured versions
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-[#49B8D3] underline hover:text-[#5fc5e0]',
+        },
+      }),
+      Underline,
       Markdown.configure({
         html: true,
         transformPastedText: true,
@@ -71,13 +81,6 @@ export function TiptapEditor({
         inline: false,
         allowBase64: true,
       }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-[#49B8D3] underline hover:text-[#5fc5e0]',
-        },
-      }),
-      Underline,
       Table.configure({ resizable: true }),
       TableRow,
       TableCell,
@@ -97,9 +100,12 @@ export function TiptapEditor({
     },
     onUpdate: ({ editor }) => {
       if (viewMode === 'rich' && !isInternalUpdate.current) {
-        const markdownContent = editor.getMarkdown();
-        lastSyncedContent.current = markdownContent;
-        onChange(markdownContent);
+        // Check if getMarkdown is available (Markdown extension may not be ready yet)
+        if (typeof editor.getMarkdown === 'function') {
+          const markdownContent = editor.getMarkdown();
+          lastSyncedContent.current = markdownContent;
+          onChange(markdownContent);
+        }
       }
     },
   });

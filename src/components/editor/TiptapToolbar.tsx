@@ -84,12 +84,12 @@ export function TiptapToolbar({
       forceUpdate((n) => n + 1);
     };
 
+    // Only listen to selectionUpdate - transaction fires too frequently
+    // and causes unnecessary re-renders during scroll/typing
     editor.on('selectionUpdate', handleUpdate);
-    editor.on('transaction', handleUpdate);
 
     return () => {
       editor.off('selectionUpdate', handleUpdate);
-      editor.off('transaction', handleUpdate);
     };
   }, [editor]);
 

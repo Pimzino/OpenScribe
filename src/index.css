@@ -80,9 +80,7 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(30, 27, 35, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(30, 27, 35, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
 }
@@ -126,6 +124,20 @@ body {
   /* Scroll performance optimization */
   .scroll-optimized {
     contain: layout style paint;
+  }
+
+  /* Glass surface optimized for scroll containers - no blur for better performance */
+  .glass-surface-scroll {
+    background: rgba(30, 27, 35, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* No backdrop-filter - avoids expensive blur recalculation during scroll */
+  }
+
+  /* Scroll container optimization - promotes to compositor layer */
+  .scroll-container {
+    will-change: scroll-position;
+    contain: strict;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Sticky element optimization - promotes to compositor layer */

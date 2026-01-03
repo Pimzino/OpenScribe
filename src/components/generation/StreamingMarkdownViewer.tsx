@@ -19,11 +19,12 @@ export default function StreamingMarkdownViewer({ content, isGenerating = false 
     }, [content, autoScroll]);
 
     // Detect manual scroll to disable auto-scroll
+    // Only update state when value changes to prevent unnecessary re-renders
     const handleScroll = () => {
         if (!containerRef.current) return;
         const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
         const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50;
-        setAutoScroll(isAtBottom);
+        setAutoScroll(prev => prev !== isAtBottom ? isAtBottom : prev);
     };
 
     const scrollToBottom = () => {

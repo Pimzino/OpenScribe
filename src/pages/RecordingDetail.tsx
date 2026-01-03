@@ -614,7 +614,7 @@ export default function RecordingDetail() {
             )}
 
             {/* Main Content */}
-            <main className="flex-1 p-8 overflow-auto">
+            <main className="flex-1 p-8 overflow-auto scroll-container">
                 <div className="flex justify-between items-center mb-6">
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
@@ -792,7 +792,7 @@ export default function RecordingDetail() {
                 )}
 
                 {activeTab === "docs" ? (
-                    <div className={`glass-surface-2 rounded-xl print-content ${isEditing ? '' : 'p-6'}`}>
+                    <div className={`glass-surface-scroll rounded-xl print-content ${isEditing ? '' : 'p-6'}`}>
                         {/* Stale documentation warning */}
                         {isDocumentationStale && !isEditing && (
                             <div className="mb-4 p-3 bg-amber-500/20 border border-amber-500/50 rounded-lg flex items-center justify-between">
