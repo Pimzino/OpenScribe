@@ -1,18 +1,19 @@
-use std::thread;
-use std::time::{SystemTime, Instant, Duration};
-use std::fs;
-use std::io::BufWriter;
-use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::{AppHandle, Emitter};
-use rdev::{listen, EventType, Button};
-use xcap::Monitor;
+use crate::accessibility::{get_element_at_point, ElementInfo};
+use crate::ocr::{get_models_dir, OcrConfig, OcrJob, OcrManager};
 use image::codecs::jpeg::JpegEncoder;
 use image::Rgb;
 use imageproc::drawing::{draw_filled_circle_mut, draw_hollow_circle_mut};
+use rdev::{listen, Button, EventType};
+use std::fs;
+use std::io::BufWriter;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant, SystemTime};
+use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
-use crate::accessibility::{get_element_at_point, ElementInfo};
-use crate::ocr::{OcrManager, OcrJob, OcrConfig, get_models_dir};
+use xcap::Monitor;
 
 /// Check if the given app name indicates this is the OpenScribe application
 fn is_openscribe_app(app_name: &Option<String>) -> bool {
@@ -87,15 +88,21 @@ impl RecordingState {
 }
 
 enum RecorderEvent {
-    Click { x: f64, y: f64 },
-    Key { key: rdev::Key, text: Option<String> },
+    Click {
+        x: f64,
+        y: f64,
+    },
+    Key {
+        key: rdev::Key,
+        text: Option<String>,
+    },
     // Note: Manual captures are now handled via the monitor picker UI
 }
 
 struct CaptureData {
     x: Option<i32>,
     y: Option<i32>,
-    image: image::DynamicImage,
+    image: Arc<image::DynamicImage>,
     timestamp: u64,
     step_type: String,
     text: Option<String>,
@@ -105,7 +112,7 @@ struct CaptureData {
 /// Data sent to OCR processing thread
 struct OcrData {
     step_id: String,
-    image: image::DynamicImage,
+    image: Arc<image::DynamicImage>,
     x: Option<i32>,
     y: Option<i32>,
     step_type: String,
@@ -132,8 +139,8 @@ fn get_monitor_at_point(x: f64, y: f64) -> Option<Monitor> {
 // This is more reliable than tracking mouse position for typing events
 #[cfg(target_os = "windows")]
 fn get_monitor_for_foreground_window() -> Option<Monitor> {
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
     use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
 
     unsafe {
         let hwnd = GetForegroundWindow();
@@ -170,10 +177,7 @@ fn get_monitor_for_foreground_window() -> Option<Monitor> {
         end tell
     "#;
 
-    if let Ok(output) = Command::new("osascript")
-        .args(["-e", script])
-        .output()
-    {
+    if let Ok(output) = Command::new("osascript").args(["-e", script]).output() {
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let parts: Vec<&str> = stdout.split(',').collect();
@@ -245,10 +249,7 @@ fn get_monitor_for_foreground_window() -> Option<Monitor> {
     }
 
     // Fallback: Try using wmctrl
-    if let Ok(output) = Command::new("wmctrl")
-        .args(["-l", "-G"])
-        .output()
-    {
+    if let Ok(output) = Command::new("wmctrl").args(["-l", "-G"]).output() {
         if output.status.success() {
             // wmctrl output format: window_id desktop x y width height hostname window_name
             // The active window typically has certain properties, but this is less reliable
@@ -263,7 +264,9 @@ fn get_monitor_for_foreground_window() -> Option<Monitor> {
 // Get the app name/title of the foreground window (for filtering self-interactions)
 #[cfg(target_os = "windows")]
 fn get_foreground_window_app_name() -> Option<String> {
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowTextLengthW};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW,
+    };
 
     unsafe {
         let hwnd = GetForegroundWindow();
@@ -300,10 +303,7 @@ fn get_foreground_window_app_name() -> Option<String> {
         end tell
     "#;
 
-    if let Ok(output) = Command::new("osascript")
-        .args(["-e", script])
-        .output()
-    {
+    if let Ok(output) = Command::new("osascript").args(["-e", script]).output() {
         if output.status.success() {
             let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !name.is_empty() {
@@ -365,7 +365,10 @@ pub fn start_listener(
                 m
             }
             Err(e) => {
-                eprintln!("Failed to initialize OCR engine: {}. OCR will be disabled.", e);
+                eprintln!(
+                    "Failed to initialize OCR engine: {}. OCR will be disabled.",
+                    e
+                );
                 OcrManager::disabled()
             }
         };
@@ -408,7 +411,7 @@ pub fn start_listener(
 
                     // Colors for highlight
                     let outer_color = Rgb([255u8, 69u8, 0u8]); // Orange-red
-                    let inner_color = Rgb([255u8, 0u8, 0u8]);   // Red
+                    let inner_color = Rgb([255u8, 0u8, 0u8]); // Red
 
                     // Draw outer ring (multiple circles for thickness)
                     for r in 30..=35 {
@@ -511,8 +514,11 @@ pub fn start_listener(
                             let _ = tx_encode.send(CaptureData {
                                 x: None,
                                 y: None,
-                                image: image::DynamicImage::ImageRgba8(image),
-                                timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+                                image: Arc::new(image::DynamicImage::ImageRgba8(image)),
+                                timestamp: SystemTime::now()
+                                    .duration_since(SystemTime::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as u64,
                                 step_type: "type".to_string(),
                                 text: Some(key_buffer.trim().to_string()),
                                 element_info: None,
@@ -551,12 +557,11 @@ pub fn start_listener(
                     else if is_space {
                         key_buffer.push(' ');
                         last_key_time = Some(Instant::now());
-                    }
-                    else if let Some(t) = text {
+                    } else if let Some(t) = text {
                         // Filter out control characters from text representation if needed
                         if t.len() == 1 {
-                             key_buffer.push_str(&t);
-                             last_key_time = Some(Instant::now());
+                            key_buffer.push_str(&t);
+                            last_key_time = Some(Instant::now());
                         }
                     }
 
@@ -576,8 +581,12 @@ pub fn start_listener(
                                 let _ = tx_encode.send(CaptureData {
                                     x: None,
                                     y: None,
-                                    image: image::DynamicImage::ImageRgba8(image),
-                                    timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+                                    image: Arc::new(image::DynamicImage::ImageRgba8(image)),
+                                    timestamp: SystemTime::now()
+                                        .duration_since(SystemTime::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis()
+                                        as u64,
                                     step_type: "type".to_string(),
                                     text: Some(key_buffer.trim().to_string()),
                                     element_info: None,
@@ -593,7 +602,9 @@ pub fn start_listener(
                     let now = Instant::now();
                     if let Some(last_time) = last_click_time {
                         let time_diff = now.duration_since(last_time);
-                        let distance = ((x - last_click_pos.0).powi(2) + (y - last_click_pos.1).powi(2)).sqrt();
+                        let distance = ((x - last_click_pos.0).powi(2)
+                            + (y - last_click_pos.1).powi(2))
+                        .sqrt();
 
                         if time_diff < click_debounce && distance < click_distance_threshold {
                             continue; // Skip this click (debounced)
@@ -611,11 +622,15 @@ pub fn start_listener(
                         if !key_buffer.trim().is_empty() {
                             if let Some(mon) = get_monitor_for_foreground_window() {
                                 if let Ok(image) = mon.capture_image() {
-                                    let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+                                    let timestamp = SystemTime::now()
+                                        .duration_since(SystemTime::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis()
+                                        as u64;
                                     let _ = tx_encode.send(CaptureData {
                                         x: None,
                                         y: None,
-                                        image: image::DynamicImage::ImageRgba8(image),
+                                        image: Arc::new(image::DynamicImage::ImageRgba8(image)),
                                         timestamp,
                                         step_type: "type".to_string(),
                                         text: Some(key_buffer.trim().to_string()),
@@ -632,14 +647,17 @@ pub fn start_listener(
                     // Capture Screenshot from the correct monitor
                     if let Some(mon) = get_monitor_at_point(x, y) {
                         if let Ok(image) = mon.capture_image() {
-                            let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+                            let timestamp = SystemTime::now()
+                                .duration_since(SystemTime::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as u64;
 
                             // 1. Flush text if any (using the same screenshot)
                             if !key_buffer.trim().is_empty() {
                                 let _ = tx_encode.send(CaptureData {
                                     x: None,
                                     y: None,
-                                    image: image::DynamicImage::ImageRgba8(image.clone()), // Clone for text step
+                                    image: Arc::new(image::DynamicImage::ImageRgba8(image.clone())), // Clone for text step
                                     timestamp,
                                     step_type: "type".to_string(),
                                     text: Some(key_buffer.trim().to_string()),
@@ -658,7 +676,7 @@ pub fn start_listener(
                             let _ = tx_encode.send(CaptureData {
                                 x: Some(rel_x),
                                 y: Some(rel_y),
-                                image: image::DynamicImage::ImageRgba8(image), // Move for click step
+                                image: Arc::new(image::DynamicImage::ImageRgba8(image)), // Move for click step
                                 timestamp,
                                 step_type: "click".to_string(),
                                 text: None,
@@ -666,8 +684,7 @@ pub fn start_listener(
                             });
                         }
                     }
-                }
-                // Note: Manual captures (RecorderEvent::Capture) have been moved to monitor picker UI
+                } // Note: Manual captures (RecorderEvent::Capture) have been moved to monitor picker UI
             }
         }
     });
@@ -677,20 +694,24 @@ pub fn start_listener(
         let mut current_x = 0.0;
         let mut current_y = 0.0;
 
-        if let Err(error) = listen(move |event| {
-            match event.event_type {
-                EventType::MouseMove { x, y } => {
-                    current_x = x;
-                    current_y = y;
-                }
-                EventType::ButtonPress(Button::Left) => {
-                    let _ = tx_event.send(RecorderEvent::Click { x: current_x, y: current_y });
-                }
-                EventType::KeyPress(key) => {
-                    let _ = tx_event.send(RecorderEvent::Key { key, text: event.name });
-                }
-                _ => {}
+        if let Err(error) = listen(move |event| match event.event_type {
+            EventType::MouseMove { x, y } => {
+                current_x = x;
+                current_y = y;
             }
+            EventType::ButtonPress(Button::Left) => {
+                let _ = tx_event.send(RecorderEvent::Click {
+                    x: current_x,
+                    y: current_y,
+                });
+            }
+            EventType::KeyPress(key) => {
+                let _ = tx_event.send(RecorderEvent::Key {
+                    key,
+                    text: event.name,
+                });
+            }
+            _ => {}
         }) {
             eprintln!("Input listener error: {:?}", error);
         }

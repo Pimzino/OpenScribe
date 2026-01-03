@@ -32,7 +32,7 @@ impl Default for OcrConfig {
 #[derive(Clone)]
 pub struct OcrJob {
     pub step_id: String,
-    pub image: DynamicImage,
+    pub image: Arc<DynamicImage>,
     pub x: Option<i32>,
     pub y: Option<i32>,
     pub step_type: String,
@@ -124,15 +124,17 @@ impl OcrManager {
         };
 
         // Crop image for click steps
-        let image_to_process = if job.step_type == "click" {
+        // Use Cow to avoid cloning the full image when not cropping
+        let image_binding = job.image.clone();
+        let image_to_process: std::borrow::Cow<DynamicImage> = if job.step_type == "click" {
             if let (Some(x), Some(y)) = (job.x, job.y) {
-                self.crop_around_point(&job.image, x, y)
+                std::borrow::Cow::Owned(self.crop_around_point(&image_binding, x, y))
             } else {
-                job.image.clone()
+                std::borrow::Cow::Borrowed(&image_binding)
             }
         } else {
             // For type/capture steps, use full image
-            job.image.clone()
+            std::borrow::Cow::Borrowed(&image_binding)
         };
 
         // Run OCR - pass the DynamicImage directly
@@ -182,8 +184,14 @@ pub fn get_models_dir(app_handle: &tauri::AppHandle) -> PathBuf {
         // CARGO_MANIFEST_DIR is set at compile time to the directory containing Cargo.toml
         // which is src-tauri/
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let dev_path = PathBuf::from(manifest_dir).join("resources").join("ocr_models");
-        println!("OCR dev path: {:?} (exists: {})", dev_path, dev_path.exists());
+        let dev_path = PathBuf::from(manifest_dir)
+            .join("resources")
+            .join("ocr_models");
+        println!(
+            "OCR dev path: {:?} (exists: {})",
+            dev_path,
+            dev_path.exists()
+        );
         if dev_path.exists() {
             return dev_path;
         }
@@ -219,7 +227,8 @@ pub fn get_models_dir(app_handle: &tauri::AppHandle) -> PathBuf {
                     // Try to canonicalize to resolve .. properly
                     let resolved = if candidate.to_string_lossy().contains("_up_") {
                         // Manual parent traversal for Windows compatibility
-                        parent.parent()
+                        parent
+                            .parent()
                             .and_then(|p| p.parent())
                             .map(|p| p.join("resources").join("ocr_models"))
                     } else {

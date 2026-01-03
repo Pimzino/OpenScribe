@@ -1,17 +1,31 @@
-import { useEffect } from "react";
+
+import { useEffect, lazy, Suspense } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import Dashboard from "./pages/Dashboard";
-import NewRecording from "./pages/NewRecording";
-import RecordingsList from "./pages/RecordingsList";
-import RecordingDetail from "./pages/RecordingDetail";
-import Editor from "./pages/Editor";
-import Settings from "./pages/Settings";
-import MonitorPicker from "./pages/MonitorPicker";
+
+// Lazy load pages
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const NewRecording = lazy(() => import("./pages/NewRecording"));
+const RecordingsList = lazy(() => import("./pages/RecordingsList"));
+const RecordingDetail = lazy(() => import("./pages/RecordingDetail"));
+const Editor = lazy(() => import("./pages/Editor"));
+const Settings = lazy(() => import("./pages/Settings"));
+const MonitorPicker = lazy(() => import("./pages/MonitorPicker"));
+
 import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-screen text-white/50">
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-8 h-8 border-4 border-white/20 border-t-white/80 rounded-full animate-spin"></div>
+      <p>Loading...</p>
+    </div>
+  </div>
+);
 
 function App() {
   const navigate = useNavigate();
@@ -94,16 +108,18 @@ function App() {
 
   return (
     <>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/new-recording" element={<NewRecording />} />
-        <Route path="/recordings" element={<RecordingsList />} />
-        <Route path="/recordings/:id" element={<RecordingDetail />} />
-        <Route path="/editor/:id?" element={<Editor />} />
-        <Route path="/settings" element={<Settings />} />
-        {/* Monitor selection route for separate window */}
-        <Route path="/monitor-picker" element={<MonitorPicker />} />
-      </Routes>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/new-recording" element={<NewRecording />} />
+          <Route path="/recordings" element={<RecordingsList />} />
+          <Route path="/recordings/:id" element={<RecordingDetail />} />
+          <Route path="/editor/:id?" element={<Editor />} />
+          <Route path="/settings" element={<Settings />} />
+          {/* Monitor selection route for separate window */}
+          <Route path="/monitor-picker" element={<MonitorPicker />} />
+        </Routes>
+      </Suspense>
     </>
   );
 }

@@ -116,7 +116,6 @@ function centerAspectCrop(mediaWidth: number, mediaHeight: number) {
 // Pixelate a region of an image for blur/redact effect
 // Uses adaptive pixel size based on region dimensions for optimal visual effect
 function createPixelatedRect(
-    canvas: fabric.Canvas,
     left: number,
     top: number,
     width: number,
@@ -328,9 +327,8 @@ function ColorPicker({ currentColor, onColorChange }: ColorPickerProps) {
                                 e.stopPropagation();
                                 handleColorSelect(color);
                             }}
-                            className={`w-7 h-7 rounded-md border-2 transition-transform hover:scale-110 ${
-                                currentColor === color ? 'border-white' : 'border-transparent'
-                            }`}
+                            className={`w-7 h-7 rounded-md border-2 transition-transform hover:scale-110 ${currentColor === color ? 'border-white' : 'border-transparent'
+                                }`}
                             style={{ backgroundColor: color }}
                         />
                     ))}
@@ -651,7 +649,7 @@ export default function ImageEditor({ imageSrc, onSave, onCancel }: ImageEditorP
         canvas.defaultCursor = 'default';
         canvas.hoverCursor = 'move';
         canvas.moveCursor = 'move';
-        canvas.rotationCursor = 'crosshair';
+        (canvas as any).rotationCursor = 'crosshair';
 
         // Remove existing event listeners
         canvas.off('mouse:down');
@@ -824,7 +822,7 @@ export default function ImageEditor({ imageSrc, onSave, onCancel }: ImageEditorP
                         if (img) {
                             const canvasWidth = canvas.getWidth();
                             const canvasHeight = canvas.getHeight();
-                            const blurGroup = createPixelatedRect(canvas, left, top, width, height, img, canvasWidth, canvasHeight);
+                            const blurGroup = createPixelatedRect(left, top, width, height, img, canvasWidth, canvasHeight);
                             canvas.add(blurGroup);
                         }
                     } else {
