@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-01-03
+
+### Added
+- Monitor and window picker - choose which screen or window to capture
+- OCR text recognition for better AI understanding of your screenshots
+- Streaming documentation - watch your guide being written in real-time
+- Customizable writing style settings to match your documentation tone
+- Rate limit protection to prevent API throttling
+- New rich text editor with formatting toolbar (bold, italic, lists, tables, and more)
+- Screenshot editor for annotating and editing captured images
+- Stale documentation warning when content may need updating
+- Helpful tooltips throughout the interface
+- Support for additional heading levels (H4, H5, H6)
+- Auto-scroll to current step during documentation generation
+
+### Improved
+- Faster and smoother scrolling performance
+- Better memory usage when capturing screenshots
+- Cleaner export experience with native file picker
+- More natural AI-generated descriptions with better context awareness
+- New animated splash screen
+- Refreshed visual styling with custom scrollbars
+- Native toast notifications for a cleaner look
+
+### Fixed
+- Various tooltip visibility issues
+- Monitor picker window sizing and overlay handling
+- Image handling in the markdown preview
+
 ## [0.0.2] - 2025-05-28
 
 ### Added
