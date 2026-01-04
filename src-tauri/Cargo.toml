@@ -3,7 +3,7 @@ name = "openscribe"
 version = "0.0.3"
 description = "A desktop app for creating step-by-step documentation with AI assistance"
 authors = ["OpenScribe Contributors"]
-edition = "2021"
+edition = "2026"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
