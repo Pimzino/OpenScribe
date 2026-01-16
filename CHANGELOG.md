@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.4] - 2026-01-16
 
+### Added
+- Linux Wayland support with automatic display server detection
+- Native D-Bus notifications on Linux Wayland sessions
+- XWayland fallback for overlay borders when running on Wayland
+
 ### Fixed
 - Splash screen not auto-closing in production builds (MSI installer)
 
