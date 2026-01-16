@@ -44,7 +44,7 @@ function App() {
     const closeSplash = async () => {
       await invoke("close_splashscreen");
     };
-    closeSplash();
+    closeSplash().catch(console.error);
   }, []);
 
   // Update backend hotkeys when settings change

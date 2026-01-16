@@ -692,13 +692,11 @@ mod macos_impl {
                 };
 
                 // Position in bottom-right corner (macOS uses bottom-left origin)
-                let x = screen_frame.origin.x + screen_frame.size.width - TOAST_WIDTH - TOAST_MARGIN;
+                let x =
+                    screen_frame.origin.x + screen_frame.size.width - TOAST_WIDTH - TOAST_MARGIN;
                 let y = screen_frame.origin.y + TOAST_MARGIN;
 
-                let frame = CGRect::new(
-                    CGPoint::new(x, y),
-                    CGSize::new(TOAST_WIDTH, TOAST_HEIGHT),
-                );
+                let frame = CGRect::new(CGPoint::new(x, y), CGSize::new(TOAST_WIDTH, TOAST_HEIGHT));
 
                 // Create window
                 let style = NSWindowStyleMask::Borderless;
@@ -770,11 +768,11 @@ mod macos_impl {
 }
 
 // ============================================================================
-// Linux Implementation (X11)
+// Linux X11 Implementation
 // ============================================================================
 
 #[cfg(target_os = "linux")]
-mod linux_impl {
+mod linux_x11_impl {
     use std::ptr;
     use std::sync::Mutex;
     use x11::xlib::*;
@@ -1176,7 +1174,14 @@ mod linux_impl {
             XPoint { x: 26, y: 32 },
             XPoint { x: 34, y: 24 },
         ];
-        XDrawLines(display, window, gc, points.as_ptr() as *mut XPoint, 3, CoordModeOrigin);
+        XDrawLines(
+            display,
+            window,
+            gc,
+            points.as_ptr() as *mut XPoint,
+            3,
+            CoordModeOrigin,
+        );
 
         // Note: Text rendering with X11 requires font setup which is complex
         // For full text support, consider using XFT or Pango
@@ -1184,6 +1189,82 @@ mod linux_impl {
 
         XFreeGC(display, gc);
         XFlush(display);
+    }
+}
+
+// ============================================================================
+// Linux Wayland Implementation
+// ============================================================================
+
+#[cfg(target_os = "linux")]
+mod linux_wayland_impl {
+    use notify_rust::Notification;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+
+    // Track if we've warned about layer-shell not being available
+    static LAYER_SHELL_WARNED: AtomicBool = AtomicBool::new(false);
+
+    // Overlay state for Wayland (using layer-shell when available)
+    static OVERLAY_ACTIVE: Mutex<bool> = Mutex::new(false);
+
+    /// Show border overlay using wlr-layer-shell protocol.
+    ///
+    /// Note: Full layer-shell implementation requires significant setup with
+    /// smithay-client-toolkit. For now, we log a warning and fall back to X11
+    /// via XWayland if available. The overlay feature degrades gracefully.
+    pub fn show_border(x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
+        // Mark overlay as logically active
+        *OVERLAY_ACTIVE.lock().map_err(|e| e.to_string())? = true;
+
+        // Log warning once about limited Wayland overlay support
+        if !LAYER_SHELL_WARNED.swap(true, Ordering::SeqCst) {
+            eprintln!(
+                "[OpenScribe] Wayland detected: Border overlays using layer-shell are not yet fully implemented. \
+                 Overlay may not appear. Toast notifications will work via D-Bus."
+            );
+        }
+
+        // For now, try X11 via XWayland as fallback
+        // Most Wayland sessions include XWayland
+        if std::env::var("DISPLAY").is_ok() {
+            return super::linux_x11_impl::show_border(x, y, width, height);
+        }
+
+        // No XWayland available - overlay won't show but app continues
+        eprintln!(
+            "[OpenScribe] Cannot show overlay: no XWayland available. \
+             Overlay position would be: ({}, {}) size: {}x{}",
+            x, y, width, height
+        );
+        Ok(())
+    }
+
+    /// Hide border overlay
+    pub fn hide_border() -> Result<(), String> {
+        *OVERLAY_ACTIVE.lock().map_err(|e| e.to_string())? = false;
+
+        // If we fell back to X11, hide that too
+        if std::env::var("DISPLAY").is_ok() {
+            return super::linux_x11_impl::hide_border();
+        }
+
+        Ok(())
+    }
+
+    /// Show toast notification using D-Bus (freedesktop notifications).
+    ///
+    /// This works natively on Wayland without any compatibility layer,
+    /// as long as a notification daemon is running (e.g., mako, dunst, fnott).
+    pub fn show_toast(message: &str, duration_ms: u32) -> Result<(), String> {
+        Notification::new()
+            .summary("OpenScribe")
+            .body(message)
+            .icon("dialog-information")
+            .timeout(duration_ms as i32)
+            .show()
+            .map_err(|e| format!("Failed to show notification: {}", e))?;
+        Ok(())
     }
 }
 
@@ -1205,7 +1286,12 @@ pub fn show_monitor_border(x: i32, y: i32, width: u32, height: u32) -> Result<()
 
     #[cfg(target_os = "linux")]
     {
-        return linux_impl::show_border(x, y, width, height);
+        use crate::display::{detect_display_server, DisplayServer};
+
+        return match detect_display_server() {
+            DisplayServer::Wayland => linux_wayland_impl::show_border(x, y, width, height),
+            _ => linux_x11_impl::show_border(x, y, width, height),
+        };
     }
 
     #[allow(unreachable_code)]
@@ -1226,7 +1312,12 @@ pub fn hide_monitor_border() -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        return linux_impl::hide_border();
+        use crate::display::{detect_display_server, DisplayServer};
+
+        return match detect_display_server() {
+            DisplayServer::Wayland => linux_wayland_impl::hide_border(),
+            _ => linux_x11_impl::hide_border(),
+        };
     }
 
     #[allow(unreachable_code)]
@@ -1247,7 +1338,12 @@ pub fn show_toast(message: &str, duration_ms: u32) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        return linux_impl::show_toast(message, duration_ms);
+        use crate::display::{detect_display_server, DisplayServer};
+
+        return match detect_display_server() {
+            DisplayServer::Wayland => linux_wayland_impl::show_toast(message, duration_ms),
+            _ => linux_x11_impl::show_toast(message, duration_ms),
+        };
     }
 
     #[allow(unreachable_code)]

@@ -206,54 +206,62 @@ fn get_monitor_for_foreground_window() -> Option<Monitor> {
 
 #[cfg(target_os = "linux")]
 fn get_monitor_for_foreground_window() -> Option<Monitor> {
-    // Linux: Try to get active window via D-Bus/AT-SPI or environment
-    // This is complex due to X11/Wayland differences
-
-    // Try reading _NET_ACTIVE_WINDOW via xdotool-like approach
-    // For now, use a simpler approach: check DISPLAY env and try xdotool if available
+    use crate::display::{detect_display_server, DisplayServer};
     use std::process::Command;
 
-    // Try using xdotool to get active window geometry (works on X11)
-    if let Ok(output) = Command::new("xdotool")
-        .args(["getactivewindow", "getwindowgeometry", "--shell"])
-        .output()
-    {
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let mut x: Option<i32> = None;
-            let mut y: Option<i32> = None;
-            let mut width: Option<i32> = None;
-            let mut height: Option<i32> = None;
+    match detect_display_server() {
+        DisplayServer::X11 => {
+            // X11: Use xdotool to get active window geometry
+            if let Ok(output) = Command::new("xdotool")
+                .args(["getactivewindow", "getwindowgeometry", "--shell"])
+                .output()
+            {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let mut x: Option<i32> = None;
+                    let mut y: Option<i32> = None;
+                    let mut width: Option<i32> = None;
+                    let mut height: Option<i32> = None;
 
-            for line in stdout.lines() {
-                if let Some(val) = line.strip_prefix("X=") {
-                    x = val.parse().ok();
-                } else if let Some(val) = line.strip_prefix("Y=") {
-                    y = val.parse().ok();
-                } else if let Some(val) = line.strip_prefix("WIDTH=") {
-                    width = val.parse().ok();
-                } else if let Some(val) = line.strip_prefix("HEIGHT=") {
-                    height = val.parse().ok();
+                    for line in stdout.lines() {
+                        if let Some(val) = line.strip_prefix("X=") {
+                            x = val.parse().ok();
+                        } else if let Some(val) = line.strip_prefix("Y=") {
+                            y = val.parse().ok();
+                        } else if let Some(val) = line.strip_prefix("WIDTH=") {
+                            width = val.parse().ok();
+                        } else if let Some(val) = line.strip_prefix("HEIGHT=") {
+                            height = val.parse().ok();
+                        }
+                    }
+
+                    if let (Some(x), Some(y), Some(w), Some(h)) = (x, y, width, height) {
+                        let center_x = x + w / 2;
+                        let center_y = y + h / 2;
+
+                        if let Some(monitor) =
+                            get_monitor_at_point(center_x as f64, center_y as f64)
+                        {
+                            return Some(monitor);
+                        }
+                    }
                 }
             }
 
-            if let (Some(x), Some(y), Some(w), Some(h)) = (x, y, width, height) {
-                let center_x = x + w / 2;
-                let center_y = y + h / 2;
-
-                if let Some(monitor) = get_monitor_at_point(center_x as f64, center_y as f64) {
-                    return Some(monitor);
+            // Fallback: Try using wmctrl
+            if let Ok(output) = Command::new("wmctrl").args(["-l", "-G"]).output() {
+                if output.status.success() {
+                    // wmctrl output is less reliable, fall through to default
                 }
             }
         }
-    }
-
-    // Fallback: Try using wmctrl
-    if let Ok(output) = Command::new("wmctrl").args(["-l", "-G"]).output() {
-        if output.status.success() {
-            // wmctrl output format: window_id desktop x y width height hostname window_name
-            // The active window typically has certain properties, but this is less reliable
-            // For now, just fall back to primary monitor
+        DisplayServer::Wayland => {
+            // Wayland: No standardized API for getting active window info.
+            // xdotool doesn't work on Wayland. We fall back to primary monitor.
+            // This is a known limitation - typing events will use primary monitor.
+        }
+        DisplayServer::Unknown => {
+            // Unknown: Can't determine display server, fall back to default
         }
     }
 
@@ -316,20 +324,35 @@ fn get_foreground_window_app_name() -> Option<String> {
 
 #[cfg(target_os = "linux")]
 fn get_foreground_window_app_name() -> Option<String> {
+    use crate::display::{detect_display_server, DisplayServer};
     use std::process::Command;
 
-    // Try using xdotool to get active window name
-    if let Ok(output) = Command::new("xdotool")
-        .args(["getactivewindow", "getwindowname"])
-        .output()
-    {
-        if output.status.success() {
-            let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !name.is_empty() {
-                return Some(name);
+    match detect_display_server() {
+        DisplayServer::X11 => {
+            // X11: Use xdotool to get active window name
+            if let Ok(output) = Command::new("xdotool")
+                .args(["getactivewindow", "getwindowname"])
+                .output()
+            {
+                if output.status.success() {
+                    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !name.is_empty() {
+                        return Some(name);
+                    }
+                }
             }
         }
+        DisplayServer::Wayland => {
+            // Wayland: No standardized API for getting active window info.
+            // This feature is degraded on Wayland - we can't reliably detect
+            // which app the user is interacting with.
+            // Return None to indicate we can't detect it.
+        }
+        DisplayServer::Unknown => {
+            // Unknown: Can't determine display server
+        }
     }
+
     None
 }
 

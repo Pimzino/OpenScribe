@@ -1,9 +1,9 @@
 [package]
 name = "openscribe"
-version = "0.0.3"
+version = "0.0.4"
 description = "A desktop app for creating step-by-step documentation with AI assistance"
 authors = ["OpenScribe Contributors"]
-edition = "2026"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -66,3 +66,8 @@ atspi = "0.21"
 zbus = { version = "4", default-features = false, features = ["tokio"] }
 x11 = { version = "2.21", features = ["xlib"] }
 
+# Wayland support
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+smithay-client-toolkit = { version = "0.19", features = ["calloop"] }
+notify-rust = "4"

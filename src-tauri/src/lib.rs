@@ -5,10 +5,13 @@ mod database;
 mod overlay;
 mod ocr;
 
+#[cfg(target_os = "linux")]
+mod display;
+
 use std::sync::Mutex;
 use std::path::PathBuf;
 use std::io::Write;
-use tauri::{AppHandle, State, Manager, Emitter, WebviewWindow};
+use tauri::{AppHandle, State, Manager, Emitter};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
 use database::{Database, StepInput, Recording, RecordingWithSteps, Statistics};
@@ -16,11 +19,15 @@ use database::{Database, StepInput, Recording, RecordingWithSteps, Statistics};
 pub struct DatabaseState(pub Mutex<Database>);
 
 #[tauri::command]
-async fn close_splashscreen(window: WebviewWindow) {
-    if let Some(splashscreen) = window.get_webview_window("splashscreen") {
-        splashscreen.close().unwrap();
+async fn close_splashscreen(app: AppHandle) -> Result<(), String> {
+    if let Some(splashscreen) = app.get_webview_window("splashscreen") {
+        splashscreen.close().map_err(|e| e.to_string())?;
     }
-    window.get_webview_window("main").unwrap().show().unwrap();
+    app.get_webview_window("main")
+        .ok_or("Main window not found")?
+        .show()
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
