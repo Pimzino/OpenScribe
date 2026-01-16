@@ -17,7 +17,7 @@ import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } fro
 
 export default function NewRecording() {
     const navigate = useNavigate();
-    const { isRecording, setIsRecording, steps, addStep, removeStep, clearSteps, updateStepDescription, updateStepScreenshot, reorderSteps } = useRecorderStore();
+    const { isRecording, setIsRecording, steps, addStep, removeStep, updateStepDescription, updateStepScreenshot, reorderSteps } = useRecorderStore();
     const { createRecording, saveStepsWithPath } = useRecordingsStore();
     const { screenshotPath } = useSettingsStore();
     const [recordingName, setRecordingName] = useState("");
@@ -171,14 +171,13 @@ export default function NewRecording() {
             }));
 
             await saveStepsWithPath(recordingId, name, stepInputs, screenshotPath || undefined);
-            clearSteps();
             setShowNameDialog(false);
             setRecordingName("");
 
             if (generateAfterSave) {
-                navigate(`/editor/${recordingId}`);
+                navigate(`/recordings/${recordingId}`, { state: { triggerGeneration: true }, replace: true });
             } else {
-                navigate(`/recordings/${recordingId}`);
+                navigate(`/recordings/${recordingId}`, { replace: true });
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Failed to save recording";

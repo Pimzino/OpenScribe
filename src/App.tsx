@@ -10,7 +10,6 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const NewRecording = lazy(() => import("./pages/NewRecording"));
 const RecordingsList = lazy(() => import("./pages/RecordingsList"));
 const RecordingDetail = lazy(() => import("./pages/RecordingDetail"));
-const Editor = lazy(() => import("./pages/Editor"));
 const Settings = lazy(() => import("./pages/Settings"));
 const MonitorPicker = lazy(() => import("./pages/MonitorPicker"));
 
@@ -114,7 +113,6 @@ function App() {
           <Route path="/new-recording" element={<NewRecording />} />
           <Route path="/recordings" element={<RecordingsList />} />
           <Route path="/recordings/:id" element={<RecordingDetail />} />
-          <Route path="/editor/:id?" element={<Editor />} />
           <Route path="/settings" element={<Settings />} />
           {/* Monitor selection route for separate window */}
           <Route path="/monitor-picker" element={<MonitorPicker />} />

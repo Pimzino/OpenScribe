@@ -14,8 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native D-Bus notifications on Linux Wayland sessions
 - XWayland fallback for overlay borders when running on Wayland
 
+### Improved
+- Unified recording flow - new recordings now open directly in the recording detail view instead of a separate editor page
+
 ### Fixed
 - Splash screen not auto-closing in production builds (MSI installer)
+- Infinite regeneration loop when creating new recordings with auto-generate
+- Flash of blank page when saving recordings
 
 ## [0.0.3] - 2026-01-03
 

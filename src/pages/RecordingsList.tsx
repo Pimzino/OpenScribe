@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecordingsStore, Recording } from "../store/recordingsStore";
+import { useRecorderStore } from "../store/recorderStore";
 import { FileText, Plus, Trash2, Search } from "lucide-react";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
@@ -8,6 +9,7 @@ import Sidebar from "../components/Sidebar";
 export default function RecordingsList() {
     const navigate = useNavigate();
     const { recordings, fetchRecordings, deleteRecording, loading } = useRecordingsStore();
+    const { clearSteps } = useRecorderStore();
     const [searchQuery, setSearchQuery] = useState("");
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -37,6 +39,11 @@ export default function RecordingsList() {
     const handleNavigate = (page: "dashboard" | "recordings" | "settings") => {
         if (page === "dashboard") navigate('/');
         else if (page === "settings") navigate('/settings');
+    };
+
+    const handleNewRecording = () => {
+        clearSteps();
+        navigate('/new-recording');
     };
 
     return (
@@ -75,7 +82,7 @@ export default function RecordingsList() {
                     <h2 className="text-2xl font-bold">My Recordings</h2>
                     <Tooltip content="New recording">
                         <button
-                            onClick={() => navigate('/new-recording')}
+                            onClick={handleNewRecording}
                             className="p-2 bg-[#2721E8] hover:bg-[#4a45f5] rounded-md transition-colors"
                         >
                             <Plus size={18} />
@@ -146,7 +153,7 @@ export default function RecordingsList() {
                             <>
                                 <p>No recordings yet</p>
                                 <button
-                                    onClick={() => navigate('/new-recording')}
+                                    onClick={handleNewRecording}
                                     className="mt-2 text-[#49B8D3] hover:text-[#49B8D3]/80"
                                 >
                                     Create your first recording

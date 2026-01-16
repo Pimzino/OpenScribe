@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecordingsStore, Recording } from "../store/recordingsStore";
+import { useRecorderStore } from "../store/recorderStore";
 import { FileText, Plus, Clock, Layers } from "lucide-react";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
@@ -8,6 +9,7 @@ import Sidebar from "../components/Sidebar";
 export default function Dashboard() {
     const navigate = useNavigate();
     const { statistics, fetchStatistics, loading } = useRecordingsStore();
+    const { clearSteps } = useRecorderStore();
 
     useEffect(() => {
         fetchStatistics();
@@ -27,6 +29,11 @@ export default function Dashboard() {
         else if (page === "settings") navigate('/settings');
     };
 
+    const handleNewRecording = () => {
+        clearSteps();
+        navigate('/new-recording');
+    };
+
     return (
         <div className="flex h-screen text-white">
             <Sidebar activePage="dashboard" onNavigate={handleNavigate} />
@@ -37,7 +44,7 @@ export default function Dashboard() {
                     <h2 className="text-2xl font-bold">Dashboard</h2>
                     <Tooltip content="New recording">
                         <button
-                            onClick={() => navigate('/new-recording')}
+                            onClick={handleNewRecording}
                             className="p-2 bg-[#2721E8] hover:bg-[#4a45f5] rounded-md transition-colors"
                         >
                             <Plus size={18} />
@@ -120,7 +127,7 @@ export default function Dashboard() {
                                 <div className="p-8 text-center text-white/50">
                                     <p>No recordings yet</p>
                                     <button
-                                        onClick={() => navigate('/new-recording')}
+                                        onClick={handleNewRecording}
                                         className="mt-2 text-[#49B8D3] hover:text-[#5fc5e0]"
                                     >
                                         Create your first recording

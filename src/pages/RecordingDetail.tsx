@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
@@ -25,6 +25,7 @@ import ImageEditor from "../components/ImageEditor";
 export default function RecordingDetail() {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
+    const location = useLocation();
     const { currentRecording, getRecording, saveDocumentation, loading } = useRecordingsStore();
     const { isRecording, setIsRecording } = useRecorderStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel, screenshotPath } = useSettingsStore();
@@ -60,6 +61,7 @@ export default function RecordingDetail() {
     const [isSelectingPosition, setIsSelectingPosition] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deletingStepId, setDeletingStepId] = useState<string | null>(null);
+    const hasTriggeredGeneration = useRef(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -83,6 +85,23 @@ export default function RecordingDetail() {
             setInsertPosition(null);
         }
     }, [currentRecording?.recording.id]);
+
+    // Auto-trigger generation if navigated with triggerGeneration flag
+    useEffect(() => {
+        // Only trigger once per navigation with the flag
+        if (location.state?.triggerGeneration && currentRecording && !isGenerating && !hasTriggeredGeneration.current) {
+            hasTriggeredGeneration.current = true;
+            // Clear the navigation state to prevent re-triggering
+            navigate(location.pathname, { replace: true, state: {} });
+            // Trigger generation
+            handleRegenerate();
+        }
+    }, [location.state?.triggerGeneration, currentRecording, isGenerating]);
+
+    // Reset the generation trigger flag when navigating to a different recording
+    useEffect(() => {
+        hasTriggeredGeneration.current = false;
+    }, [id]);
 
     // Helper to copy screenshot to permanent location and register asset scope
     const copyScreenshotToPermanent = async (tempPath: string): Promise<string> => {
