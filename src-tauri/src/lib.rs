@@ -14,7 +14,7 @@ use std::io::Write;
 use tauri::{AppHandle, State, Manager, Emitter};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
-use database::{Database, StepInput, Recording, RecordingWithSteps, Statistics, DeleteRecordingCleanup};
+use database::{Database, StepInput, Recording, RecordingWithSteps, DeleteRecordingCleanup};
 
 pub struct DatabaseState(pub Mutex<Database>);
 
@@ -264,14 +264,6 @@ fn update_recording_name(db: State<'_, DatabaseState>, id: String, name: String)
     db.0.lock()
         .map_err(|e| e.to_string())?
         .update_recording_name(&id, &name)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn get_statistics(db: State<'_, DatabaseState>) -> Result<Statistics, String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
-        .get_statistics()
         .map_err(|e| e.to_string())
 }
 
@@ -1014,7 +1006,6 @@ pub fn run() {
             get_recording,
             delete_recording,
             update_recording_name,
-            get_statistics,
             get_default_screenshot_path,
             validate_screenshot_path,
             register_asset_scope,

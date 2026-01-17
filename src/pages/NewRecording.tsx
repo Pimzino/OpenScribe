@@ -246,7 +246,7 @@ export default function NewRecording() {
             <Sidebar
                 activePage="new-recording"
                 onNavigate={(page) => {
-                    if (page === "dashboard" || page === "recordings") navigate('/');
+                    if (page === "recordings") navigate('/');
                     else if (page === "settings") navigate('/settings');
                 }}
             />

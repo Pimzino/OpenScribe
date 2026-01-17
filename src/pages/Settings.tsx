@@ -271,9 +271,8 @@ export default function Settings() {
         }
     };
 
-    const handleNavigate = (page: "dashboard" | "recordings" | "settings") => {
-        if (page === "dashboard") navigate("/");
-        else if (page === "recordings") navigate("/recordings");
+    const handleNavigate = (page: "recordings" | "settings") => {
+        if (page === "recordings") navigate("/");
     };
 
     return (

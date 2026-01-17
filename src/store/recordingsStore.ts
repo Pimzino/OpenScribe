@@ -38,13 +38,6 @@ export interface RecordingWithSteps {
     steps: Step[];
 }
 
-export interface Statistics {
-    total_recordings: number;
-    total_steps: number;
-    recordings_this_week: number;
-    recent_recordings: Recording[];
-}
-
 export interface StepInput {
     type_: string;
     x?: number;
@@ -63,14 +56,12 @@ export interface StepInput {
 interface RecordingsState {
     recordings: Recording[];
     currentRecording: RecordingWithSteps | null;
-    statistics: Statistics | null;
     loading: boolean;
     error: string | null;
 
     // Actions
     fetchRecordings: () => Promise<void>;
     refreshRecordings: () => Promise<void>;
-    fetchStatistics: () => Promise<void>;
     createRecording: (name: string) => Promise<string>;
     saveSteps: (recordingId: string, steps: StepInput[]) => Promise<void>;
     saveStepsWithPath: (recordingId: string, recordingName: string, steps: StepInput[], screenshotPath?: string) => Promise<void>;
@@ -87,7 +78,6 @@ interface RecordingsState {
 export const useRecordingsStore = create<RecordingsState>((set, get) => ({
     recordings: [],
     currentRecording: null,
-    statistics: null,
     loading: false,
     error: null,
 
@@ -108,16 +98,6 @@ export const useRecordingsStore = create<RecordingsState>((set, get) => ({
             set({ recordings });
         } catch {
             // Ignore background refresh failures
-        }
-    },
-
-    fetchStatistics: async () => {
-        set({ loading: true, error: null });
-        try {
-            const statistics = await invoke<Statistics>('get_statistics');
-            set({ statistics, loading: false });
-        } catch (error) {
-            set({ error: String(error), loading: false });
         }
     },
 

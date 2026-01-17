@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Inline recording rename - click the recording name in the detail view to edit it
 
+### Improved
+- Streamlined navigation - app now opens directly to My Recordings, removing the redundant dashboard page
+
 ## [0.0.4] - 2026-01-16
 
 ### Added

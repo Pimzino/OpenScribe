@@ -69,14 +69,6 @@ pub struct RecordingWithSteps {
     pub steps: Vec<Step>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Statistics {
-    pub total_recordings: i32,
-    pub total_steps: i32,
-    pub recordings_this_week: i32,
-    pub recent_recordings: Vec<Recording>,
-}
-
 pub struct Database {
     conn: Connection,
     data_dir: PathBuf,
@@ -563,54 +555,6 @@ impl Database {
             params![name, id],
         )?;
         Ok(())
-    }
-
-    pub fn get_statistics(&self) -> Result<Statistics> {
-        let total_recordings: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM recordings",
-            [],
-            |row| row.get(0),
-        )?;
-
-        let total_steps: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM steps",
-            [],
-            |row| row.get(0),
-        )?;
-
-        let week_ago = chrono::Utc::now().timestamp_millis() - (7 * 24 * 60 * 60 * 1000);
-        let recordings_this_week: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM recordings WHERE created_at >= ?1",
-            params![week_ago],
-            |row| row.get(0),
-        )?;
-
-        let mut stmt = self.conn.prepare(
-            "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation, r.documentation_generated_at,
-                    (SELECT COUNT(*) FROM steps WHERE recording_id = r.id) as step_count
-             FROM recordings r
-             ORDER BY r.updated_at DESC
-             LIMIT 5"
-        )?;
-
-        let recent_recordings = stmt.query_map([], |row| {
-            Ok(Recording {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                created_at: row.get(2)?,
-                updated_at: row.get(3)?,
-                documentation: row.get(4)?,
-                documentation_generated_at: row.get(5)?,
-                step_count: row.get(6)?,
-            })
-        })?.collect::<Result<Vec<_>>>()?;
-
-        Ok(Statistics {
-            total_recordings,
-            total_steps,
-            recordings_this_week,
-            recent_recordings,
-        })
     }
 
     pub fn update_step_screenshot(&self, step_id: &str, screenshot_path: &str, is_cropped: bool) -> Result<()> {

@@ -302,7 +302,7 @@ export default function RecordingDetail() {
         setEditedContent("");
     };
 
-    const handleNavigate = async (page: "dashboard" | "recordings" | "settings") => {
+    const handleNavigate = async (page: "recordings" | "settings") => {
         if (hasUnsavedChanges) {
             const confirmed = window.confirm("You have unsaved changes. Do you want to discard them?");
             if (!confirmed) return;
@@ -311,8 +311,7 @@ export default function RecordingDetail() {
             await cleanupTempScreenshots();
         }
 
-        if (page === "dashboard") navigate('/');
-        else if (page === "recordings") navigate('/recordings');
+        if (page === "recordings") navigate('/');
         else if (page === "settings") navigate('/settings');
     };
 

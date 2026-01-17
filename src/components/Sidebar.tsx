@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
-import { TrendingUp, List, Settings, Info, Coffee } from "lucide-react";
+import { List, Settings, Info, Coffee } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import AboutModal from "./AboutModal";
 import ChangelogModal from "./ChangelogModal";
 
-type Page = "dashboard" | "recordings" | "settings" | "new-recording" | "recording-detail";
+type Page = "recordings" | "settings" | "new-recording" | "recording-detail";
 
 interface SidebarProps {
     activePage: Page;
-    onNavigate: (page: "dashboard" | "recordings" | "settings") => void;
+    onNavigate: (page: "recordings" | "settings") => void;
 }
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
@@ -30,15 +30,6 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                 </h1>
 
                 <nav className="space-y-2 flex-1">
-                    <button
-                        onClick={() => onNavigate("dashboard")}
-                        className={`w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-white/10 transition-colors ${
-                            activePage === "dashboard" ? "bg-[#2721E8]/20 text-white border-l-2 border-[#2721E8]" : "text-white/60"
-                        }`}
-                    >
-                        <TrendingUp size={16} />
-                        Dashboard
-                    </button>
                     <button
                         onClick={() => onNavigate("recordings")}
                         className={`w-full flex items-center gap-3 px-4 py-2 rounded-md text-sm font-medium hover:bg-white/10 transition-colors ${
