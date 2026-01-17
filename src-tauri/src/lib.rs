@@ -933,6 +933,55 @@ fn update_step_ocr(
         .map_err(|e| e.to_string())
 }
 
+/// Migrate data from old "com.openscribe" identifier location to new "openscribe" location.
+/// Returns Ok(Some(message)) if user notification is needed, Ok(None) if silent success or nothing to do.
+fn migrate_from_old_identifier(new_data_dir: &std::path::Path) -> Result<Option<String>, String> {
+    // Get parent directory (e.g., %APPDATA% on Windows)
+    let parent = match new_data_dir.parent() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+    
+    // Old location with "com.openscribe" identifier
+    let old_data_dir = parent.join("com.openscribe");
+    
+    // Check if old location exists
+    if !old_data_dir.exists() {
+        return Ok(None); // Nothing to migrate
+    }
+    
+    // Check if old location has a valid database (required for migration)
+    let old_db_path = old_data_dir.join("openscribe.db");
+    if !old_db_path.exists() {
+        return Ok(None); // No database to migrate
+    }
+    
+    // Check if new location already exists
+    if new_data_dir.exists() {
+        // Both locations exist - user needs to manually resolve
+        return Ok(Some(format!(
+            "Data exists in both old and new locations. You may want to manually check: {}",
+            old_data_dir.display()
+        )));
+    }
+    
+    // Attempt to rename old folder to new location
+    match std::fs::rename(&old_data_dir, new_data_dir) {
+        Ok(_) => {
+            println!("Successfully migrated data from {} to {}", 
+                     old_data_dir.display(), new_data_dir.display());
+            Ok(None) // Silent success
+        }
+        Err(e) => {
+            // Migration failed - notify user
+            Ok(Some(format!(
+                "Could not migrate data from old location. Your data may be at: {} (Error: {})",
+                old_data_dir.display(), e
+            )))
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize DPI awareness BEFORE any window/monitor operations (Windows only)
@@ -966,6 +1015,19 @@ pub fn run() {
             // Initialize database
             let app_data_dir = app.path().app_data_dir()
                 .expect("Failed to get app data directory");
+            
+            // Migrate from old "com.openscribe" identifier if needed
+            if let Ok(Some(warning_message)) = migrate_from_old_identifier(&app_data_dir) {
+                // Emit warning to frontend - user may need to take action
+                let app_handle = app.handle().clone();
+                let msg = warning_message.clone();
+                std::thread::spawn(move || {
+                    // Small delay to ensure frontend is ready
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    let _ = app_handle.emit("migration-warning", msg);
+                });
+            }
+            
             let db = Database::new(app_data_dir)
                 .expect("Failed to initialize database");
             app.manage(DatabaseState(Mutex::new(db)));

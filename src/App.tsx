@@ -16,6 +16,7 @@ const MonitorPicker = lazy(() => import("./pages/MonitorPicker"));
 
 import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
+import { useToastStore } from "./store/toastStore";
 
 // Loading fallback component
 const PageLoader = () => (
@@ -56,6 +57,22 @@ function App() {
       }).catch(console.error);
     }
   }, [startRecordingHotkey, stopRecordingHotkey, isLoaded]);
+
+  // Listen for migration warnings from backend
+  useEffect(() => {
+    const unlistenMigration = listen<string>("migration-warning", (event) => {
+      // Show a warning toast with longer duration for important migration messages
+      useToastStore.getState().showToast({
+        message: event.payload,
+        variant: "info",
+        durationMs: 10000, // 10 seconds - important message
+      });
+    });
+
+    return () => {
+      unlistenMigration.then((f) => f());
+    };
+  }, []);
 
   // Listen for hotkey events
   useEffect(() => {
