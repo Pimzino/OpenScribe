@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Splash screen not auto-closing in production builds (MSI installer)
 - Infinite regeneration loop when creating new recordings with auto-generate
 - Flash of blank page when saving recordings
+- UI hanging when deleting recordings with many screenshots
 
 ## [0.0.3] - 2026-01-03
 

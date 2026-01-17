@@ -21,9 +21,9 @@ export default function RecordingsList() {
         recording.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const handleDelete = async (id: string) => {
-        await deleteRecording(id);
+    const handleDelete = (id: string) => {
         setDeleteConfirm(null);
+        deleteRecording(id).catch(() => undefined);
     };
 
     const formatDate = (timestamp: number) => {

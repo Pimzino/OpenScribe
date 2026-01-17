@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 
+import { useToastStore } from './toastStore';
+
 export interface Recording {
     id: string;
     name: string;
@@ -67,6 +69,7 @@ interface RecordingsState {
 
     // Actions
     fetchRecordings: () => Promise<void>;
+    refreshRecordings: () => Promise<void>;
     fetchStatistics: () => Promise<void>;
     createRecording: (name: string) => Promise<string>;
     saveSteps: (recordingId: string, steps: StepInput[]) => Promise<void>;
@@ -95,6 +98,16 @@ export const useRecordingsStore = create<RecordingsState>((set, get) => ({
             set({ recordings, loading: false });
         } catch (error) {
             set({ error: String(error), loading: false });
+        }
+    },
+
+    refreshRecordings: async () => {
+        set({ error: null });
+        try {
+            const recordings = await invoke<Recording[]>('list_recordings');
+            set({ recordings });
+        } catch {
+            // Ignore background refresh failures
         }
     },
 
@@ -175,16 +188,39 @@ export const useRecordingsStore = create<RecordingsState>((set, get) => ({
     },
 
     deleteRecording: async (id: string) => {
-        set({ loading: true, error: null });
+        const previousRecordings = get().recordings;
+
+        set({ recordings: previousRecordings.filter((r) => r.id !== id), error: null });
+        if (get().currentRecording?.recording.id === id) {
+            set({ currentRecording: null });
+        }
+
+        const deletingToastId = useToastStore.getState().showToast({
+            message: "Deleting recording…",
+            variant: "info",
+            durationMs: 60000,
+        });
+
         try {
             await invoke('delete_recording', { id });
-            await get().fetchRecordings();
-            if (get().currentRecording?.recording.id === id) {
-                set({ currentRecording: null });
-            }
-            set({ loading: false });
+
+            useToastStore.getState().dismissToast(deletingToastId);
+            useToastStore.getState().showToast({
+                message: "Recording deleted",
+                variant: "success",
+            });
+
+            // Fire-and-forget refresh to stay in sync with backend
+            get().refreshRecordings().catch(() => undefined);
         } catch (error) {
-            set({ error: String(error), loading: false });
+            useToastStore.getState().dismissToast(deletingToastId);
+
+            set({ recordings: previousRecordings, error: String(error) });
+            useToastStore.getState().showToast({
+                message: "Failed to delete recording",
+                variant: "error",
+            });
+
             throw error;
         }
     },

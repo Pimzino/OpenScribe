@@ -14,7 +14,7 @@ use std::io::Write;
 use tauri::{AppHandle, State, Manager, Emitter};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
-use database::{Database, StepInput, Recording, RecordingWithSteps, Statistics};
+use database::{Database, StepInput, Recording, RecordingWithSteps, Statistics, DeleteRecordingCleanup};
 
 pub struct DatabaseState(pub Mutex<Database>);
 
@@ -220,10 +220,43 @@ fn get_recording(db: State<'_, DatabaseState>, id: String) -> Result<Option<Reco
 
 #[tauri::command]
 fn delete_recording(db: State<'_, DatabaseState>, id: String) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
-        .delete_recording(&id)
-        .map_err(|e| e.to_string())
+    let cleanup: DeleteRecordingCleanup = {
+        let db = db.0.lock().map_err(|e| e.to_string())?;
+        db.delete_recording(&id).map_err(|e| e.to_string())?
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::fs;
+        use std::io;
+        use std::path::PathBuf;
+
+        for file in cleanup.files {
+            match fs::remove_file(&file) {
+                Ok(_) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => eprintln!("Warning: Failed to remove file {:?}: {}", file, e),
+            }
+        }
+
+        // Remove directories deepest-first, skipping protected dirs.
+        let mut dirs: Vec<PathBuf> = cleanup.dirs;
+        dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+
+        for dir in dirs {
+            if dir == cleanup.protected_dir {
+                continue;
+            }
+
+            match fs::remove_dir(&dir) {
+                Ok(_) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) if e.kind() == io::ErrorKind::DirectoryNotEmpty => {}
+                Err(e) => eprintln!("Warning: Failed to remove dir {:?}: {}", dir, e),
+            }
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]

@@ -5,6 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import ToastHost from "./components/ToastHost";
+
 // Lazy load pages
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const NewRecording = lazy(() => import("./pages/NewRecording"));
@@ -107,6 +109,7 @@ function App() {
 
   return (
     <>
+      <ToastHost />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Dashboard />} />

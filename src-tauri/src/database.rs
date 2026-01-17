@@ -4,6 +4,14 @@ use std::path::PathBuf;
 use std::fs;
 use uuid::Uuid;
 
+#[derive(Debug, Clone)]
+pub struct DeleteRecordingCleanup {
+    pub files: Vec<PathBuf>,
+    pub dirs: Vec<PathBuf>,
+    /// Directory that must never be removed (even if empty).
+    pub protected_dir: PathBuf,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Recording {
     pub id: String,
@@ -511,41 +519,42 @@ impl Database {
         }
     }
 
-    pub fn delete_recording(&self, id: &str) -> Result<()> {
-        // Get screenshot paths to delete
+    pub fn delete_recording(&self, id: &str) -> Result<DeleteRecordingCleanup> {
+        // Collect screenshot paths from steps. Filesystem cleanup is intentionally not
+        // performed here because callers typically hold a mutex lock while calling.
         let mut stmt = self.conn.prepare(
             "SELECT screenshot_path FROM steps WHERE recording_id = ?1 AND screenshot_path IS NOT NULL"
         )?;
 
-        let paths: Vec<String> = stmt.query_map(params![id], |row| {
-            row.get(0)
-        })?.filter_map(|r| r.ok()).collect();
+        let screenshot_paths: Vec<String> = stmt
+            .query_map(params![id], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
 
-        // Collect unique parent directories
-        let mut dirs_to_check: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+        let mut files: Vec<PathBuf> = Vec::new();
+        let mut dirs: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
 
-        // Delete screenshot files
-        for path in paths {
+        for path in screenshot_paths {
             let path_buf = PathBuf::from(&path);
             if let Some(parent) = path_buf.parent() {
-                dirs_to_check.insert(parent.to_path_buf());
+                dirs.insert(parent.to_path_buf());
             }
-            let _ = fs::remove_file(&path);
+            files.push(path_buf);
         }
 
-        // Try to remove empty directories
-        for dir in dirs_to_check {
-            // Only remove if empty and not the default screenshots directory
-            if dir != self.screenshots_dir() && dir.exists() {
-                let _ = fs::remove_dir_all(&dir);
-            }
-        }
-
-        // Delete from database
+        // Delete from database.
         self.conn.execute("DELETE FROM steps WHERE recording_id = ?1", params![id])?;
         self.conn.execute("DELETE FROM recordings WHERE id = ?1", params![id])?;
 
-        Ok(())
+        // Protect the default screenshots directory from deletion, even if it is empty.
+        let protected_dir = self.get_default_screenshot_path();
+        dirs.remove(&protected_dir);
+
+        Ok(DeleteRecordingCleanup {
+            files,
+            dirs: dirs.into_iter().collect(),
+            protected_dir,
+        })
     }
 
     pub fn update_recording_name(&self, id: &str, name: &str) -> Result<()> {
