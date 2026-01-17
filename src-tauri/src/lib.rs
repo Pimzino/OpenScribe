@@ -14,7 +14,7 @@ use std::io::Write;
 use tauri::{AppHandle, State, Manager, Emitter};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
-use database::{Database, StepInput, Recording, RecordingWithSteps, DeleteRecordingCleanup};
+use database::{Database, StepInput, Recording, RecordingWithSteps, DeleteRecordingCleanup, PaginatedRecordings};
 
 pub struct DatabaseState(pub Mutex<Database>);
 
@@ -207,6 +207,19 @@ fn list_recordings(db: State<'_, DatabaseState>) -> Result<Vec<Recording>, Strin
     db.0.lock()
         .map_err(|e| e.to_string())?
         .list_recordings()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_recordings_paginated(
+    db: State<'_, DatabaseState>,
+    page: i32,
+    per_page: i32,
+    search: Option<String>
+) -> Result<PaginatedRecordings, String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .list_recordings_paginated(page, per_page, search.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -1003,6 +1016,7 @@ pub fn run() {
             save_steps_with_path,
             save_documentation,
             list_recordings,
+            list_recordings_paginated,
             get_recording,
             delete_recording,
             update_recording_name,

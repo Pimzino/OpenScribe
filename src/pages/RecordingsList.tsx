@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecordingsStore, Recording } from "../store/recordingsStore";
+import Pagination from "../components/Pagination";
 import { useRecorderStore } from "../store/recorderStore";
 import { FileText, Plus, Trash2, Search } from "lucide-react";
 import Tooltip from "../components/Tooltip";
@@ -8,18 +9,33 @@ import Sidebar from "../components/Sidebar";
 
 export default function RecordingsList() {
     const navigate = useNavigate();
-    const { recordings, fetchRecordings, deleteRecording, loading } = useRecordingsStore();
+    const { 
+        recordings, 
+        fetchRecordingsPaginated, 
+        deleteRecording, 
+        loading,
+        currentPage,
+        totalPages,
+        nextPage,
+        prevPage
+    } = useRecordingsStore();
     const { clearSteps } = useRecorderStore();
     const [searchQuery, setSearchQuery] = useState("");
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+    // Fetch recordings on mount
     useEffect(() => {
-        fetchRecordings();
-    }, [fetchRecordings]);
+        fetchRecordingsPaginated(1, "");
+    }, [fetchRecordingsPaginated]);
 
-    const filteredRecordings = recordings.filter(recording =>
-        recording.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Debounced search effect
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            fetchRecordingsPaginated(1, searchQuery);
+        }, 300);
+        
+        return () => clearTimeout(timer);
+    }, [searchQuery, fetchRecordingsPaginated]);
 
     const handleDelete = (id: string) => {
         setDeleteConfirm(null);
@@ -105,9 +121,10 @@ export default function RecordingsList() {
                     <div className="flex items-center justify-center h-64">
                         <div className="text-white/50">Loading recordings...</div>
                     </div>
-                ) : filteredRecordings.length > 0 ? (
+                ) : recordings.length > 0 ? (
+                    <>
                     <div className="glass-surface-2 rounded-xl divide-y divide-white/8 overflow-hidden">
-                        {filteredRecordings.map((recording: Recording) => (
+                        {recordings.map((recording: Recording) => (
                             <div
                                 key={recording.id}
                                 className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
@@ -144,6 +161,14 @@ export default function RecordingsList() {
                             </div>
                         ))}
                     </div>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPrevious={prevPage}
+                        onNext={nextPage}
+                        disabled={loading}
+                    />
+                    </>
                 ) : (
                     <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-white/20 rounded-lg text-white/50">
                         {searchQuery ? (

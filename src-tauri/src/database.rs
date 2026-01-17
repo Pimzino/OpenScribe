@@ -69,6 +69,15 @@ pub struct RecordingWithSteps {
     pub steps: Vec<Step>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedRecordings {
+    pub recordings: Vec<Recording>,
+    pub total_count: i64,
+    pub page: i32,
+    pub per_page: i32,
+    pub total_pages: i32,
+}
+
 pub struct Database {
     conn: Connection,
     data_dir: PathBuf,
@@ -450,6 +459,85 @@ impl Database {
         })?;
 
         recordings.collect()
+    }
+
+    pub fn list_recordings_paginated(&self, page: i32, per_page: i32, search: Option<&str>) -> Result<PaginatedRecordings> {
+        let offset = (page - 1) * per_page;
+        
+        // Build the WHERE clause for search
+        let search_clause = if search.is_some() {
+            "WHERE r.name LIKE ?1"
+        } else {
+            ""
+        };
+        
+        // Get total count
+        let count_sql = format!(
+            "SELECT COUNT(*) FROM recordings r {}",
+            search_clause
+        );
+        
+        let total_count: i64 = if let Some(ref search_term) = search {
+            let search_pattern = format!("%{}%", search_term);
+            self.conn.query_row(&count_sql, params![search_pattern], |row| row.get(0))?
+        } else {
+            self.conn.query_row(&count_sql, [], |row| row.get(0))?
+        };
+        
+        // Calculate total pages
+        let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i32;
+        
+        // Get paginated recordings
+        let query_sql = format!(
+            "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation, r.documentation_generated_at,
+                    (SELECT COUNT(*) FROM steps WHERE recording_id = r.id) as step_count
+             FROM recordings r
+             {}
+             ORDER BY r.updated_at DESC
+             LIMIT ?{} OFFSET ?{}",
+            search_clause,
+            if search.is_some() { "2" } else { "1" },
+            if search.is_some() { "3" } else { "2" }
+        );
+        
+        let recordings: Vec<Recording> = if let Some(ref search_term) = search {
+            let search_pattern = format!("%{}%", search_term);
+            let mut stmt = self.conn.prepare(&query_sql)?;
+            let rows = stmt.query_map(params![search_pattern, per_page, offset], |row| {
+                Ok(Recording {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    created_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    documentation: row.get(4)?,
+                    documentation_generated_at: row.get(5)?,
+                    step_count: row.get(6)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>>>()?
+        } else {
+            let mut stmt = self.conn.prepare(&query_sql)?;
+            let rows = stmt.query_map(params![per_page, offset], |row| {
+                Ok(Recording {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    created_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    documentation: row.get(4)?,
+                    documentation_generated_at: row.get(5)?,
+                    step_count: row.get(6)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>>>()?
+        };
+        
+        Ok(PaginatedRecordings {
+            recordings,
+            total_count,
+            page,
+            per_page,
+            total_pages,
+        })
     }
 
     pub fn get_recording(&self, id: &str) -> Result<Option<RecordingWithSteps>> {

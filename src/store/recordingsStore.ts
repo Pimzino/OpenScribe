@@ -53,11 +53,26 @@ export interface StepInput {
     is_cropped?: boolean;
 }
 
+export interface PaginatedRecordings {
+    recordings: Recording[];
+    total_count: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+}
+
 interface RecordingsState {
     recordings: Recording[];
     currentRecording: RecordingWithSteps | null;
     loading: boolean;
     error: string | null;
+
+    // Pagination state
+    currentPage: number;
+    perPage: number;
+    totalCount: number;
+    totalPages: number;
+    searchQuery: string;
 
     // Actions
     fetchRecordings: () => Promise<void>;
@@ -73,6 +88,11 @@ interface RecordingsState {
     updateStepOcr: (stepId: string, ocrText: string | null, ocrStatus: string) => Promise<void>;
     setCurrentRecording: (recording: RecordingWithSteps | null) => void;
     clearError: () => void;
+    fetchRecordingsPaginated: (page?: number, search?: string) => Promise<void>;
+    setSearchQuery: (query: string) => void;
+    goToPage: (page: number) => Promise<void>;
+    nextPage: () => Promise<void>;
+    prevPage: () => Promise<void>;
 }
 
 export const useRecordingsStore = create<RecordingsState>((set, get) => ({
@@ -80,6 +100,13 @@ export const useRecordingsStore = create<RecordingsState>((set, get) => ({
     currentRecording: null,
     loading: false,
     error: null,
+
+    // Pagination state
+    currentPage: 1,
+    perPage: 10,
+    totalCount: 0,
+    totalPages: 0,
+    searchQuery: "",
 
     fetchRecordings: async () => {
         set({ loading: true, error: null });
@@ -258,5 +285,55 @@ export const useRecordingsStore = create<RecordingsState>((set, get) => ({
 
     clearError: () => {
         set({ error: null });
+    },
+
+    fetchRecordingsPaginated: async (page?: number, search?: string) => {
+        const state = get();
+        const targetPage = page ?? state.currentPage;
+        const searchTerm = search !== undefined ? search : state.searchQuery;
+        
+        set({ loading: true, error: null });
+        try {
+            const result = await invoke<PaginatedRecordings>('list_recordings_paginated', {
+                page: targetPage,
+                perPage: state.perPage,
+                search: searchTerm || null
+            });
+            set({
+                recordings: result.recordings,
+                currentPage: result.page,
+                totalCount: result.total_count,
+                totalPages: result.total_pages,
+                searchQuery: searchTerm,
+                loading: false
+            });
+        } catch (error) {
+            set({ error: String(error), loading: false });
+        }
+    },
+
+    setSearchQuery: (query: string) => {
+        set({ searchQuery: query });
+    },
+
+    goToPage: async (page: number) => {
+        const { totalPages, fetchRecordingsPaginated } = get();
+        if (page >= 1 && page <= totalPages) {
+            await fetchRecordingsPaginated(page);
+        }
+    },
+
+    nextPage: async () => {
+        const { currentPage, totalPages, fetchRecordingsPaginated } = get();
+        if (currentPage < totalPages) {
+            await fetchRecordingsPaginated(currentPage + 1);
+        }
+    },
+
+    prevPage: async () => {
+        const { currentPage, fetchRecordingsPaginated } = get();
+        if (currentPage > 1) {
+            await fetchRecordingsPaginated(currentPage - 1);
+        }
     },
 }));

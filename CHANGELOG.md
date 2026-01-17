@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Inline recording rename - click the recording name in the detail view to edit it
+- Server-side pagination for My Recordings page - recordings are now loaded in pages of 10 for better performance
+- Server-side search - search queries are now processed by the database for faster filtering on large collections
 
 ### Improved
 - Streamlined navigation - app now opens directly to My Recordings, removing the redundant dashboard page
