@@ -558,10 +558,9 @@ impl Database {
     }
 
     pub fn update_recording_name(&self, id: &str, name: &str) -> Result<()> {
-        let now = chrono::Utc::now().timestamp_millis();
         self.conn.execute(
-            "UPDATE recordings SET name = ?1, updated_at = ?2 WHERE id = ?3",
-            params![name, now, id],
+            "UPDATE recordings SET name = ?1 WHERE id = ?2",
+            params![name, id],
         )?;
         Ok(())
     }
