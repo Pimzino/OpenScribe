@@ -933,6 +933,31 @@ fn update_step_ocr(
         .map_err(|e| e.to_string())
 }
 
+/// Update paths in settings.json that reference the old identifier.
+/// This is called after a successful folder migration.
+fn update_settings_paths(settings_path: &std::path::Path, old_identifier: &str, new_identifier: &str) {
+    // Read settings file if it exists
+    let content = match std::fs::read_to_string(settings_path) {
+        Ok(c) => c,
+        Err(_) => return, // No settings file to update
+    };
+    
+    // Check if the old identifier is present in the content
+    if !content.contains(old_identifier) {
+        return; // Nothing to update
+    }
+    
+    // Replace old identifier with new identifier in all paths
+    let updated_content = content.replace(old_identifier, new_identifier);
+    
+    // Write back the updated settings
+    if let Err(e) = std::fs::write(settings_path, updated_content) {
+        eprintln!("Warning: Could not update paths in settings.json: {}", e);
+    } else {
+        println!("Updated paths in settings.json: {} -> {}", old_identifier, new_identifier);
+    }
+}
+
 /// Migrate data from old "com.openscribe" identifier location to new "openscribe" location.
 /// Returns Ok(Some(message)) if user notification is needed, Ok(None) if silent success or nothing to do.
 fn migrate_from_old_identifier(new_data_dir: &std::path::Path) -> Result<Option<String>, String> {
@@ -970,6 +995,11 @@ fn migrate_from_old_identifier(new_data_dir: &std::path::Path) -> Result<Option<
         Ok(_) => {
             println!("Successfully migrated data from {} to {}", 
                      old_data_dir.display(), new_data_dir.display());
+            
+            // Update paths in settings.json that reference the old identifier
+            let settings_path = new_data_dir.join("settings.json");
+            update_settings_paths(&settings_path, "com.openscribe", "openscribe");
+            
             Ok(None) // Silent success
         }
         Err(e) => {
