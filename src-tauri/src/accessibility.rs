@@ -109,6 +109,8 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
                 y: f32,
                 element_at_position: *mut *mut std::ffi::c_void,
             ) -> i32;
+            // Reserved for future use when we implement full attribute reading
+            #[allow(dead_code)]
             fn AXUIElementCopyAttributeValue(
                 element: *mut std::ffi::c_void,
                 attribute: *const std::ffi::c_void,

@@ -485,7 +485,7 @@ mod windows_impl {
 #[cfg(target_os = "macos")]
 mod macos_impl {
     use objc2::rc::Retained;
-    use objc2::{msg_send, MainThreadOnly};
+    use objc2::msg_send;
     use objc2_app_kit::{
         NSBezierPath, NSColor, NSGraphicsContext, NSScreen, NSView, NSWindow, NSWindowStyleMask,
     };
@@ -508,53 +508,51 @@ mod macos_impl {
     // Custom view that draws the green border
     #[allow(dead_code)]
     fn draw_border_in_rect(rect: CGRect) {
-        unsafe {
-            // Get current graphics context
-            let context = NSGraphicsContext::currentContext();
-            if context.is_none() {
-                return;
-            }
-
-            // Set green color (RGB: 34, 197, 94 = #22c55e)
-            let green = NSColor::colorWithRed_green_blue_alpha(
-                34.0 / 255.0,
-                197.0 / 255.0,
-                94.0 / 255.0,
-                1.0,
-            );
-            green.set();
-
-            // Draw 4 border rectangles
-            let border = BORDER_WIDTH;
-
-            // Top border
-            let top = NSBezierPath::bezierPathWithRect(CGRect::new(
-                CGPoint::new(0.0, rect.size.height - border),
-                CGSize::new(rect.size.width, border),
-            ));
-            top.fill();
-
-            // Bottom border
-            let bottom = NSBezierPath::bezierPathWithRect(CGRect::new(
-                CGPoint::new(0.0, 0.0),
-                CGSize::new(rect.size.width, border),
-            ));
-            bottom.fill();
-
-            // Left border
-            let left = NSBezierPath::bezierPathWithRect(CGRect::new(
-                CGPoint::new(0.0, 0.0),
-                CGSize::new(border, rect.size.height),
-            ));
-            left.fill();
-
-            // Right border
-            let right = NSBezierPath::bezierPathWithRect(CGRect::new(
-                CGPoint::new(rect.size.width - border, 0.0),
-                CGSize::new(border, rect.size.height),
-            ));
-            right.fill();
+        // Get current graphics context
+        let context = NSGraphicsContext::currentContext();
+        if context.is_none() {
+            return;
         }
+
+        // Set green color (RGB: 34, 197, 94 = #22c55e)
+        let green = NSColor::colorWithRed_green_blue_alpha(
+            34.0 / 255.0,
+            197.0 / 255.0,
+            94.0 / 255.0,
+            1.0,
+        );
+        green.set();
+
+        // Draw 4 border rectangles
+        let border = BORDER_WIDTH;
+
+        // Top border
+        let top = NSBezierPath::bezierPathWithRect(CGRect::new(
+            CGPoint::new(0.0, rect.size.height - border),
+            CGSize::new(rect.size.width, border),
+        ));
+        top.fill();
+
+        // Bottom border
+        let bottom = NSBezierPath::bezierPathWithRect(CGRect::new(
+            CGPoint::new(0.0, 0.0),
+            CGSize::new(rect.size.width, border),
+        ));
+        bottom.fill();
+
+        // Left border
+        let left = NSBezierPath::bezierPathWithRect(CGRect::new(
+            CGPoint::new(0.0, 0.0),
+            CGSize::new(border, rect.size.height),
+        ));
+        left.fill();
+
+        // Right border
+        let right = NSBezierPath::bezierPathWithRect(CGRect::new(
+            CGPoint::new(rect.size.width - border, 0.0),
+            CGSize::new(border, rect.size.height),
+        ));
+        right.fill();
     }
 
     pub fn show_border(x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
@@ -569,12 +567,10 @@ mod macos_impl {
 
             // macOS uses bottom-left origin, so we need to flip Y coordinate
             // Get screen height to flip Y
-            let screen_height: CGFloat = unsafe {
-                if let Some(main_screen) = NSScreen::mainScreen(mtm) {
-                    main_screen.frame().size.height
-                } else {
-                    1080.0 // fallback
-                }
+            let screen_height: CGFloat = if let Some(main_screen) = NSScreen::mainScreen(mtm) {
+                main_screen.frame().size.height
+            } else {
+                1080.0 // fallback
             };
 
             let flipped_y = screen_height - y as CGFloat - height as CGFloat;
@@ -585,9 +581,7 @@ mod macos_impl {
 
             if let Some(ref window) = *guard {
                 // Move existing window
-                unsafe {
-                    window.setFrame_display(frame, true);
-                }
+                window.setFrame_display(frame, true);
                 return Ok(());
             }
 
