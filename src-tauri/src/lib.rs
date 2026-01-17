@@ -231,43 +231,124 @@ fn get_recording(db: State<'_, DatabaseState>, id: String) -> Result<Option<Reco
         .map_err(|e| e.to_string())
 }
 
+/// Progress event payload for delete operations
+#[derive(Clone, serde::Serialize)]
+struct DeleteProgress {
+    phase: String,
+    current: u32,
+    total: u32,
+    message: String,
+}
+
 #[tauri::command]
-fn delete_recording(db: State<'_, DatabaseState>, id: String) -> Result<(), String> {
+fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) -> Result<(), String> {
+    use std::fs;
+    use std::io;
+
+    // Emit initial progress
+    let _ = app.emit("delete-progress", DeleteProgress {
+        phase: "preparing".to_string(),
+        current: 0,
+        total: 0,
+        message: "Preparing to delete recording...".to_string(),
+    });
+
+    // Get cleanup info from database (this also deletes DB records)
     let cleanup: DeleteRecordingCleanup = {
         let db = db.0.lock().map_err(|e| e.to_string())?;
         db.delete_recording(&id).map_err(|e| e.to_string())?
     };
 
-    tauri::async_runtime::spawn_blocking(move || {
-        use std::fs;
-        use std::io;
-        use std::path::PathBuf;
-
-        for file in cleanup.files {
-            match fs::remove_file(&file) {
-                Ok(_) => {}
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                Err(e) => eprintln!("Warning: Failed to remove file {:?}: {}", file, e),
-            }
-        }
-
-        // Remove directories deepest-first, skipping protected dirs.
-        let mut dirs: Vec<PathBuf> = cleanup.dirs;
-        dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
-
-        for dir in dirs {
-            if dir == cleanup.protected_dir {
-                continue;
-            }
-
-            match fs::remove_dir(&dir) {
-                Ok(_) => {}
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                Err(e) if e.kind() == io::ErrorKind::DirectoryNotEmpty => {}
-                Err(e) => eprintln!("Warning: Failed to remove dir {:?}: {}", dir, e),
-            }
-        }
+    // Emit database deletion complete
+    let _ = app.emit("delete-progress", DeleteProgress {
+        phase: "database".to_string(),
+        current: 1,
+        total: 1,
+        message: "Database records removed".to_string(),
     });
+
+    let total_files = cleanup.files.len() as u32;
+    let mut deleted_count: u32 = 0;
+    let mut warnings: Vec<String> = Vec::new();
+
+    // Delete screenshot files synchronously with progress
+    for file in &cleanup.files {
+        let filename = file.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "file".to_string());
+        
+        let _ = app.emit("delete-progress", DeleteProgress {
+            phase: "screenshots".to_string(),
+            current: deleted_count + 1,
+            total: total_files,
+            message: format!("Deleting screenshot: {}", filename),
+        });
+
+        match fs::remove_file(file) {
+            Ok(_) => deleted_count += 1,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                // File already gone, count as success
+                deleted_count += 1;
+            }
+            Err(e) => {
+                warnings.push(format!("Failed to remove {:?}: {}", file, e));
+                deleted_count += 1; // Still increment to keep progress moving
+            }
+        }
+    }
+
+    // Remove directories deepest-first, skipping protected dirs
+    let mut dirs: Vec<PathBuf> = cleanup.dirs;
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+
+    let total_dirs = dirs.len() as u32;
+    let mut dir_count: u32 = 0;
+
+    for dir in dirs {
+        if dir == cleanup.protected_dir {
+            continue;
+        }
+
+        dir_count += 1;
+        let dirname = dir.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "folder".to_string());
+
+        let _ = app.emit("delete-progress", DeleteProgress {
+            phase: "directories".to_string(),
+            current: dir_count,
+            total: total_dirs,
+            message: format!("Cleaning up folder: {}", dirname),
+        });
+
+        match fs::remove_dir(&dir) {
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) if e.kind() == io::ErrorKind::DirectoryNotEmpty => {}
+            Err(e) => {
+                warnings.push(format!("Failed to remove dir {:?}: {}", dir, e));
+            }
+        }
+    }
+
+    // Emit completion
+    let final_message = if warnings.is_empty() {
+        "Recording deleted successfully".to_string()
+    } else {
+        format!("Recording deleted with {} warning(s)", warnings.len())
+    };
+
+    let _ = app.emit("delete-progress", DeleteProgress {
+        phase: "complete".to_string(),
+        current: total_files,
+        total: total_files,
+        message: final_message,
+    });
+
+    // Log any warnings to stderr for debugging
+    for warning in &warnings {
+        eprintln!("Delete warning: {}", warning);
+    }
 
     Ok(())
 }

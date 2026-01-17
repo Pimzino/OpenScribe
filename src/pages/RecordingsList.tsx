@@ -6,6 +6,7 @@ import { useRecorderStore } from "../store/recorderStore";
 import { FileText, Plus, Trash2, Search } from "lucide-react";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
+import DeleteProgressModal from "../components/DeleteProgressModal";
 
 export default function RecordingsList() {
     const navigate = useNavigate();
@@ -17,11 +18,13 @@ export default function RecordingsList() {
         currentPage,
         totalPages,
         nextPage,
-        prevPage
+        prevPage,
+        deletionProgress,
+        deletingRecordingName
     } = useRecordingsStore();
     const { clearSteps } = useRecorderStore();
     const [searchQuery, setSearchQuery] = useState("");
-    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
     // Fetch recordings on mount
     useEffect(() => {
@@ -37,9 +40,9 @@ export default function RecordingsList() {
         return () => clearTimeout(timer);
     }, [searchQuery, fetchRecordingsPaginated]);
 
-    const handleDelete = (id: string) => {
+    const handleDelete = (id: string, name: string) => {
         setDeleteConfirm(null);
-        deleteRecording(id).catch(() => undefined);
+        deleteRecording(id, name).catch(() => undefined);
     };
 
     const formatDate = (timestamp: number) => {
@@ -79,7 +82,7 @@ export default function RecordingsList() {
                                 Cancel
                             </button>
                             <button
-                                onClick={() => handleDelete(deleteConfirm)}
+                                onClick={() => handleDelete(deleteConfirm.id, deleteConfirm.name)}
                                 className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md font-medium transition-colors"
                             >
                                 Delete
@@ -150,7 +153,7 @@ export default function RecordingsList() {
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                setDeleteConfirm(recording.id);
+                                                setDeleteConfirm({ id: recording.id, name: recording.name });
                                             }}
                                             className="p-2 hover:bg-white/10 rounded-md transition-colors text-white/60 hover:text-red-500"
                                         >
@@ -187,6 +190,13 @@ export default function RecordingsList() {
                     </div>
                 )}
             </main>
+
+            {/* Delete Progress Modal */}
+            <DeleteProgressModal
+                isOpen={deletionProgress !== null}
+                recordingName={deletingRecordingName || ''}
+                progress={deletionProgress}
+            />
         </div>
     );
 }
