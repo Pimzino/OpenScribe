@@ -26,7 +26,7 @@ export default function RecordingDetail() {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
     const location = useLocation();
-    const { currentRecording, getRecording, saveDocumentation, loading } = useRecordingsStore();
+    const { currentRecording, getRecording, saveDocumentation, updateRecordingName, loading } = useRecordingsStore();
     const { isRecording, setIsRecording } = useRecorderStore();
     const { openaiApiKey, openaiBaseUrl, openaiModel, screenshotPath } = useSettingsStore();
     const {
@@ -61,6 +61,9 @@ export default function RecordingDetail() {
     const [isSelectingPosition, setIsSelectingPosition] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deletingStepId, setDeletingStepId] = useState<string | null>(null);
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editedName, setEditedName] = useState("");
+    const [nameSaving, setNameSaving] = useState(false);
     const hasTriggeredGeneration = useRef(false);
 
     const sensors = useSensors(
@@ -575,6 +578,50 @@ export default function RecordingDetail() {
         setCroppingStepId(null);
     };
 
+    const handleStartEditName = () => {
+        if (currentRecording) {
+            setEditedName(currentRecording.recording.name);
+            setIsEditingName(true);
+        }
+    };
+
+    const handleSaveName = async () => {
+        if (!id || !editedName.trim() || nameSaving) return;
+        
+        // Don't save if name hasn't changed
+        if (editedName.trim() === currentRecording?.recording.name) {
+            setIsEditingName(false);
+            return;
+        }
+        
+        setNameSaving(true);
+        try {
+            await updateRecordingName(id, editedName.trim());
+            await getRecording(id);
+            setIsEditingName(false);
+        } catch (error) {
+            console.error("Failed to rename recording:", error);
+            setError(error instanceof Error ? error.message : "Failed to rename recording");
+        } finally {
+            setNameSaving(false);
+        }
+    };
+
+    const handleCancelEditName = () => {
+        setIsEditingName(false);
+        setEditedName("");
+    };
+
+    const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleSaveName();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            handleCancelEditName();
+        }
+    };
+
     const croppingStep = croppingStepId ? currentRecording?.steps.find(s => s.id === croppingStepId) : null;
 
     // Check if documentation is stale (steps modified after documentation was generated)
@@ -653,7 +700,31 @@ export default function RecordingDetail() {
                             </button>
                         </Tooltip>
                         <div>
-                            <h2 className="text-2xl font-bold">{currentRecording.recording.name}</h2>
+                            {isEditingName ? (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={editedName}
+                                        onChange={(e) => setEditedName(e.target.value)}
+                                        onBlur={handleSaveName}
+                                        onKeyDown={handleNameKeyDown}
+                                        disabled={nameSaving}
+                                        autoFocus
+                                        className="text-2xl font-bold bg-white/10 border border-white/20 rounded-md px-2 py-1 focus:outline-none focus:border-[#2721E8] disabled:opacity-50"
+                                        style={{ minWidth: '200px' }}
+                                    />
+                                    {nameSaving && <Spinner size="sm" />}
+                                </div>
+                            ) : (
+                                <Tooltip content="Click to rename">
+                                    <h2
+                                        onClick={handleStartEditName}
+                                        className="text-2xl font-bold cursor-pointer hover:text-white/80 transition-colors"
+                                    >
+                                        {currentRecording.recording.name}
+                                    </h2>
+                                </Tooltip>
+                            )}
                             <p className="text-sm text-white/50">
                                 {currentRecording.steps.length} steps • Created {new Date(currentRecording.recording.created_at).toLocaleDateString()}
                             </p>

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-01-17
+
+### Added
+- Inline recording rename - click the recording name in the detail view to edit it
+
 ## [0.0.4] - 2026-01-16
 
 ### Added
