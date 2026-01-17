@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useRecordingsStore, Recording } from "../store/recordingsStore";
 import Pagination from "../components/Pagination";
 import { useRecorderStore } from "../store/recorderStore";
-import { FileText, Plus, Trash2, Search } from "lucide-react";
+import { FileText, Plus, Trash2, Search, X } from "lucide-react";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
 import DeleteProgressModal from "../components/DeleteProgressModal";
@@ -110,14 +110,23 @@ export default function RecordingsList() {
 
                 {/* Search */}
                 <div className="relative mb-6">
-                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50" />
+                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50 z-10 pointer-events-none" />
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search recordings..."
-                        className="w-full pl-10 pr-4 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8]"
+                        className="w-full pl-10 pr-10 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8]"
                     />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-white/50 hover:text-white transition-colors"
+                            aria-label="Clear search"
+                        >
+                            <X size={18} />
+                        </button>
+                    )}
                 </div>
 
                 {loading && recordings.length === 0 ? (

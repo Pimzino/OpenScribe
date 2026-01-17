@@ -17,9 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 - Streamlined navigation - app now opens directly to My Recordings, removing the redundant dashboard page
 - Simplified app data folder from `com.openscribe` to `openscribe` with automatic migration of existing data
+- Search field now includes a clear button for quick search reset
 
 ### Fixed
 - Screenshots not being deleted from disk when deleting recordings - now shows deletion progress in real-time
+- Search icon not displaying in the recordings search field
 
 ## [0.0.4] - 2026-01-16
 
