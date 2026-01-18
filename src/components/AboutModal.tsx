@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, RefreshCw } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import ChangelogModal from "./ChangelogModal";
+import { useUpdateStore } from "../store/updateStore";
 
 interface AboutModalProps {
     isOpen: boolean;
@@ -11,12 +12,34 @@ interface AboutModalProps {
 export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
     const [version, setVersion] = useState("");
     const [showChangelog, setShowChangelog] = useState(false);
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+    const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+    const { checkForUpdates, updateAvailable } = useUpdateStore();
 
     useEffect(() => {
         if (isOpen && !version) {
             getVersion().then(setVersion).catch(console.error);
         }
     }, [isOpen, version]);
+
+    const handleCheckForUpdates = async () => {
+        setIsCheckingUpdate(true);
+        setUpdateMessage(null);
+
+        try {
+            const hasUpdate = await checkForUpdates();
+            if (hasUpdate) {
+                setUpdateMessage("Update available! Check the notification.");
+                onClose();
+            } else {
+                setUpdateMessage("You're running the latest version.");
+            }
+        } catch {
+            setUpdateMessage("Failed to check for updates.");
+        } finally {
+            setIsCheckingUpdate(false);
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -43,9 +66,24 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                     </div>
                 </div>
 
-                <p className="text-sm text-white/70">
+                <p className="text-sm text-white/70 mb-4">
                     AI-powered documentation generator that captures your screen interactions and creates step-by-step guides automatically.
                 </p>
+
+                <button
+                    onClick={handleCheckForUpdates}
+                    disabled={isCheckingUpdate}
+                    className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-white/80 text-sm rounded-lg transition-colors border border-white/10"
+                >
+                    <RefreshCw size={14} className={isCheckingUpdate ? "animate-spin" : ""} />
+                    <span>{isCheckingUpdate ? "Checking..." : "Check for Updates"}</span>
+                </button>
+
+                {updateMessage && (
+                    <p className={`text-xs mt-2 ${updateAvailable ? "text-[#49B8D3]" : "text-white/50"}`}>
+                        {updateMessage}
+                    </p>
+                )}
             </div>
 
             <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />

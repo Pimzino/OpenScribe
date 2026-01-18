@@ -165,6 +165,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.args }}
 
@@ -175,8 +177,12 @@ jobs:
           path: |
             src-tauri/target/**/release/bundle/**/*.exe
             src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.msi.sig
             src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.app.tar.gz
+            src-tauri/target/**/release/bundle/**/*.app.tar.gz.sig
             src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.AppImage.sig
             src-tauri/target/**/release/bundle/**/*.deb
           if-no-files-found: error
           retention-days: 1
@@ -206,13 +212,75 @@ jobs:
           find artifacts -type f \( \
             -name "*.exe" -o \
             -name "*.msi" -o \
+            -name "*.msi.sig" -o \
             -name "*.dmg" -o \
+            -name "*.app.tar.gz" -o \
+            -name "*.app.tar.gz.sig" -o \
             -name "*.AppImage" -o \
+            -name "*.AppImage.sig" -o \
             -name "*.deb" \
           \) -exec cp {} release-files/ \;
 
           echo "Files to release:"
           ls -la release-files/
+
+      - name: Generate latest.json for updater
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          REPO="Pimzino/OpenScribe"
+
+          # Read signatures
+          WINDOWS_SIG=""
+          MACOS_ARM_SIG=""
+          MACOS_X64_SIG=""
+          LINUX_SIG=""
+
+          if [ -f "release-files/openscribe_${VERSION}_x64-setup.msi.sig" ]; then
+            WINDOWS_SIG=$(cat "release-files/openscribe_${VERSION}_x64-setup.msi.sig")
+          fi
+
+          if [ -f "release-files/openscribe.app.tar.gz.sig" ]; then
+            MACOS_ARM_SIG=$(cat "release-files/openscribe.app.tar.gz.sig")
+            MACOS_X64_SIG=$(cat "release-files/openscribe.app.tar.gz.sig")
+          fi
+
+          if [ -f "release-files/openscribe_${VERSION}_amd64.AppImage.sig" ]; then
+            LINUX_SIG=$(cat "release-files/openscribe_${VERSION}_amd64.AppImage.sig")
+          fi
+
+          # Get release notes
+          NOTES="${{ needs.validate.outputs.changelog }}"
+          NOTES_ESCAPED=$(echo "$NOTES" | jq -Rsa .)
+
+          # Generate latest.json
+          cat > release-files/latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": ${NOTES_ESCAPED},
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${WINDOWS_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/openscribe_${VERSION}_x64-setup.msi"
+              },
+              "darwin-aarch64": {
+                "signature": "${MACOS_ARM_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/openscribe_aarch64.app.tar.gz"
+              },
+              "darwin-x86_64": {
+                "signature": "${MACOS_X64_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/openscribe_x64.app.tar.gz"
+              },
+              "linux-x86_64": {
+                "signature": "${LINUX_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/openscribe_${VERSION}_amd64.AppImage"
+              }
+            }
+          }
+          EOF
+
+          echo "Generated latest.json:"
+          cat release-files/latest.json
 
       - name: Create GitHub Release
         env:

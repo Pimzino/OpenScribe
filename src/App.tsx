@@ -17,6 +17,8 @@ const MonitorPicker = lazy(() => import("./pages/MonitorPicker"));
 import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { useToastStore } from "./store/toastStore";
+import { useUpdateStore } from "./store/updateStore";
+import UpdateNotification from "./components/UpdateNotification";
 
 // Loading fallback component
 const PageLoader = () => (
@@ -74,6 +76,15 @@ function App() {
     };
   }, []);
 
+  // Check for updates after app loads
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      useUpdateStore.getState().checkForUpdates();
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   // Listen for hotkey events
   useEffect(() => {
     const unlistenStart = listen("hotkey-start", async () => {
@@ -126,6 +137,7 @@ function App() {
   return (
     <>
       <ToastHost />
+      <UpdateNotification />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<RecordingsList />} />

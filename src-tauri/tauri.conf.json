@@ -41,6 +41,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -57,6 +58,17 @@
         "appPosition": { "x": 180, "y": 170 },
         "applicationFolderPosition": { "x": 480, "y": 170 },
         "windowSize": { "width": 660, "height": 400 }
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDA4RTkxNzQ2Q0RFQUM3QUQKUldTdHgrck5SaGZwQ080WDJYMEFJNUVrK0tJWTc3MDlHZnpZT2ZRcG0xQXpJaU1CcG1HbW1PZGsK",
+      "endpoints": [
+        "https://github.com/Pimzino/OpenScribe/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

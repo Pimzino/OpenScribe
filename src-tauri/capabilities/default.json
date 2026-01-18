@@ -23,6 +23,8 @@
     },
     "store:default",
     "dialog:default",
+    "updater:default",
+    "process:allow-restart",
     "core:window:allow-minimize",
     "core:window:allow-unminimize",
     "core:window:allow-set-focus"
