@@ -1,4 +1,4 @@
-import { X, Plus, RefreshCw, Wrench } from "lucide-react";
+import { X, Plus, RefreshCw, Wrench, Sparkles } from "lucide-react";
 import { currentChangelog, ChangelogSection } from "../lib/changelog-data";
 
 interface ChangelogModalProps {
@@ -14,6 +14,8 @@ function getSectionIcon(title: string) {
             return <RefreshCw size={14} className="text-[#49B8D3]" />;
         case "fixed":
             return <Wrench size={14} className="text-[#FF6B35]" />;
+        case "improved":
+            return <Sparkles size={14} className="text-violet-400" />;
         default:
             return null;
     }
@@ -27,6 +29,8 @@ function getSectionColor(title: string) {
             return "text-[#49B8D3]";
         case "fixed":
             return "text-[#FF6B35]";
+        case "improved":
+            return "text-violet-400";
         default:
             return "text-zinc-400";
     }
