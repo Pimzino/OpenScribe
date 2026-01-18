@@ -46,7 +46,6 @@
     "codemirror": "^6.0.2",
     "docx": "^9.5.1",
     "fabric": "^6.9.0",
-    "html2pdf.js": "^0.12.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.554.0",
     "pdfmake": "^0.2.20",
@@ -65,11 +64,15 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
-    "@types/html2pdf.js": "^0.10.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "baseline-browser-mapping": "^2.9.15",
     "typescript": "~5.8.3",
     "vite": "^6.4.1"
+  },
+  "overrides": {
+    "tar": "^7.5.3",
+    "canvas": "$canvas"
   }
 }
