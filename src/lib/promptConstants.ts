@@ -1,11 +1,126 @@
-// Default style guidelines - user can customize these in Settings
-// These control writing style, tone, and mood only
-export const DEFAULT_STYLE_GUIDELINES = `Writing Style:
-- Use imperative mood (e.g., "Click", "Type", "Select", "Verify")
-- Keep descriptions concise (1-2 sentences maximum)
-- Use a professional, technical tone
-- Be specific about UI elements and locations
-- For verification steps, describe expected outcomes clearly`;
+// ============================================
+// STRUCTURED WRITING STYLE OPTIONS
+// ============================================
+
+export type ToneOption = 'professional' | 'friendly' | 'technical' | 'direct';
+export type AudienceOption = 'beginner' | 'intermediate' | 'expert';
+export type VerbosityOption = 'concise' | 'standard' | 'detailed';
+export type BrandVoiceOption = 'neutral' | 'helpful' | 'authoritative';
+
+export interface WritingStyleOptions {
+    tone: ToneOption;
+    audience: AudienceOption;
+    verbosity: VerbosityOption;
+    brandVoice: BrandVoiceOption;
+}
+
+// Default values
+export const DEFAULT_WRITING_STYLE: WritingStyleOptions = {
+    tone: 'professional',
+    audience: 'intermediate',
+    verbosity: 'standard',
+    brandVoice: 'neutral',
+};
+
+// Option definitions with labels and descriptions for the UI
+export const TONE_OPTIONS: { value: ToneOption; label: string; description: string }[] = [
+    { value: 'professional', label: 'Professional', description: 'Clear, business-appropriate language' },
+    { value: 'friendly', label: 'Friendly', description: 'Warm, approachable, and encouraging' },
+    { value: 'technical', label: 'Technical', description: 'Precise terminology, assumes expertise' },
+    { value: 'direct', label: 'Direct', description: 'Minimal words, straight to the point' },
+];
+
+export const AUDIENCE_OPTIONS: { value: AudienceOption; label: string; description: string }[] = [
+    { value: 'beginner', label: 'Beginner', description: 'Detailed explanations, no assumptions' },
+    { value: 'intermediate', label: 'Intermediate', description: 'Balanced detail level' },
+    { value: 'expert', label: 'Expert', description: 'Assumes familiarity, minimal hand-holding' },
+];
+
+export const VERBOSITY_OPTIONS: { value: VerbosityOption; label: string; description: string }[] = [
+    { value: 'concise', label: 'Concise', description: 'Brief, essential information only' },
+    { value: 'standard', label: 'Standard', description: 'Balanced amount of detail' },
+    { value: 'detailed', label: 'Detailed', description: 'Thorough explanations with context' },
+];
+
+export const BRAND_VOICE_OPTIONS: { value: BrandVoiceOption; label: string; description: string }[] = [
+    { value: 'neutral', label: 'Neutral', description: 'No particular personality' },
+    { value: 'helpful', label: 'Helpful', description: 'Supportive and reassuring' },
+    { value: 'authoritative', label: 'Authoritative', description: 'Confident and expert-led' },
+];
+
+/**
+ * Builds structured style guidelines from the options
+ */
+export function buildStyleGuidelines(options: WritingStyleOptions): string {
+    const guidelines: string[] = ['=== WRITING STYLE GUIDELINES ==='];
+
+    // Tone guidelines
+    switch (options.tone) {
+        case 'professional':
+            guidelines.push('TONE: Use professional, business-appropriate language. Maintain clarity and precision.');
+            break;
+        case 'friendly':
+            guidelines.push('TONE: Use warm, approachable language. Be encouraging and supportive. Use phrases like "Go ahead and..." or "Simply..." when appropriate.');
+            break;
+        case 'technical':
+            guidelines.push('TONE: Use precise technical terminology. Be exact and specific. Assume the reader understands technical concepts.');
+            break;
+        case 'direct':
+            guidelines.push('TONE: Be extremely concise. No filler words. Get straight to the action.');
+            break;
+    }
+
+    // Audience guidelines
+    switch (options.audience) {
+        case 'beginner':
+            guidelines.push('AUDIENCE: Writing for beginners. Explain every step thoroughly. Don\'t assume prior knowledge. Include context about why each action matters.');
+            break;
+        case 'intermediate':
+            guidelines.push('AUDIENCE: Writing for intermediate users. Provide clear instructions without over-explaining common concepts.');
+            break;
+        case 'expert':
+            guidelines.push('AUDIENCE: Writing for experts. Keep instructions minimal. Skip obvious details. Focus on what matters.');
+            break;
+    }
+
+    // Verbosity guidelines
+    switch (options.verbosity) {
+        case 'concise':
+            guidelines.push('DETAIL LEVEL: Keep descriptions to a single sentence. Only essential information. No elaboration.');
+            break;
+        case 'standard':
+            guidelines.push('DETAIL LEVEL: Use 1-2 sentences per step. Include necessary context but stay focused.');
+            break;
+        case 'detailed':
+            guidelines.push('DETAIL LEVEL: Provide thorough descriptions. Include context, purpose, and expected outcomes when helpful.');
+            break;
+    }
+
+    // Brand voice guidelines
+    switch (options.brandVoice) {
+        case 'neutral':
+            // No additional guidelines for neutral
+            break;
+        case 'helpful':
+            guidelines.push('VOICE: Be supportive and reassuring. Use encouraging language. Acknowledge that tasks can be completed successfully.');
+            break;
+        case 'authoritative':
+            guidelines.push('VOICE: Project confidence and expertise. Use definitive language. Guide the reader with authority.');
+            break;
+    }
+
+    // Common guidelines that always apply
+    guidelines.push('');
+    guidelines.push('ALWAYS:');
+    guidelines.push('- Use imperative mood (e.g., "Click", "Type", "Select", "Verify")');
+    guidelines.push('- Be specific about UI elements and their locations');
+    guidelines.push('- For verification steps, describe expected outcomes clearly');
+
+    return guidelines.join('\n');
+}
+
+// Legacy: Default style guidelines as string (for backwards compatibility during migration)
+export const DEFAULT_STYLE_GUIDELINES = buildStyleGuidelines(DEFAULT_WRITING_STYLE);
 
 // Hardcoded technical instructions - NOT user-configurable
 // These ensure the AI correctly interprets screenshots, metadata, OCR text, and action types
@@ -193,15 +308,16 @@ PRIORITIZE INTENT OVER LITERAL ACTIONS:
  * with customizable style guidelines.
  *
  * @param sendScreenshots - Whether screenshots are being sent to the AI
- * @param customGuidelines - User's custom guidelines (empty string = use default)
+ * @param writingStyle - Structured writing style options
  * @returns Complete system prompt string
  */
-export function buildSystemPrompt(sendScreenshots: boolean, customGuidelines?: string): string {
+export function buildSystemPrompt(sendScreenshots: boolean, writingStyle?: WritingStyleOptions): string {
     const technical = sendScreenshots
         ? TECHNICAL_INSTRUCTIONS_WITH_SCREENSHOTS
         : TECHNICAL_INSTRUCTIONS_WITHOUT_SCREENSHOTS;
 
-    const guidelines = customGuidelines?.trim() || DEFAULT_STYLE_GUIDELINES;
+    const styleOptions = writingStyle || DEFAULT_WRITING_STYLE;
+    const guidelines = buildStyleGuidelines(styleOptions);
 
     return `${technical}
 

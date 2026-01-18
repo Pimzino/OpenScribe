@@ -176,9 +176,9 @@ async function generateStepDescription(
     sendScreenshots: boolean,
     workflowTitle?: string
 ): Promise<string> {
-    // Get custom guidelines from settings (empty = use default)
-    const styleGuidelines = useSettingsStore.getState().styleGuidelines;
-    const systemPrompt = buildSystemPrompt(sendScreenshots, styleGuidelines);
+    // Get writing style options from settings
+    const writingStyle = useSettingsStore.getState().writingStyle;
+    const systemPrompt = buildSystemPrompt(sendScreenshots, writingStyle);
 
     let actionDescription: string;
     if (step.type_ === 'click') {
@@ -613,8 +613,8 @@ async function generateStepDescriptionStreaming(
     abortSignal?: AbortSignal,
     workflowTitle?: string
 ): Promise<string> {
-    const styleGuidelines = useSettingsStore.getState().styleGuidelines;
-    const systemPrompt = buildSystemPrompt(sendScreenshots, styleGuidelines);
+    const writingStyle = useSettingsStore.getState().writingStyle;
+    const systemPrompt = buildSystemPrompt(sendScreenshots, writingStyle);
 
     let actionDescription: string;
     if (step.type_ === 'click') {

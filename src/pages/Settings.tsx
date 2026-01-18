@@ -9,7 +9,12 @@ import Sidebar from "../components/Sidebar";
 import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
 import { PROVIDERS, getProvider, testConnection, fetchModels } from "../lib/providers";
-import { DEFAULT_STYLE_GUIDELINES } from "../lib/promptConstants";
+import {
+    TONE_OPTIONS,
+    AUDIENCE_OPTIONS,
+    VERBOSITY_OPTIONS,
+    BRAND_VOICE_OPTIONS,
+} from "../lib/promptConstants";
 
 export default function Settings() {
     const navigate = useNavigate();
@@ -20,7 +25,7 @@ export default function Settings() {
         openaiModel,
         screenshotPath,
         sendScreenshotsToAi,
-        styleGuidelines,
+        writingStyle,
         enableAutoRetry,
         maxRetryAttempts,
         initialRetryDelayMs,
@@ -35,7 +40,11 @@ export default function Settings() {
         setOpenaiModel,
         setScreenshotPath,
         setSendScreenshotsToAi,
-        setStyleGuidelines,
+        setWritingStyleTone,
+        setWritingStyleAudience,
+        setWritingStyleVerbosity,
+        setWritingStyleBrandVoice,
+        resetWritingStyle,
         setEnableAutoRetry,
         setMaxRetryAttempts,
         setInitialRetryDelayMs,
@@ -719,7 +728,7 @@ export default function Settings() {
                             )}
                         </div>
 
-                        {/* Writing Style Guidelines - Collapsible Section */}
+                        {/* Writing Style - Collapsible Section */}
                         <div className="mt-6 border-t border-white/8 pt-6">
                             <button
                                 onClick={() => setGuidelinesExpanded(!guidelinesExpanded)}
@@ -727,7 +736,7 @@ export default function Settings() {
                             >
                                 <div>
                                     <h4 className="text-sm font-medium text-white/80">
-                                        Writing Style Guidelines
+                                        Writing Style
                                     </h4>
                                     <p className="text-xs text-white/50 mt-1">
                                         Customize how the AI writes step descriptions
@@ -740,37 +749,109 @@ export default function Settings() {
                             </button>
 
                             {guidelinesExpanded && (
-                                <div className="mt-4">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-sm font-medium text-white/60">
-                                            Custom Guidelines
+                                <div className="mt-4 space-y-4">
+                                    {/* Tone */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/60 mb-2">
+                                            Tone
                                         </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {TONE_OPTIONS.map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => setWritingStyleTone(option.value)}
+                                                    className={`px-3 py-2 rounded-md text-sm text-left transition-all ${
+                                                        writingStyle.tone === option.value
+                                                            ? 'bg-[#2721E8] text-white'
+                                                            : 'bg-[#161316]/70 text-white/70 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="font-medium">{option.label}</div>
+                                                    <div className="text-xs opacity-70 mt-0.5">{option.description}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Audience */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/60 mb-2">
+                                            Audience
+                                        </label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {AUDIENCE_OPTIONS.map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => setWritingStyleAudience(option.value)}
+                                                    className={`px-3 py-2 rounded-md text-sm text-left transition-all ${
+                                                        writingStyle.audience === option.value
+                                                            ? 'bg-[#2721E8] text-white'
+                                                            : 'bg-[#161316]/70 text-white/70 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="font-medium">{option.label}</div>
+                                                    <div className="text-xs opacity-70 mt-0.5">{option.description}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Detail Level */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/60 mb-2">
+                                            Detail Level
+                                        </label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {VERBOSITY_OPTIONS.map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => setWritingStyleVerbosity(option.value)}
+                                                    className={`px-3 py-2 rounded-md text-sm text-left transition-all ${
+                                                        writingStyle.verbosity === option.value
+                                                            ? 'bg-[#2721E8] text-white'
+                                                            : 'bg-[#161316]/70 text-white/70 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="font-medium">{option.label}</div>
+                                                    <div className="text-xs opacity-70 mt-0.5">{option.description}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Brand Voice */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/60 mb-2">
+                                            Brand Voice
+                                        </label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {BRAND_VOICE_OPTIONS.map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => setWritingStyleBrandVoice(option.value)}
+                                                    className={`px-3 py-2 rounded-md text-sm text-left transition-all ${
+                                                        writingStyle.brandVoice === option.value
+                                                            ? 'bg-[#2721E8] text-white'
+                                                            : 'bg-[#161316]/70 text-white/70 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="font-medium">{option.label}</div>
+                                                    <div className="text-xs opacity-70 mt-0.5">{option.description}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Reset button */}
+                                    <div className="flex justify-end pt-2">
                                         <button
-                                            onClick={() => setStyleGuidelines("")}
-                                            className="text-xs text-[#49B8D3] hover:text-[#5fc5e0] transition-colors"
+                                            onClick={resetWritingStyle}
+                                            className="text-xs text-[#49B8D3] hover:text-[#5fc5e0] transition-colors flex items-center gap-1"
                                         >
-                                            Reset to Default
+                                            <RotateCcw size={12} />
+                                            Reset to Defaults
                                         </button>
                                     </div>
-                                    <textarea
-                                        value={styleGuidelines || DEFAULT_STYLE_GUIDELINES}
-                                        onChange={(e) => {
-                                            const newValue = e.target.value;
-                                            // Store empty string if it matches default exactly
-                                            if (newValue === DEFAULT_STYLE_GUIDELINES) {
-                                                setStyleGuidelines("");
-                                            } else {
-                                                setStyleGuidelines(newValue);
-                                            }
-                                        }}
-                                        placeholder={DEFAULT_STYLE_GUIDELINES}
-                                        rows={8}
-                                        className="w-full px-4 py-3 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white text-sm font-mono placeholder-white/30 focus:outline-none focus:border-[#2721E8] transition-colors resize-y"
-                                    />
-                                    <p className="mt-2 text-xs text-white/50">
-                                        These guidelines tell the AI how to write step descriptions.
-                                        Technical instructions for handling clicks, typing, and screenshots are applied automatically.
-                                    </p>
                                 </div>
                             )}
                         </div>

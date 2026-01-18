@@ -2,6 +2,14 @@ import { create } from "zustand";
 import { load, Store } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
 import { getProvider, getDefaultProvider } from "../lib/providers";
+import {
+    WritingStyleOptions,
+    ToneOption,
+    AudienceOption,
+    VerbosityOption,
+    BrandVoiceOption,
+    DEFAULT_WRITING_STYLE,
+} from "../lib/promptConstants";
 
 export interface HotkeyBinding {
     ctrl: boolean;
@@ -17,7 +25,8 @@ interface SettingsState {
     openaiModel: string;
     screenshotPath: string;
     sendScreenshotsToAi: boolean;
-    styleGuidelines: string; // Custom AI style guidelines (empty = use default)
+    // Structured writing style options
+    writingStyle: WritingStyleOptions;
     // Rate limit mitigation settings
     enableAutoRetry: boolean;
     maxRetryAttempts: number;
@@ -34,7 +43,11 @@ interface SettingsState {
     setOpenaiModel: (model: string) => void;
     setScreenshotPath: (path: string) => void;
     setSendScreenshotsToAi: (enabled: boolean) => void;
-    setStyleGuidelines: (guidelines: string) => void;
+    setWritingStyleTone: (tone: ToneOption) => void;
+    setWritingStyleAudience: (audience: AudienceOption) => void;
+    setWritingStyleVerbosity: (verbosity: VerbosityOption) => void;
+    setWritingStyleBrandVoice: (brandVoice: BrandVoiceOption) => void;
+    resetWritingStyle: () => void;
     setEnableAutoRetry: (enabled: boolean) => void;
     setMaxRetryAttempts: (attempts: number) => void;
     setInitialRetryDelayMs: (delay: number) => void;
@@ -75,7 +88,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     openaiModel: getDefaultProvider().defaultModel || "",
     screenshotPath: "",
     sendScreenshotsToAi: true, // Default: send screenshots to AI
-    styleGuidelines: "", // Empty = use default guidelines
+    writingStyle: { ...DEFAULT_WRITING_STYLE },
     enableAutoRetry: defaultEnableAutoRetry,
     maxRetryAttempts: defaultMaxRetryAttempts,
     initialRetryDelayMs: defaultInitialRetryDelayMs,
@@ -105,7 +118,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     setOpenaiModel: (model) => set({ openaiModel: model }),
     setScreenshotPath: (path) => set({ screenshotPath: path }),
     setSendScreenshotsToAi: (enabled) => set({ sendScreenshotsToAi: enabled }),
-    setStyleGuidelines: (guidelines) => set({ styleGuidelines: guidelines }),
+    setWritingStyleTone: (tone) => set((state) => ({
+        writingStyle: { ...state.writingStyle, tone }
+    })),
+    setWritingStyleAudience: (audience) => set((state) => ({
+        writingStyle: { ...state.writingStyle, audience }
+    })),
+    setWritingStyleVerbosity: (verbosity) => set((state) => ({
+        writingStyle: { ...state.writingStyle, verbosity }
+    })),
+    setWritingStyleBrandVoice: (brandVoice) => set((state) => ({
+        writingStyle: { ...state.writingStyle, brandVoice }
+    })),
+    resetWritingStyle: () => set({ writingStyle: { ...DEFAULT_WRITING_STYLE } }),
     setEnableAutoRetry: (enabled) => set({ enableAutoRetry: enabled }),
     setMaxRetryAttempts: (attempts) => set({ maxRetryAttempts: Math.max(1, Math.min(10, attempts)) }),
     setInitialRetryDelayMs: (delay) => set({ initialRetryDelayMs: Math.max(100, Math.min(5000, delay)) }),
@@ -133,7 +158,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             const model = await store.get<string>("openaiModel");
             const screenshotPath = await store.get<string>("screenshotPath");
             const sendScreenshotsToAi = await store.get<boolean>("sendScreenshotsToAi");
-            const styleGuidelines = await store.get<string>("styleGuidelines");
+            const writingStyle = await store.get<WritingStyleOptions>("writingStyle");
             const enableAutoRetry = await store.get<boolean>("enableAutoRetry");
             const maxRetryAttempts = await store.get<number>("maxRetryAttempts");
             const initialRetryDelayMs = await store.get<number>("initialRetryDelayMs");
@@ -174,6 +199,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 console.error("Failed to sync OCR state with backend:", error);
             }
 
+            // Merge loaded writing style with defaults (handles missing fields from old versions)
+            const mergedWritingStyle: WritingStyleOptions = {
+                ...DEFAULT_WRITING_STYLE,
+                ...(writingStyle || {}),
+            };
+
             set({
                 aiProvider: aiProvider || defaultProvider.id,
                 openaiBaseUrl: baseUrl || providerConfig?.defaultBaseUrl || defaultProvider.defaultBaseUrl,
@@ -181,7 +212,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 openaiModel: model || providerConfig?.defaultModel || "",
                 screenshotPath: finalScreenshotPath,
                 sendScreenshotsToAi: ocrEnabled,
-                styleGuidelines: styleGuidelines || "",
+                writingStyle: mergedWritingStyle,
                 enableAutoRetry: enableAutoRetry ?? defaultEnableAutoRetry,
                 maxRetryAttempts: maxRetryAttempts ?? defaultMaxRetryAttempts,
                 initialRetryDelayMs: initialRetryDelayMs ?? defaultInitialRetryDelayMs,
@@ -201,7 +232,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     saveSettings: async () => {
         try {
             const store = await getStore();
-            const { aiProvider, openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, sendScreenshotsToAi, styleGuidelines, enableAutoRetry, maxRetryAttempts, initialRetryDelayMs, enableRequestThrottling, throttleDelayMs, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
+            const { aiProvider, openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, sendScreenshotsToAi, writingStyle, enableAutoRetry, maxRetryAttempts, initialRetryDelayMs, enableRequestThrottling, throttleDelayMs, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
 
             await store.set("aiProvider", aiProvider);
             await store.set("openaiBaseUrl", openaiBaseUrl);
@@ -209,7 +240,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             await store.set("openaiModel", openaiModel);
             await store.set("screenshotPath", screenshotPath);
             await store.set("sendScreenshotsToAi", sendScreenshotsToAi);
-            await store.set("styleGuidelines", styleGuidelines);
+            await store.set("writingStyle", writingStyle);
             await store.set("enableAutoRetry", enableAutoRetry);
             await store.set("maxRetryAttempts", maxRetryAttempts);
             await store.set("initialRetryDelayMs", initialRetryDelayMs);
