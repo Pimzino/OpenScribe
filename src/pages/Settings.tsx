@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSettingsStore, HotkeyBinding } from "../store/settingsStore";
-import { Save, Eye, EyeOff, FolderOpen, RotateCcw, ChevronDown, RefreshCw, Check, X, ExternalLink } from "lucide-react";
+import { Eye, EyeOff, FolderOpen, RotateCcw, ChevronDown, RefreshCw, Check, X, ExternalLink } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
@@ -53,15 +53,12 @@ export default function Settings() {
         setStartRecordingHotkey,
         setStopRecordingHotkey,
         setCaptureHotkey,
-        saveSettings,
         loadSettings,
         isLoaded,
         getDefaultScreenshotPath,
     } = useSettingsStore();
 
     const [showApiKey, setShowApiKey] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
     const [capturingHotkey, setCapturingHotkey] = useState<"start" | "stop" | "capture" | null>(null);
     const [pathError, setPathError] = useState<string | null>(null);
     const [validatingPath, setValidatingPath] = useState(false);
@@ -266,19 +263,6 @@ export default function Settings() {
         document.addEventListener('click', handleClickOutside);
         return () => document.removeEventListener('click', handleClickOutside);
     }, []);
-
-    const handleSave = async () => {
-        setSaving(true);
-        try {
-            await saveSettings();
-            setSaved(true);
-            setTimeout(() => setSaved(false), 2000);
-        } catch (error) {
-            console.error("Failed to save settings:", error);
-        } finally {
-            setSaving(false);
-        }
-    };
 
     const handleNavigate = (page: "recordings" | "settings") => {
         if (page === "recordings") navigate("/");
@@ -936,22 +920,6 @@ export default function Settings() {
                             <p className="mt-2 text-xs text-white/50">
                                 Click on a field and press your desired key combination
                             </p>
-                        </div>
-
-                        {/* Save Button */}
-                        <div className="pt-4">
-                            <button
-                                onClick={handleSave}
-                                disabled={saving || (currentProvider?.requiresApiKey && !!apiKeyError) || hotkeysMatch}
-                                className={`flex items-center gap-2 px-6 py-2 rounded-md font-medium transition-colors ${
-                                    saved
-                                        ? "bg-green-600 hover:bg-green-700"
-                                        : "bg-[#2721E8] hover:bg-[#4a45f5]"
-                                } ${saving || (currentProvider?.requiresApiKey && !!apiKeyError) || hotkeysMatch ? "opacity-50 cursor-not-allowed" : ""}`}
-                            >
-                                {saving ? <Spinner size="sm" /> : <Save size={16} />}
-                                {saving ? "Saving..." : saved ? "Saved!" : "Save Settings"}
-                            </button>
                         </div>
                     </div>
                 </div>

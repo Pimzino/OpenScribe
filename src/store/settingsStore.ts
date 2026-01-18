@@ -81,6 +81,24 @@ const defaultInitialRetryDelayMs = 1000;
 const defaultEnableRequestThrottling = false;
 const defaultThrottleDelayMs = 500;
 
+// Debounced auto-save mechanism
+let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+const AUTO_SAVE_DELAY_MS = 500;
+
+function debouncedAutoSave(saveSettings: () => Promise<void>) {
+    if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+    }
+    autoSaveTimeout = setTimeout(async () => {
+        try {
+            await saveSettings();
+            console.log("Settings auto-saved");
+        } catch (error) {
+            console.error("Auto-save failed:", error);
+        }
+    }, AUTO_SAVE_DELAY_MS);
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     aiProvider: getDefaultProvider().id,
     openaiBaseUrl: getDefaultProvider().defaultBaseUrl,
@@ -272,3 +290,27 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         }
     },
 }));
+
+// Subscribe to store changes and trigger debounced auto-save
+// Only auto-save after settings have been loaded initially
+useSettingsStore.subscribe((state, prevState) => {
+    // Don't auto-save during initial load or before settings are loaded
+    if (!state.isLoaded || !prevState.isLoaded) {
+        return;
+    }
+
+    // Dynamically check if any setting value changed
+    // Exclude functions and isLoaded from comparison
+    const settingsChanged = Object.keys(state).some((key) => {
+        const value = state[key as keyof typeof state];
+        // Skip functions and isLoaded flag
+        if (typeof value === "function" || key === "isLoaded") {
+            return false;
+        }
+        return value !== prevState[key as keyof typeof prevState];
+    });
+
+    if (settingsChanged) {
+        debouncedAutoSave(state.saveSettings);
+    }
+});

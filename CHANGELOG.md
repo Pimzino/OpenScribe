@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.6] - 2026-01-18
 
 ### Improved
+- Settings now auto-save automatically when changed, removing the need for a manual save button
 - Writing Style settings now use structured options (Tone, Audience, Detail Level, Brand Voice) instead of free-text input, making it easier to customize AI-generated documentation
 
 ## [0.0.5] - 2026-01-17
