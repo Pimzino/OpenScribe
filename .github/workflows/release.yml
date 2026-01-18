@@ -229,27 +229,48 @@ jobs:
           VERSION="${{ needs.validate.outputs.version }}"
           REPO="Pimzino/OpenScribe"
 
+          echo "Available release files:"
+          ls -la release-files/
+
+          # Find actual filenames (Tauri naming can vary)
+          WINDOWS_MSI=$(ls release-files/*.msi 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          MACOS_ARM_TAR=$(ls release-files/*aarch64*.app.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          MACOS_X64_TAR=$(ls release-files/*x64*.app.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          LINUX_APPIMAGE=$(ls release-files/*.AppImage 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+
+          echo "Detected files:"
+          echo "  Windows MSI: $WINDOWS_MSI"
+          echo "  macOS ARM: $MACOS_ARM_TAR"
+          echo "  macOS x64: $MACOS_X64_TAR"
+          echo "  Linux AppImage: $LINUX_APPIMAGE"
+
           # Read signatures
           WINDOWS_SIG=""
           MACOS_ARM_SIG=""
           MACOS_X64_SIG=""
           LINUX_SIG=""
 
-          if [ -f "release-files/openscribe_${VERSION}_x64-setup.msi.sig" ]; then
-            WINDOWS_SIG=$(cat "release-files/openscribe_${VERSION}_x64-setup.msi.sig")
+          if [ -n "$WINDOWS_MSI" ] && [ -f "release-files/${WINDOWS_MSI}.sig" ]; then
+            WINDOWS_SIG=$(cat "release-files/${WINDOWS_MSI}.sig")
           fi
 
-          if [ -f "release-files/openscribe.app.tar.gz.sig" ]; then
-            MACOS_ARM_SIG=$(cat "release-files/openscribe.app.tar.gz.sig")
-            MACOS_X64_SIG=$(cat "release-files/openscribe.app.tar.gz.sig")
+          if [ -n "$MACOS_ARM_TAR" ] && [ -f "release-files/${MACOS_ARM_TAR}.sig" ]; then
+            MACOS_ARM_SIG=$(cat "release-files/${MACOS_ARM_TAR}.sig")
           fi
 
-          if [ -f "release-files/openscribe_${VERSION}_amd64.AppImage.sig" ]; then
-            LINUX_SIG=$(cat "release-files/openscribe_${VERSION}_amd64.AppImage.sig")
+          if [ -n "$MACOS_X64_TAR" ] && [ -f "release-files/${MACOS_X64_TAR}.sig" ]; then
+            MACOS_X64_SIG=$(cat "release-files/${MACOS_X64_TAR}.sig")
           fi
 
-          # Get release notes
-          NOTES="${{ needs.validate.outputs.changelog }}"
+          if [ -n "$LINUX_APPIMAGE" ] && [ -f "release-files/${LINUX_APPIMAGE}.sig" ]; then
+            LINUX_SIG=$(cat "release-files/${LINUX_APPIMAGE}.sig")
+          fi
+
+          # Get release notes (escape for JSON)
+          NOTES=$(cat << 'CHANGELOG_EOF'
+          ${{ needs.validate.outputs.changelog }}
+          CHANGELOG_EOF
+          )
           NOTES_ESCAPED=$(echo "$NOTES" | jq -Rsa .)
 
           # Generate latest.json
@@ -261,19 +282,19 @@ jobs:
             "platforms": {
               "windows-x86_64": {
                 "signature": "${WINDOWS_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/openscribe_${VERSION}_x64-setup.msi"
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/${WINDOWS_MSI}"
               },
               "darwin-aarch64": {
                 "signature": "${MACOS_ARM_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/openscribe_aarch64.app.tar.gz"
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/${MACOS_ARM_TAR}"
               },
               "darwin-x86_64": {
                 "signature": "${MACOS_X64_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/openscribe_x64.app.tar.gz"
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/${MACOS_X64_TAR}"
               },
               "linux-x86_64": {
                 "signature": "${LINUX_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/openscribe_${VERSION}_amd64.AppImage"
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/${LINUX_APPIMAGE}"
               }
             }
           }
