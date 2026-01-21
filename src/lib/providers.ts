@@ -60,6 +60,16 @@ export const PROVIDERS: AIProvider[] = [
         helpUrl: 'https://openrouter.ai/',
     },
     {
+        id: 'chutes',
+        name: 'Chutes AI',
+        defaultBaseUrl: 'https://llm.chutes.ai/v1',
+        requiresApiKey: true,
+        supportsVision: true,
+        defaultModel: 'meta-llama/Llama-3.2-11B-Vision-Instruct',
+        helpText: 'Get your API key from chutes.ai. Access many open-source models with predictable pricing.',
+        helpUrl: 'https://chutes.ai/',
+    },
+    {
         id: 'custom',
         name: 'Custom (OpenAI-compatible)',
         defaultBaseUrl: '',

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.8] - 2026-01-21
 
+### Added
+- Added Chutes AI as a new AI provider option for documentation generation
+
 ### Improved
 - Increased blur on update notifications, toast messages, and dropdown menus for better text readability
 
