@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 - Increased blur on update notifications, toast messages, and dropdown menus for better text readability
 
+### Fixed
+- AI documentation generation using stale data from previously viewed recording when switching between recordings
+
 ## [0.0.7] - 2026-01-21
 
 ### Fixed

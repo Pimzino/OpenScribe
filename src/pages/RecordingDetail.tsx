@@ -92,18 +92,38 @@ export default function RecordingDetail() {
     // Auto-trigger generation if navigated with triggerGeneration flag
     useEffect(() => {
         // Only trigger once per navigation with the flag
-        if (location.state?.triggerGeneration && currentRecording && !isGenerating && !hasTriggeredGeneration.current) {
+        // Also validate that currentRecording matches the URL id to prevent stale data
+        if (location.state?.triggerGeneration &&
+            currentRecording &&
+            currentRecording.recording.id === id &&
+            !isGenerating &&
+            !hasTriggeredGeneration.current) {
             hasTriggeredGeneration.current = true;
             // Clear the navigation state to prevent re-triggering
             navigate(location.pathname, { replace: true, state: {} });
             // Trigger generation
             handleRegenerate();
         }
-    }, [location.state?.triggerGeneration, currentRecording, isGenerating]);
+    }, [location.state?.triggerGeneration, currentRecording, isGenerating, id]);
 
     // Reset the generation trigger flag when navigating to a different recording
     useEffect(() => {
         hasTriggeredGeneration.current = false;
+    }, [id]);
+
+    // Cancel mismatched generation and reset state when switching recordings
+    useEffect(() => {
+        const generationState = useGenerationStore.getState();
+
+        // If there's an active generation for a DIFFERENT recording, cancel it
+        if (generationState.isGenerating && generationState.recordingId && generationState.recordingId !== id) {
+            generationState.cancelGeneration();
+            generationState.resetGeneration();
+        }
+
+        // Clear regeneration modal state from previous recording
+        setShowRegenerationModal(false);
+        setStepsForRegeneration([]);
     }, [id]);
 
     // Helper to copy screenshot to permanent location and register asset scope
@@ -223,12 +243,17 @@ export default function RecordingDetail() {
     const handleRegenerate = async () => {
         if (!currentRecording || !id) return;
 
+        // Capture values at start to prevent stale closure issues
+        const targetRecordingId = id;
+        const targetRecordingName = currentRecording.recording.name;
+
         setError(null);
         const steps = mapStepsForAI(currentRecording.steps);
         setStepsForRegeneration(steps);
         setShowRegenerationModal(true);
 
-        const abortController = startGeneration(steps.length);
+        // Pass recording ID to generation store
+        const abortController = startGeneration(targetRecordingId, steps.length);
 
         const callbacks: StreamingCallbacks = {
             onStepStart: (index) => updateStepStatus(index, 'generating'),
@@ -237,8 +262,16 @@ export default function RecordingDetail() {
             onDocumentUpdate: (md) => updateDocument(md),
             onError: (index, err) => setStepError(index, err.message),
             onComplete: async (finalMarkdown) => {
-                await saveDocumentation(id, finalMarkdown);
-                await getRecording(id);
+                // Validate we're still on the same recording before saving
+                const currentState = useGenerationStore.getState();
+                if (currentState.recordingId !== targetRecordingId) {
+                    console.warn('Generation completed but recording changed, discarding result');
+                    finishGeneration();
+                    return;
+                }
+
+                await saveDocumentation(targetRecordingId, finalMarkdown);
+                await getRecording(targetRecordingId);
                 finishGeneration();
             },
         };
@@ -250,7 +283,7 @@ export default function RecordingDetail() {
                     apiKey: openaiApiKey,
                     baseUrl: openaiBaseUrl,
                     model: openaiModel,
-                    workflowTitle: currentRecording.recording.name,
+                    workflowTitle: targetRecordingName,
                 },
                 callbacks,
                 abortController.signal

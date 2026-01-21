@@ -15,6 +15,7 @@ interface GenerationState {
     isGenerating: boolean;
     currentStepIndex: number;
     totalSteps: number;
+    recordingId: string | null;  // Track which recording this generation is for
 
     // Per-step progress
     stepProgress: StepProgress[];
@@ -26,7 +27,7 @@ interface GenerationState {
     abortController: AbortController | null;
 
     // Actions
-    startGeneration: (totalSteps: number) => AbortController;
+    startGeneration: (recordingId: string, totalSteps: number) => AbortController;
     updateStepStatus: (index: number, status: StepStatus) => void;
     appendStreamingText: (index: number, text: string) => void;
     completeStep: (index: number, finalText: string) => void;
@@ -41,11 +42,12 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     isGenerating: false,
     currentStepIndex: -1,
     totalSteps: 0,
+    recordingId: null,
     stepProgress: [],
     accumulatedMarkdown: '',
     abortController: null,
 
-    startGeneration: (totalSteps: number) => {
+    startGeneration: (recordingId: string, totalSteps: number) => {
         const abortController = new AbortController();
         const stepProgress: StepProgress[] = Array.from({ length: totalSteps }, (_, i) => ({
             index: i,
@@ -55,6 +57,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         }));
 
         set({
+            recordingId,
             isGenerating: true,
             currentStepIndex: 0,
             totalSteps,
@@ -118,6 +121,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
             isGenerating: false,
             currentStepIndex: -1,
             totalSteps: 0,
+            recordingId: null,
             stepProgress: [],
             accumulatedMarkdown: '',
             abortController: null,
