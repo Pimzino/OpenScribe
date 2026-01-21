@@ -1,10 +1,10 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* Space Grotesk Font */
+/* Space Grotesk Font - loaded from public/fonts/ (shared with splash screen) */
 @font-face {
   font-family: 'Space Grotesk';
-  src: url('./assets/fonts/SpaceGrotesk-LatinExt.woff2') format('woff2');
+  src: url('/fonts/SpaceGrotesk-LatinExt.woff2') format('woff2');
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;
@@ -13,7 +13,7 @@
 
 @font-face {
   font-family: 'Space Grotesk';
-  src: url('./assets/fonts/SpaceGrotesk-Latin.woff2') format('woff2');
+  src: url('/fonts/SpaceGrotesk-Latin.woff2') format('woff2');
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;

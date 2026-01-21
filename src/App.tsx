@@ -1,5 +1,5 @@
 
-import { useEffect, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -42,13 +42,23 @@ function App() {
     }
   }, [isLoaded, loadSettings]);
 
-  // Close splash screen when app is ready
+  // Track minimum splash display time
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
+
   useEffect(() => {
-    const closeSplash = async () => {
-      await invoke("close_splashscreen");
-    };
-    closeSplash().catch(console.error);
+    const timer = setTimeout(() => setMinTimeElapsed(true), 1500);
+    return () => clearTimeout(timer);
   }, []);
+
+  // Hide splash once settings loaded AND minimum time elapsed
+  useEffect(() => {
+    if (isLoaded && minTimeElapsed) {
+      const splash = document.getElementById('splash');
+      if (splash) {
+        splash.classList.add('hidden');
+      }
+    }
+  }, [isLoaded, minTimeElapsed]);
 
   // Update backend hotkeys when settings change
   useEffect(() => {

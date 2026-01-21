@@ -18,15 +18,12 @@ use database::{Database, StepInput, Recording, RecordingWithSteps, DeleteRecordi
 
 pub struct DatabaseState(pub Mutex<Database>);
 
+// Show main window - called from frontend once React has mounted
 #[tauri::command]
-async fn close_splashscreen(app: AppHandle) -> Result<(), String> {
-    if let Some(splashscreen) = app.get_webview_window("splashscreen") {
-        splashscreen.close().map_err(|e| e.to_string())?;
+async fn show_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().map_err(|e| e.to_string())?;
     }
-    app.get_webview_window("main")
-        .ok_or("Main window not found")?
-        .show()
-        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1144,6 +1141,7 @@ pub fn run() {
             let db = Database::new(app_data_dir)
                 .expect("Failed to initialize database");
             app.manage(DatabaseState(Mutex::new(db)));
+
             // Start the global input listener in a background thread (for recording)
             recorder::start_listener(app.handle().clone(), is_recording_clone, is_picker_open_clone, ocr_enabled_clone);
 
@@ -1181,7 +1179,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            close_splashscreen,
+            show_main_window,
             start_recording,
             stop_recording,
             delete_screenshot,
