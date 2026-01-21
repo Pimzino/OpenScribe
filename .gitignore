@@ -31,3 +31,6 @@ src/lib/changelog-data.ts
 
 # VSCode
 .vscode/
+
+# AI
+.cursor
