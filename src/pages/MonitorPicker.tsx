@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { X, Monitor, AppWindow, Minimize2, ChevronDown } from "lucide-react";
 
@@ -31,6 +31,10 @@ export default function MonitorPicker() {
   const [error, setError] = useState<string | null>(null);
   const [windowDropdownOpen, setWindowDropdownOpen] = useState(false);
 
+  // Refs for debouncing window highlights
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHighlightedRef = useRef<number | null>(null);
+
   useEffect(() => {
     loadData();
 
@@ -53,6 +57,9 @@ export default function MonitorPicker() {
     // Cleanup overlay on unmount
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
       invoke("hide_monitor_highlight").catch(() => {});
     };
   }, [monitors.length, windowDropdownOpen]);
@@ -90,32 +97,64 @@ export default function MonitorPicker() {
     }
   };
 
-  const handleWindowHover = async (win: WindowInfo) => {
-    if (!win.is_minimized) {
+  const handleWindowHover = useCallback(async (win: WindowInfo) => {
+    // Skip minimized windows entirely
+    if (win.is_minimized) {
+      return;
+    }
+
+    // Skip if same window already highlighted
+    if (lastHighlightedRef.current === win.id) {
+      return;
+    }
+
+    // Clear any pending highlight
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+
+    // Debounce: wait 50ms before showing highlight
+    hoverTimeoutRef.current = setTimeout(async () => {
       try {
         await invoke("hide_monitor_highlight");
-        await invoke("show_window_highlight", { windowId: win.id });
+        await invoke("show_highlight_at_bounds", {
+          bounds: {
+            x: win.x,
+            y: win.y,
+            width: win.width,
+            height: win.height
+          }
+        });
+        lastHighlightedRef.current = win.id;
       } catch (err) {
         console.error("Failed to show window highlight:", err);
       }
-    }
-  };
+    }, 50);
+  }, []);
 
-  const handleWindowLeave = async () => {
+  const handleWindowLeave = useCallback(async () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    lastHighlightedRef.current = null;
+
     try {
       await invoke("hide_monitor_highlight");
     } catch (err) {
       console.error("Failed to hide highlight:", err);
     }
-  };
+  }, []);
 
   const handleCaptureMonitor = async (index: number) => {
     if (isCapturing) return;
     setIsCapturing(true);
+    setError(null);
     try {
       await invoke("capture_monitor_and_close_picker", { index });
     } catch (err) {
       console.error("Failed to capture monitor:", err);
+      setError(String(err));
       setIsCapturing(false);
     }
   };
@@ -124,10 +163,15 @@ export default function MonitorPicker() {
     if (isCapturing) return;
     setIsCapturing(true);
     setWindowDropdownOpen(false);
+    setError(null);
     try {
-      await invoke("capture_window_and_close_picker", { windowId: win.id });
+      await invoke("capture_window_and_close_picker", {
+        windowId: win.id,
+        isMinimized: win.is_minimized
+      });
     } catch (err) {
       console.error("Failed to capture window:", err);
+      setError(String(err));
       setIsCapturing(false);
     }
   };

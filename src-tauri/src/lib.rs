@@ -11,6 +11,7 @@ mod display;
 use std::sync::Mutex;
 use std::path::PathBuf;
 use std::io::Write;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use tauri::{AppHandle, State, Manager, Emitter};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
@@ -544,6 +545,15 @@ pub struct WindowInfo {
     pub is_minimized: bool,
 }
 
+// Bounds for highlight overlay (passed from frontend)
+#[derive(Clone, serde::Deserialize)]
+pub struct HighlightBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
 #[tauri::command]
 fn get_monitors() -> Result<Vec<MonitorInfo>, String> {
     use xcap::Monitor;
@@ -652,6 +662,22 @@ async fn show_window_highlight(window_id: u32) -> Result<(), String> {
     overlay::show_monitor_border(x, y, width, height)
 }
 
+#[tauri::command]
+async fn show_highlight_at_bounds(bounds: HighlightBounds) -> Result<(), String> {
+    // Skip invalid bounds (minimized windows have 0 dimensions or off-screen positions)
+    if bounds.width == 0 || bounds.height == 0 {
+        return Ok(());
+    }
+    if bounds.width > 10000 || bounds.height > 10000 {
+        return Err("Invalid window bounds".to_string());
+    }
+    if bounds.x < -10000 || bounds.y < -10000 {
+        return Ok(());
+    }
+
+    overlay::show_monitor_border(bounds.x, bounds.y, bounds.width, bounds.height)
+}
+
 // Helper to save capture and emit events
 async fn save_and_emit_capture(app: AppHandle, image: image::RgbaImage, prefix: &str) -> Result<String, String> {
     use image::codecs::jpeg::JpegEncoder;
@@ -691,11 +717,37 @@ async fn save_and_emit_capture(app: AppHandle, image: image::RgbaImage, prefix: 
     Ok(file_path.to_string_lossy().to_string())
 }
 
+/// Check if a window handle is still valid on Windows
+#[cfg(target_os = "windows")]
+fn is_window_valid(window_id: u32) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    unsafe {
+        let hwnd = HWND(window_id as isize as *mut std::ffi::c_void);
+        IsWindow(hwnd).as_bool()
+    }
+}
+
+/// Safe wrapper for mutex lock that handles poisoned mutexes
+fn safe_mutex_set<T>(mutex: &Mutex<T>, value: T)
+where
+    T: Copy,
+{
+    match mutex.lock() {
+        Ok(mut guard) => *guard = value,
+        Err(poisoned) => {
+            eprintln!("Mutex poisoned, recovering");
+            *poisoned.into_inner() = value;
+        }
+    }
+}
+
 #[tauri::command]
 async fn capture_window_and_close_picker(
     app: AppHandle,
     state: State<'_, RecordingState>,
-    window_id: u32
+    window_id: u32,
+    is_minimized: bool
 ) -> Result<String, String> {
     use xcap::Window;
     use tokio::time::{sleep, Duration};
@@ -706,8 +758,8 @@ async fn capture_window_and_close_picker(
     // Small delay to ensure overlay is fully destroyed
     sleep(Duration::from_millis(50)).await;
 
-    // Hide picker window
-    *state.is_picker_open.lock().unwrap() = false;
+    // Hide picker window - use safe mutex handling
+    safe_mutex_set(&state.is_picker_open, false);
     if let Some(picker) = app.get_webview_window("monitor-picker") {
         let _ = picker.hide();
     }
@@ -715,15 +767,16 @@ async fn capture_window_and_close_picker(
     // Wait for picker to fully hide
     sleep(Duration::from_millis(150)).await;
 
-    // Find the target window BEFORE any operations
-    let windows = Window::all().map_err(|e| e.to_string())?;
-    let target = windows.into_iter()
-        .find(|w| w.id().ok().unwrap_or(0) == window_id)
-        .ok_or("Window not found")?;
-
-    // Restore minimized window if needed (Windows only)
+    // Validate window still exists before any operations (Windows only)
     #[cfg(target_os = "windows")]
-    if target.is_minimized().unwrap_or(false) {
+    if !is_window_valid(window_id) {
+        return Err("Window no longer exists".to_string());
+    }
+
+    // Restore minimized window BEFORE calling Window::all() to avoid xcap hanging
+    // We use is_minimized from frontend since it already has this info from get_windows()
+    #[cfg(target_os = "windows")]
+    if is_minimized {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SetForegroundWindow, SW_RESTORE};
 
@@ -732,20 +785,40 @@ async fn capture_window_and_close_picker(
             let _ = ShowWindow(hwnd, SW_RESTORE);
             let _ = SetForegroundWindow(hwnd);
         }
-        sleep(Duration::from_millis(300)).await;
-
-        // Re-fetch the window after restore
-        let windows = Window::all().map_err(|e| e.to_string())?;
-        let target = windows.into_iter()
-            .find(|w| w.id().ok().unwrap_or(0) == window_id)
-            .ok_or("Window not found after restore")?;
-
-        let image = target.capture_image().map_err(|e| e.to_string())?;
-        return save_and_emit_capture(app, image, "window").await;
+        // Wait for window to fully restore before capturing
+        sleep(Duration::from_millis(400)).await;
     }
 
-    // Capture the window
-    let image = target.capture_image().map_err(|e| e.to_string())?;
+    // Validate window still exists after potential restore (Windows only)
+    #[cfg(target_os = "windows")]
+    if !is_window_valid(window_id) {
+        return Err("Window became invalid during restore".to_string());
+    }
+
+    // Now it's safe to call Window::all() - the window is restored if it was minimized
+    let windows = Window::all().map_err(|e| e.to_string())?;
+    let target = windows.into_iter()
+        .find(|w| w.id().ok().unwrap_or(0) == window_id)
+        .ok_or("Window not found")?;
+
+    // Validate window has valid dimensions before capture
+    let target_width = target.width().unwrap_or(0);
+    let target_height = target.height().unwrap_or(0);
+    if target_width == 0 || target_height == 0 {
+        return Err("Window has invalid dimensions".to_string());
+    }
+
+    // Safely attempt capture with panic recovery
+    let capture_result = catch_unwind(AssertUnwindSafe(|| {
+        target.capture_image()
+    }));
+
+    let image = match capture_result {
+        Ok(Ok(img)) => img,
+        Ok(Err(e)) => return Err(format!("Capture failed: {}", e)),
+        Err(_) => return Err("Window capture crashed - window may be invalid".to_string()),
+    };
+
     save_and_emit_capture(app, image, "window").await
 }
 
@@ -802,7 +875,7 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
 
     // Close the picker window entirely to ensure it's not captured in the screenshot
     // (hiding alone is not reliable - Windows compositor may not update in time)
-    *state.is_picker_open.lock().unwrap() = false;
+    safe_mutex_set(&state.is_picker_open, false);
     if let Some(window) = app.get_webview_window("monitor-picker") {
         let _ = window.close();
     }
@@ -917,7 +990,7 @@ async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -
     use tauri::{WebviewWindowBuilder, WebviewUrl};
 
     // Always show picker UI so user can select monitors OR windows
-    *state.is_picker_open.lock().unwrap() = true;
+    safe_mutex_set(&state.is_picker_open, true);
 
     // Close existing picker if any
     if let Some(window) = app.get_webview_window("monitor-picker") {
@@ -955,7 +1028,7 @@ async fn close_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) 
     let _ = overlay::hide_monitor_border();
 
     // Reset picker open flag to resume step recording
-    *state.is_picker_open.lock().unwrap() = false;
+    safe_mutex_set(&state.is_picker_open, false);
 
     if let Some(window) = app.get_webview_window("monitor-picker") {
         window.close().map_err(|e| e.to_string())?;
@@ -1214,6 +1287,7 @@ pub fn run() {
             // Window capture commands
             get_windows,
             show_window_highlight,
+            show_highlight_at_bounds,
             capture_window_and_close_picker,
             // OCR commands
             set_ocr_enabled,

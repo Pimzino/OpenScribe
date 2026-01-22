@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - AI documentation generation using stale data from previously viewed recording when switching between recordings
+- App crash when capturing a visible window from the monitor picker dropdown during recording
 
 ## [0.0.7] - 2026-01-21
 
