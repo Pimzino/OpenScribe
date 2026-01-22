@@ -3,6 +3,7 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { useSettingsStore } from "../store/settingsStore";
 import { getProvider } from "./providers";
 import { buildSystemPrompt } from "./promptConstants";
+import { normalizePathForMarkdown, normalizeForwardSlashes } from "./pathUtils";
 
 // Default timeout for AI requests (in milliseconds)
 const DEFAULT_TIMEOUT = 120000; // 2 minutes for local models which can be slow
@@ -522,10 +523,7 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
         markdown += `${description}\n\n`;
 
         if (step.screenshot) {
-            // Use file path for local display - normalize path and encode for markdown compatibility
-            const normalizedPath = step.screenshot.replace(/\\/g, '/');
-            // Encode spaces and special characters for markdown URL compatibility
-            const encodedPath = normalizedPath.replace(/ /g, '%20');
+            const encodedPath = normalizePathForMarkdown(step.screenshot);
             markdown += `![Step ${i + 1} Screenshot](${encodedPath})\n\n`;
         }
     }
@@ -766,8 +764,7 @@ function buildPartialMarkdown(
         markdown += `${description}\n\n`;
 
         if (step.screenshot) {
-            const normalizedPath = step.screenshot.replace(/\\/g, '/');
-            const encodedPath = normalizedPath.replace(/ /g, '%20');
+            const encodedPath = normalizePathForMarkdown(step.screenshot);
             markdown += `![Step ${i + 1} Screenshot](${encodedPath})\n\n`;
         }
     }

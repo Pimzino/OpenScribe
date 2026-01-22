@@ -98,3 +98,50 @@ export function joinPath(...segments: string[]): string {
     .join('/')
     .replace(/\/+/g, '/');
 }
+
+/**
+ * Normalize image path by decoding URI components and handling file:// prefix
+ */
+export function normalizeImagePath(path: string): string {
+  let cleanPath = path;
+
+  // Decode URI components (e.g., %20 -> space)
+  try {
+    cleanPath = decodeURIComponent(cleanPath);
+  } catch {
+    // Ignore if malformed
+  }
+
+  // Remove file:// prefix for local paths
+  if (cleanPath.startsWith('file://')) {
+    cleanPath = cleanPath.slice(7);
+    // Handle Windows /C:/... -> C:/...
+    if (cleanPath.startsWith('/') && cleanPath.includes(':')) {
+      cleanPath = cleanPath.slice(1);
+    }
+  }
+
+  return cleanPath;
+}
+
+/**
+ * Normalize path to use forward slashes (for URL/markdown compatibility)
+ */
+export function normalizeForwardSlashes(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
+/**
+ * Encode path for use in markdown image syntax (spaces become %20)
+ */
+export function encodePathForMarkdown(path: string): string {
+  const normalized = normalizeForwardSlashes(path);
+  return normalized.replace(/ /g, '%20');
+}
+
+/**
+ * Full normalization for markdown display (combines all steps)
+ */
+export function normalizePathForMarkdown(path: string): string {
+  return encodePathForMarkdown(normalizeImagePath(path));
+}
