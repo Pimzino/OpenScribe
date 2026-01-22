@@ -13,6 +13,62 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Strip reasoning/thinking content from non-streaming responses
+// Handles various formats: <think>...</think>, <thinking>...</thinking>, <reasoning>...</reasoning>
+function stripReasoningContent(content: string): string {
+    if (!content) return content;
+
+    // First, try to find content AFTER the last closing thinking tag
+    // This handles the common pattern: <think>reasoning...</think>actual answer
+    const closingTagPatterns = [/<\/think>/gi, /<\/thinking>/gi, /<\/reasoning>/gi];
+
+    for (const pattern of closingTagPatterns) {
+        const matches = [...content.matchAll(pattern)];
+        if (matches.length > 0) {
+            // Get content after the last closing tag
+            const lastMatch = matches[matches.length - 1];
+            const afterTag = content.slice(lastMatch.index! + lastMatch[0].length).trim();
+            if (afterTag) {
+                return afterTag;
+            }
+        }
+    }
+
+    // If no closing tags found, remove all thinking/reasoning blocks using regex
+    let result = content;
+
+    // Remove <think>...</think> blocks
+    result = result.replace(/<think>[\s\S]*?<\/think>/gi, '');
+
+    // Remove <thinking>...</thinking> blocks
+    result = result.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+
+    // Remove <reasoning>...</reasoning> blocks
+    result = result.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '');
+
+    // Also handle unclosed thinking tags (model only output thinking without closing)
+    // Remove from opening tag to end if no closing tag
+    result = result.replace(/<think>[\s\S]*$/gi, '');
+    result = result.replace(/<thinking>[\s\S]*$/gi, '');
+    result = result.replace(/<reasoning>[\s\S]*$/gi, '');
+
+    // Clean up any extra whitespace left behind
+    result = result.trim();
+
+    // If result is empty but original had content, the model might have put
+    // everything in thinking tags. In this case, return original as fallback.
+    if (!result && content.trim()) {
+        // Try to extract just text content, removing all XML-like tags
+        const textOnly = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (textOnly) {
+            console.warn('[AI Service] Reasoning filter resulted in empty content, using text extraction fallback');
+            return textOnly;
+        }
+    }
+
+    return result;
+}
+
 // Rate limit mitigation configuration
 interface RateLimitConfig {
     enableAutoRetry: boolean;
@@ -317,7 +373,28 @@ This description reveals the user's INTENT. Incorporate this information into yo
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || "Perform this action.";
+
+    // Handle different response structures from various providers
+    const messageContent = data.choices?.[0]?.message?.content;
+    const textContent = data.choices?.[0]?.text;
+
+    // Some providers might not have content in expected location - log for debugging
+    if (!messageContent && !textContent) {
+        console.warn('[AI Service] No content in response. Response structure:', JSON.stringify({
+            hasChoices: !!data.choices,
+            choicesLength: data.choices?.length,
+            firstChoice: data.choices?.[0] ? Object.keys(data.choices[0]) : null,
+        }));
+    }
+
+    const rawContent = (messageContent || textContent || '').trim();
+    if (!rawContent) {
+        return "Perform this action.";
+    }
+
+    // Strip any reasoning/thinking content from the response
+    const stripped = stripReasoningContent(rawContent);
+    return stripped || "Perform this action.";
 }
 
 // Generate a title for the documentation based on the workflow
@@ -367,7 +444,9 @@ Example: "How to Test Network Connectivity Using Ping"`;
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || "Step-by-Step Guide";
+    const rawContent = data.choices?.[0]?.message?.content?.trim() || "Step-by-Step Guide";
+    // Strip any reasoning/thinking content from the response
+    return stripReasoningContent(rawContent) || "Step-by-Step Guide";
 }
 
 interface AIConfig {
@@ -542,7 +621,113 @@ export interface StreamingCallbacks {
     onComplete?: (finalMarkdown: string) => void;
 }
 
+// Reasoning content filter for models that output thinking tags
+// Handles various formats: <think>...</think>, <thinking>...</thinking>, <reasoning>...</reasoning>
+class ReasoningFilter {
+    private insideThinkingBlock = false;
+    private pendingContent = '';
+    // Common thinking tag patterns used by various reasoning models
+    private readonly openTags = ['<think>', '<thinking>', '<reasoning>'];
+    private readonly closeTags = ['</think>', '</thinking>', '</reasoning>'];
+    // Maximum length of any tag (for partial tag detection)
+    private readonly maxTagLength = 12; // </reasoning> is 12 chars
+
+    // Process a chunk and return only the non-reasoning content
+    filter(chunk: string): string {
+        // Add chunk to pending content for tag detection
+        this.pendingContent += chunk;
+
+        let result = '';
+
+        while (this.pendingContent.length > 0) {
+            if (this.insideThinkingBlock) {
+                // Look for closing tag
+                let closingIndex = -1;
+                let closingTagLength = 0;
+
+                for (const closeTag of this.closeTags) {
+                    const idx = this.pendingContent.indexOf(closeTag);
+                    if (idx !== -1 && (closingIndex === -1 || idx < closingIndex)) {
+                        closingIndex = idx;
+                        closingTagLength = closeTag.length;
+                    }
+                }
+
+                if (closingIndex !== -1) {
+                    // Found closing tag - discard content up to and including the tag
+                    this.pendingContent = this.pendingContent.slice(closingIndex + closingTagLength);
+                    this.insideThinkingBlock = false;
+                } else {
+                    // No closing tag yet
+                    // Keep only the last maxTagLength chars in case of partial tag
+                    if (this.pendingContent.length > this.maxTagLength) {
+                        this.pendingContent = this.pendingContent.slice(-this.maxTagLength);
+                    }
+                    break; // Wait for more data
+                }
+            } else {
+                // Look for opening tag
+                let openingIndex = -1;
+                let openingTagLength = 0;
+
+                for (const openTag of this.openTags) {
+                    const idx = this.pendingContent.indexOf(openTag);
+                    if (idx !== -1 && (openingIndex === -1 || idx < openingIndex)) {
+                        openingIndex = idx;
+                        openingTagLength = openTag.length;
+                    }
+                }
+
+                if (openingIndex !== -1) {
+                    // Found opening tag - output content before it, then enter thinking mode
+                    result += this.pendingContent.slice(0, openingIndex);
+                    this.pendingContent = this.pendingContent.slice(openingIndex + openingTagLength);
+                    this.insideThinkingBlock = true;
+                } else {
+                    // No opening tag found
+                    // Check if there might be a partial tag at the end (starts with '<')
+                    const lastLt = this.pendingContent.lastIndexOf('<');
+                    if (lastLt !== -1 && lastLt > this.pendingContent.length - this.maxTagLength) {
+                        // Potential partial tag at end - output everything before it
+                        result += this.pendingContent.slice(0, lastLt);
+                        this.pendingContent = this.pendingContent.slice(lastLt);
+                    } else {
+                        // No potential partial tag - output everything
+                        result += this.pendingContent;
+                        this.pendingContent = '';
+                    }
+                    break; // Wait for more data
+                }
+            }
+        }
+
+        return result;
+    }
+
+    // Flush any remaining content (call at end of stream)
+    flush(): string {
+        if (this.insideThinkingBlock) {
+            // Still inside thinking block at end - discard remaining
+            this.pendingContent = '';
+            return '';
+        }
+        // Check if remaining content is just a partial tag that never completed
+        // If it starts with '<' and looks like an incomplete tag, discard it
+        if (this.pendingContent.startsWith('<') && !this.pendingContent.includes('>')) {
+            this.pendingContent = '';
+            return '';
+        }
+        const remaining = this.pendingContent;
+        this.pendingContent = '';
+        return remaining;
+    }
+}
+
 // Parse SSE stream and yield text chunks
+// Filters out reasoning/thinking content from various reasoning model formats:
+// - DeepSeek R1: Uses 'reasoning_content' field separate from 'content'
+// - Qwen3: Uses <think>...</think> tags within 'content' field
+// - vLLM: Uses 'reasoning' field (newer) or 'reasoning_content' (deprecated)
 async function* parseSSEStream(
     response: Response,
     abortSignal?: AbortSignal
@@ -555,6 +740,11 @@ async function* parseSSEStream(
     const decoder = new TextDecoder();
     let buffer = '';
     let fullContent = '';
+    let rawContent = ''; // Track raw content for fallback
+    const reasoningFilter = new ReasoningFilter();
+
+    // Debug flag - set to true to see raw API responses
+    const DEBUG_STREAMING = false;
 
     try {
         while (true) {
@@ -578,10 +768,44 @@ async function* parseSSEStream(
 
                     try {
                         const parsed = JSON.parse(data);
-                        const delta = parsed.choices?.[0]?.delta?.content || '';
-                        if (delta) {
-                            fullContent += delta;
-                            yield delta;
+
+                        // Handle different API response structures:
+                        // Standard OpenAI: choices[0].delta.content
+                        // Some providers: choices[0].message.content (even in streaming)
+                        // Some providers: choices[0].text
+                        const delta = parsed.choices?.[0]?.delta;
+                        const message = parsed.choices?.[0]?.message;
+                        const text = parsed.choices?.[0]?.text;
+
+                        if (DEBUG_STREAMING) {
+                            console.log('[AI Stream Debug] Parsed:', JSON.stringify({
+                                hasDelta: !!delta,
+                                hasMessage: !!message,
+                                hasText: !!text,
+                                deltaContent: delta?.content?.substring(0, 50),
+                                messageContent: message?.content?.substring(0, 50),
+                            }));
+                        }
+
+                        // Reasoning model formats we handle:
+                        // 1. DeepSeek R1: reasoning_content (separate field)
+                        // 2. vLLM: reasoning (separate field, newer format)
+                        // 3. Qwen3/others: <think>...</think> tags within content
+                        //
+                        // We extract from 'content' field - reasoning fields are ignored
+                        // The content may contain <think> tags which we filter out
+
+                        // Try multiple possible content locations
+                        const content = delta?.content || message?.content || text || '';
+
+                        if (content) {
+                            rawContent += content; // Track raw for fallback
+                            // Filter out any thinking tags from the content
+                            const filtered = reasoningFilter.filter(content);
+                            if (filtered) {
+                                fullContent += filtered;
+                                yield filtered;
+                            }
                         }
                     } catch {
                         // Skip malformed JSON chunks
@@ -589,8 +813,27 @@ async function* parseSSEStream(
                 }
             }
         }
+
+        // Flush any remaining buffered content
+        const remaining = reasoningFilter.flush();
+        if (remaining) {
+            fullContent += remaining;
+            yield remaining;
+        }
     } finally {
         reader.releaseLock();
+    }
+
+    // If filtered content is empty but we had raw content, apply fallback extraction
+    if (!fullContent.trim() && rawContent.trim()) {
+        console.warn('[AI Service] Streaming filter resulted in empty content, raw length:', rawContent.length);
+        console.warn('[AI Service] Raw content preview:', rawContent.substring(0, 200));
+        const fallback = stripReasoningContent(rawContent);
+        if (fallback) {
+            console.warn('[AI Service] Fallback extraction succeeded');
+            return fallback;
+        }
+        console.warn('[AI Service] Fallback extraction also failed');
     }
 
     return fullContent.trim() || "Perform this action.";

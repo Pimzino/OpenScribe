@@ -6,10 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.0.8] - 2026-01-21
+## [0.0.8] - 2026-01-22
 
 ### Added
 - Added Chutes AI as a new AI provider option for documentation generation
+- Support for reasoning/thinking models (DeepSeek R1, Qwen3, QwQ) - thinking content is now filtered from generated documentation
 
 ### Improved
 - Increased blur on update notifications, toast messages, and dropdown menus for better text readability
@@ -17,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - AI documentation generation using stale data from previously viewed recording when switching between recordings
 - App crash when capturing a visible window from the monitor picker dropdown during recording
+- Reasoning models outputting thinking tags as step content instead of the actual response
 
 ## [0.0.7] - 2026-01-21
 
