@@ -3,7 +3,7 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { useSettingsStore } from "../store/settingsStore";
 import { getProvider } from "./providers";
 import { buildSystemPrompt } from "./promptConstants";
-import { normalizePathForMarkdown, normalizeForwardSlashes } from "./pathUtils";
+import { normalizePathForMarkdown } from "./pathUtils";
 
 // Default timeout for AI requests (in milliseconds)
 const DEFAULT_TIMEOUT = 120000; // 2 minutes for local models which can be slow

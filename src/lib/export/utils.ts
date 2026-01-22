@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import { save } from "@tauri-apps/plugin-dialog";
-import { normalizeImagePath } from '../pathUtils';
 
 // Helper to read file as Uint8Array
 export async function getFileBuffer(path: string): Promise<Uint8Array | null> {
