@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.0.9] - 2026-01-23
+
+### Added
+- **macOS**: Runtime permission checking for screen recording and accessibility APIs
+- **macOS**: New Tauri commands to check and request system permissions programmatically
+- **macOS**: Window validation using CGWindowListCopyWindowInfo to detect invalid windows
+- **macOS**: Full accessibility API implementation extracting element name, type, value, and app name
+
+### Improved
+- **macOS**: Overlay borders now render correctly using layer-backed NSViews with CALayer backgrounds
+- **macOS**: Toast notifications display text using NSTextField with proper styling and rounded corners
+- **macOS**: Minimized windows can now be restored and captured using AppleScript automation
+- **macOS**: All AppKit operations now safely dispatch to main thread using GCD helpers
+- **macOS**: System windows filtered from capture list (Dock, Menu Bar, Notification Center, etc.)
+- **Linux**: System windows filtered from capture list (gnome-shell, plasmashell, etc.)
+- Added Info.plist with proper permission descriptions for screen recording and automation
+
+### Fixed
+- **macOS**: Overlay border not drawing (was marked as dead code and never called)
+- **macOS**: Toast notifications only showing background without text
+- **macOS**: Silent failures when AppKit operations called from background threads
+- **macOS**: Accessibility API returning placeholder values instead of real element properties
+
 ## [0.0.8] - 2026-01-22
 
 ### Added

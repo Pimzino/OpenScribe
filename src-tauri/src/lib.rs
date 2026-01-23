@@ -577,28 +577,91 @@ fn get_monitors() -> Result<Vec<MonitorInfo>, String> {
 }
 
 // Helper function to filter system windows
-fn is_capturable_window(title: &str, _app_name: &str) -> bool {
+#[allow(unused_variables)]
+fn is_capturable_window(title: &str, app_name: &str) -> bool {
     // Filter empty titles
     if title.trim().is_empty() {
         return false;
     }
-
-    // Filter system windows
-    let system_titles = [
-        "Program Manager",
-        "Windows Input Experience",
-        "Microsoft Text Input Application",
-        "Settings",
-        "MSCTFIME UI",
-        "Default IME",
-    ];
 
     // Filter own windows
     if title.contains("OpenScribe") || title.contains("Select Capture") || title.contains("monitor-picker") {
         return false;
     }
 
-    !system_titles.iter().any(|s| title.eq_ignore_ascii_case(s))
+    // Windows-specific system windows
+    #[cfg(target_os = "windows")]
+    {
+        let system_titles = [
+            "Program Manager",
+            "Windows Input Experience",
+            "Microsoft Text Input Application",
+            "Settings",
+            "MSCTFIME UI",
+            "Default IME",
+        ];
+        if system_titles.iter().any(|s| title.eq_ignore_ascii_case(s)) {
+            return false;
+        }
+    }
+
+    // macOS-specific system windows and apps
+    #[cfg(target_os = "macos")]
+    {
+        // Filter system app names
+        let system_apps = [
+            "Dock",
+            "Window Server",
+            "SystemUIServer",
+            "Control Center",
+            "Notification Center",
+            "NotificationCenter",
+            "Spotlight",
+            "Siri",
+            "AirPlayUIAgent",
+            "TextInputMenuAgent",
+            "CoreServicesUIAgent",
+            "universalAccessAuthWarn",
+            "talagent",
+        ];
+        if system_apps.iter().any(|s| app_name.eq_ignore_ascii_case(s)) {
+            return false;
+        }
+
+        // Filter system window titles
+        let system_titles = [
+            "Menu Bar",
+            "Menubar",
+            "Item-0",  // Menu bar items
+            "Notification Center",
+            "Focus",   // Focus mode overlay
+        ];
+        if system_titles.iter().any(|s| title.eq_ignore_ascii_case(s)) {
+            return false;
+        }
+
+        // Filter windows that are just app names with no real title (common for background processes)
+        if title == app_name && system_apps.iter().any(|s| app_name.contains(s)) {
+            return false;
+        }
+    }
+
+    // Linux-specific system windows
+    #[cfg(target_os = "linux")]
+    {
+        let system_titles = [
+            "Desktop",
+            "gnome-shell",
+            "mutter",
+            "plasmashell",
+            "kwin",
+        ];
+        if system_titles.iter().any(|s| title.eq_ignore_ascii_case(s)) {
+            return false;
+        }
+    }
+
+    true
 }
 
 #[tauri::command]
@@ -728,6 +791,96 @@ fn is_window_valid(window_id: u32) -> bool {
     }
 }
 
+/// Check if a window ID is still valid on macOS
+/// Uses CGWindowListCopyWindowInfo to check if the window exists
+#[cfg(target_os = "macos")]
+fn is_window_valid(window_id: u32) -> bool {
+    use core_foundation::array::CFArrayRef;
+    use core_foundation::base::CFRelease;
+
+    // CGWindowListOption flags
+    const K_CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW: u32 = 1 << 3;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: u32) -> CFArrayRef;
+        fn CFArrayGetCount(array: CFArrayRef) -> isize;
+    }
+
+    unsafe {
+        // Query for this specific window
+        let window_list = CGWindowListCopyWindowInfo(
+            K_CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW,
+            window_id,
+        );
+
+        if window_list.is_null() {
+            return false;
+        }
+
+        let count = CFArrayGetCount(window_list);
+        CFRelease(window_list as *const _);
+
+        // If the array has at least one entry, the window exists
+        count > 0
+    }
+}
+
+/// Get the app name for a window ID on macOS
+#[cfg(target_os = "macos")]
+fn get_app_name_for_window(window_id: u32) -> Option<String> {
+    use xcap::Window;
+
+    if let Ok(windows) = Window::all() {
+        for window in windows {
+            if window.id().ok() == Some(window_id) {
+                return window.app_name().ok();
+            }
+        }
+    }
+    None
+}
+
+/// Restore a minimized window on macOS using AppleScript
+#[cfg(target_os = "macos")]
+fn restore_macos_window(app_name: &str) -> Result<(), String> {
+    use std::process::Command;
+
+    // AppleScript to activate the app and unminimize its windows
+    // This brings the app to the front and restores any minimized windows
+    let script = format!(r#"
+        tell application "{}"
+            activate
+        end tell
+        delay 0.1
+        tell application "System Events"
+            tell process "{}"
+                set frontmost to true
+                repeat with w in windows
+                    try
+                        if miniaturized of w is true then
+                            set miniaturized of w to false
+                        end if
+                    end try
+                end repeat
+            end tell
+        end tell
+    "#, app_name, app_name);
+
+    let output = Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .map_err(|e| format!("Failed to run AppleScript: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("AppleScript warning (may be ignorable): {}", stderr);
+        // Don't fail on AppleScript errors - the window might still be usable
+    }
+
+    Ok(())
+}
+
 /// Safe wrapper for mutex lock that handles poisoned mutexes
 fn safe_mutex_set<T>(mutex: &Mutex<T>, value: T)
 where
@@ -767,8 +920,8 @@ async fn capture_window_and_close_picker(
     // Wait for picker to fully hide
     sleep(Duration::from_millis(150)).await;
 
-    // Validate window still exists before any operations (Windows only)
-    #[cfg(target_os = "windows")]
+    // Validate window still exists before any operations
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     if !is_window_valid(window_id) {
         return Err("Window no longer exists".to_string());
     }
@@ -789,10 +942,26 @@ async fn capture_window_and_close_picker(
         sleep(Duration::from_millis(400)).await;
     }
 
-    // Validate window still exists after potential restore (Windows only)
-    #[cfg(target_os = "windows")]
+    // Validate window still exists after potential restore
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     if !is_window_valid(window_id) {
         return Err("Window became invalid during restore".to_string());
+    }
+
+    // Restore minimized window on macOS using AppleScript
+    #[cfg(target_os = "macos")]
+    if is_minimized {
+        // Get the app name for this window so we can target it with AppleScript
+        if let Some(app_name) = get_app_name_for_window(window_id) {
+            if let Err(e) = restore_macos_window(&app_name) {
+                eprintln!("Warning: Failed to restore macOS window: {}", e);
+                // Continue anyway - the window might still be capturable
+            }
+            // Wait for window to fully restore before capturing
+            sleep(Duration::from_millis(500)).await;
+        } else {
+            eprintln!("Warning: Could not find app name for window {}", window_id);
+        }
     }
 
     // Now it's safe to call Window::all() - the window is restored if it was minimized
@@ -1084,6 +1253,109 @@ fn update_step_ocr(
         .map_err(|e| e.to_string())
 }
 
+// Permission status response
+#[derive(Clone, serde::Serialize)]
+pub struct PermissionStatus {
+    pub screen_recording: bool,
+    pub accessibility: bool,
+}
+
+/// Check if screen recording permission is granted on macOS
+/// Returns true on other platforms (no permission needed)
+#[tauri::command]
+fn check_screen_recording_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        #[link(name = "CoreGraphics", kind = "framework")]
+        extern "C" {
+            // Available on macOS 10.15+
+            fn CGPreflightScreenCaptureAccess() -> bool;
+        }
+
+        unsafe { CGPreflightScreenCaptureAccess() }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        true // No permission needed on other platforms
+    }
+}
+
+/// Request screen recording permission on macOS
+/// This will show the system permission dialog if not already granted
+/// Returns true if permission was granted, false otherwise
+#[tauri::command]
+fn request_screen_recording_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        #[link(name = "CoreGraphics", kind = "framework")]
+        extern "C" {
+            // Available on macOS 10.15+
+            fn CGRequestScreenCaptureAccess() -> bool;
+        }
+
+        unsafe { CGRequestScreenCaptureAccess() }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        true // No permission needed on other platforms
+    }
+}
+
+/// Check if accessibility permission is granted on macOS
+/// This is needed for the accessibility API to read UI element info
+#[tauri::command]
+fn check_accessibility_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXIsProcessTrusted() -> bool;
+        }
+
+        unsafe { AXIsProcessTrusted() }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        true // No permission needed on other platforms
+    }
+}
+
+/// Request accessibility permission on macOS
+/// This opens System Preferences to the Accessibility pane
+#[tauri::command]
+fn request_accessibility_permission() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+
+        // Open System Preferences to the Accessibility pane
+        // Using the Privacy & Security > Accessibility path
+        Command::new("open")
+            .args(["x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
+            .spawn()
+            .map_err(|e| format!("Failed to open System Preferences: {}", e))?;
+
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(()) // No permission needed on other platforms
+    }
+}
+
+/// Get all permission statuses at once
+#[tauri::command]
+fn get_permission_status() -> PermissionStatus {
+    PermissionStatus {
+        screen_recording: check_screen_recording_permission(),
+        accessibility: check_accessibility_permission(),
+    }
+}
+
 /// Update paths in settings.json that reference the old identifier.
 /// This is called after a successful folder migration.
 fn update_settings_paths(settings_path: &std::path::Path, old_identifier: &str, new_identifier: &str) {
@@ -1292,7 +1564,13 @@ pub fn run() {
             // OCR commands
             set_ocr_enabled,
             get_ocr_enabled,
-            update_step_ocr
+            update_step_ocr,
+            // Permission commands (macOS)
+            check_screen_recording_permission,
+            request_screen_recording_permission,
+            check_accessibility_permission,
+            request_accessibility_permission,
+            get_permission_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

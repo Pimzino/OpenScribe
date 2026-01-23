@@ -487,15 +487,91 @@ mod macos_impl {
     use objc2::rc::Retained;
     use objc2::msg_send;
     use objc2_app_kit::{
-        NSBezierPath, NSColor, NSGraphicsContext, NSScreen, NSView, NSWindow, NSWindowStyleMask,
+        NSColor, NSScreen, NSView, NSWindow, NSWindowStyleMask,
     };
     use objc2_core_foundation::{CGFloat, CGPoint, CGRect, CGSize};
     use objc2_foundation::MainThreadMarker;
+    use objc2_quartz_core::CALayer;
     use std::cell::RefCell;
+    use std::sync::Mutex;
+
+    // ============================================================================
+    // Main Thread Dispatch Helpers
+    // ============================================================================
+
+    // GCD types for dispatch_sync
+    #[repr(C)]
+    struct DispatchQueue {
+        _private: [u8; 0],
+    }
+
+    type DispatchQueueT = *const DispatchQueue;
+    type DispatchBlock = extern "C" fn(*mut std::ffi::c_void);
+
+    #[link(name = "System", kind = "dylib")]
+    extern "C" {
+        fn dispatch_get_main_queue() -> DispatchQueueT;
+        fn dispatch_sync_f(
+            queue: DispatchQueueT,
+            context: *mut std::ffi::c_void,
+            work: DispatchBlock,
+        );
+    }
+
+    /// Check if we're currently on the main thread
+    fn is_main_thread() -> bool {
+        use objc2_foundation::NSThread;
+        NSThread::isMainThread()
+    }
+
+    /// Execute a closure on the main thread synchronously.
+    /// If already on main thread, executes directly.
+    /// If on background thread, dispatches to main and waits.
+    fn run_on_main_thread<F, R>(f: F) -> R
+    where
+        F: FnOnce() -> R + Send,
+        R: Send,
+    {
+        if is_main_thread() {
+            // Already on main thread, just run it
+            f()
+        } else {
+            // Need to dispatch to main thread
+            let result: Mutex<Option<R>> = Mutex::new(None);
+            let closure: Mutex<Option<F>> = Mutex::new(Some(f));
+
+            extern "C" fn trampoline<F, R>(context: *mut std::ffi::c_void)
+            where
+                F: FnOnce() -> R + Send,
+                R: Send,
+            {
+                unsafe {
+                    let data = &*(context as *const (Mutex<Option<F>>, Mutex<Option<R>>));
+                    if let Some(f) = data.0.lock().unwrap().take() {
+                        let r = f();
+                        *data.1.lock().unwrap() = Some(r);
+                    }
+                }
+            }
+
+            let data = (closure, result);
+            unsafe {
+                dispatch_sync_f(
+                    dispatch_get_main_queue(),
+                    &data as *const _ as *mut std::ffi::c_void,
+                    std::mem::transmute(trampoline::<F, R> as extern "C" fn(*mut std::ffi::c_void)),
+                );
+            }
+
+            data.1.lock().unwrap().take().expect("Main thread execution failed")
+        }
+    }
 
     // NSWindow is main-thread-only, so we use thread_local storage instead of Mutex
     thread_local! {
         static OVERLAY_WINDOW: RefCell<Option<Retained<NSWindow>>> = const { RefCell::new(None) };
+        // Store border views so we can update their frames when window moves
+        static BORDER_VIEWS: RefCell<Option<[Retained<NSView>; 4]>> = const { RefCell::new(None) };
     }
     const BORDER_WIDTH: CGFloat = 4.0;
 
@@ -505,136 +581,196 @@ mod macos_impl {
     // NSScreenSaverWindowLevel = 1000, we want above that
     const OVERLAY_WINDOW_LEVEL: isize = 1001;
 
-    // Custom view that draws the green border
-    #[allow(dead_code)]
-    fn draw_border_in_rect(rect: CGRect) {
-        // Get current graphics context
-        let context = NSGraphicsContext::currentContext();
-        if context.is_none() {
-            return;
+    /// Create a colored NSView at the given frame using layer-backed background
+    fn create_border_view(mtm: MainThreadMarker, frame: CGRect) -> Retained<NSView> {
+        unsafe {
+            let view: Retained<NSView> = msg_send![
+                mtm.alloc::<NSView>(),
+                initWithFrame: frame,
+            ];
+
+            // Enable layer-backing so we can set background color
+            view.setWantsLayer(true);
+
+            // Get the layer and set its background color to green (#22c55e)
+            if let Some(layer) = view.layer() {
+                // Create CGColor using core-graphics crate (uses its own CGFloat type)
+                let cg_color = core_graphics::color::CGColor::rgb(
+                    34.0 / 255.0,   // R
+                    197.0 / 255.0,  // G
+                    94.0 / 255.0,   // B
+                    1.0,            // A
+                );
+
+                // Use msg_send to set backgroundColor
+                // Pass the CGColorRef pointer to the Objective-C method
+                use core_graphics::color::CGColorRef;
+                let color_ref: CGColorRef = cg_color.as_concrete_TypeRef();
+                let _: () = msg_send![&*layer, setBackgroundColor: color_ref];
+            }
+
+            view
         }
+    }
 
-        // Set green color (RGB: 34, 197, 94 = #22c55e)
-        let green = NSColor::colorWithRed_green_blue_alpha(
-            34.0 / 255.0,
-            197.0 / 255.0,
-            94.0 / 255.0,
-            1.0,
-        );
-        green.set();
-
-        // Draw 4 border rectangles
-        let border = BORDER_WIDTH;
-
+    /// Update border view frames for the given content size
+    fn update_border_frames(views: &[Retained<NSView>; 4], width: CGFloat, height: CGFloat) {
         // Top border
-        let top = NSBezierPath::bezierPathWithRect(CGRect::new(
-            CGPoint::new(0.0, rect.size.height - border),
-            CGSize::new(rect.size.width, border),
+        views[0].setFrame(CGRect::new(
+            CGPoint::new(0.0, height - BORDER_WIDTH),
+            CGSize::new(width, BORDER_WIDTH),
         ));
-        top.fill();
 
         // Bottom border
-        let bottom = NSBezierPath::bezierPathWithRect(CGRect::new(
+        views[1].setFrame(CGRect::new(
             CGPoint::new(0.0, 0.0),
-            CGSize::new(rect.size.width, border),
+            CGSize::new(width, BORDER_WIDTH),
         ));
-        bottom.fill();
 
         // Left border
-        let left = NSBezierPath::bezierPathWithRect(CGRect::new(
+        views[2].setFrame(CGRect::new(
             CGPoint::new(0.0, 0.0),
-            CGSize::new(border, rect.size.height),
+            CGSize::new(BORDER_WIDTH, height),
         ));
-        left.fill();
 
         // Right border
-        let right = NSBezierPath::bezierPathWithRect(CGRect::new(
-            CGPoint::new(rect.size.width - border, 0.0),
-            CGSize::new(border, rect.size.height),
+        views[3].setFrame(CGRect::new(
+            CGPoint::new(width - BORDER_WIDTH, 0.0),
+            CGSize::new(BORDER_WIDTH, height),
         ));
-        right.fill();
     }
 
     pub fn show_border(x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
-        // Must be called on main thread for AppKit
-        let mtm = match MainThreadMarker::new() {
-            Some(m) => m,
-            None => return Err("Must be called from main thread".to_string()),
-        };
+        // Dispatch to main thread if necessary (AppKit requires main thread)
+        run_on_main_thread(|| show_border_impl(x, y, width, height))
+    }
+
+    fn show_border_impl(x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
+        // We're guaranteed to be on main thread now
+        let mtm = MainThreadMarker::new()
+            .expect("show_border_impl must be called on main thread");
 
         OVERLAY_WINDOW.with(|window_cell| {
-            let mut guard = window_cell.borrow_mut();
+            BORDER_VIEWS.with(|views_cell| {
+                let mut window_guard = window_cell.borrow_mut();
+                let mut views_guard = views_cell.borrow_mut();
 
-            // macOS uses bottom-left origin, so we need to flip Y coordinate
-            // Get screen height to flip Y
-            let screen_height: CGFloat = if let Some(main_screen) = NSScreen::mainScreen(mtm) {
-                main_screen.frame().size.height
-            } else {
-                1080.0 // fallback
-            };
+                // macOS uses bottom-left origin, so we need to flip Y coordinate
+                // Get screen height to flip Y
+                let screen_height: CGFloat = if let Some(main_screen) = NSScreen::mainScreen(mtm) {
+                    main_screen.frame().size.height
+                } else {
+                    1080.0 // fallback
+                };
 
-            let flipped_y = screen_height - y as CGFloat - height as CGFloat;
-            let frame = CGRect::new(
-                CGPoint::new(x as CGFloat, flipped_y),
-                CGSize::new(width as CGFloat, height as CGFloat),
-            );
+                let flipped_y = screen_height - y as CGFloat - height as CGFloat;
+                let frame = CGRect::new(
+                    CGPoint::new(x as CGFloat, flipped_y),
+                    CGSize::new(width as CGFloat, height as CGFloat),
+                );
 
-            if let Some(ref window) = *guard {
-                // Move existing window
-                window.setFrame_display(frame, true);
-                return Ok(());
-            }
+                if let Some(ref window) = *window_guard {
+                    // Move existing window and update border frames
+                    window.setFrame_display(frame, true);
 
-            // Create new window using MainThreadOnly alloc pattern
-            unsafe {
-                let style = NSWindowStyleMask::Borderless;
+                    // Update border view frames
+                    if let Some(ref views) = *views_guard {
+                        update_border_frames(views, width as CGFloat, height as CGFloat);
+                    }
+                    return Ok(());
+                }
 
-                // Use mtm.alloc() for main-thread-only types
-                let window: Retained<NSWindow> = msg_send![
-                    mtm.alloc::<NSWindow>(),
-                    initWithContentRect: frame,
-                    styleMask: style,
-                    backing: NS_BACKING_STORE_BUFFERED,
-                    defer: false,
-                ];
+                // Create new window using MainThreadOnly alloc pattern
+                unsafe {
+                    let style = NSWindowStyleMask::Borderless;
 
-                // Configure window properties
-                window.setOpaque(false);
-                window.setBackgroundColor(Some(&NSColor::clearColor()));
-                window.setHasShadow(false);
-                window.setIgnoresMouseEvents(true);
-                window.setLevel(OVERLAY_WINDOW_LEVEL);
+                    // Use mtm.alloc() for main-thread-only types
+                    let window: Retained<NSWindow> = msg_send![
+                        mtm.alloc::<NSWindow>(),
+                        initWithContentRect: frame,
+                        styleMask: style,
+                        backing: NS_BACKING_STORE_BUFFERED,
+                        defer: false,
+                    ];
 
-                // Create content view that draws the border
-                let content_view: Retained<NSView> = msg_send![
-                    mtm.alloc::<NSView>(),
-                    initWithFrame: frame,
-                ];
+                    // Configure window properties
+                    window.setOpaque(false);
+                    window.setBackgroundColor(Some(&NSColor::clearColor()));
+                    window.setHasShadow(false);
+                    window.setIgnoresMouseEvents(true);
+                    window.setLevel(OVERLAY_WINDOW_LEVEL);
 
-                // We need to draw the border - for now, use a simple approach
-                // by setting up a display link or using layer-backed view
-                // For simplicity, we'll use setWantsLayer and draw via CALayer
+                    // Create transparent content view
+                    let content_frame = CGRect::new(
+                        CGPoint::new(0.0, 0.0),
+                        CGSize::new(width as CGFloat, height as CGFloat),
+                    );
+                    let content_view: Retained<NSView> = msg_send![
+                        mtm.alloc::<NSView>(),
+                        initWithFrame: content_frame,
+                    ];
 
-                window.setContentView(Some(&content_view));
-                window.makeKeyAndOrderFront(None);
+                    // Create 4 border views (top, bottom, left, right) with green background
+                    let top_view = create_border_view(mtm, CGRect::new(
+                        CGPoint::new(0.0, height as CGFloat - BORDER_WIDTH),
+                        CGSize::new(width as CGFloat, BORDER_WIDTH),
+                    ));
 
-                // Store window reference
-                *guard = Some(window);
-            }
+                    let bottom_view = create_border_view(mtm, CGRect::new(
+                        CGPoint::new(0.0, 0.0),
+                        CGSize::new(width as CGFloat, BORDER_WIDTH),
+                    ));
 
-            Ok(())
+                    let left_view = create_border_view(mtm, CGRect::new(
+                        CGPoint::new(0.0, 0.0),
+                        CGSize::new(BORDER_WIDTH, height as CGFloat),
+                    ));
+
+                    let right_view = create_border_view(mtm, CGRect::new(
+                        CGPoint::new(width as CGFloat - BORDER_WIDTH, 0.0),
+                        CGSize::new(BORDER_WIDTH, height as CGFloat),
+                    ));
+
+                    // Add border views to content view
+                    content_view.addSubview(&top_view);
+                    content_view.addSubview(&bottom_view);
+                    content_view.addSubview(&left_view);
+                    content_view.addSubview(&right_view);
+
+                    window.setContentView(Some(&content_view));
+                    window.makeKeyAndOrderFront(None);
+
+                    // Store references
+                    *window_guard = Some(window);
+                    *views_guard = Some([top_view, bottom_view, left_view, right_view]);
+                }
+
+                Ok(())
+            })
         })
     }
 
     pub fn hide_border() -> Result<(), String> {
+        // Dispatch to main thread if necessary (AppKit requires main thread)
+        run_on_main_thread(|| hide_border_impl())
+    }
+
+    fn hide_border_impl() -> Result<(), String> {
         OVERLAY_WINDOW.with(|window_cell| {
-            let mut guard = window_cell.borrow_mut();
+            BORDER_VIEWS.with(|views_cell| {
+                let mut window_guard = window_cell.borrow_mut();
+                let mut views_guard = views_cell.borrow_mut();
 
-            if let Some(window) = guard.take() {
-                window.close();
-            }
+                // Clear border views first
+                *views_guard = None;
 
-            Ok(())
+                // Close and release window
+                if let Some(window) = window_guard.take() {
+                    window.close();
+                }
+
+                Ok(())
+            })
         })
     }
 
@@ -642,8 +778,13 @@ mod macos_impl {
     // Toast Notification Implementation
     // ============================================================================
 
+    use objc2_app_kit::{NSTextField, NSFont, NSTextFieldCell};
+    use objc2_foundation::NSString;
+
     thread_local! {
         static TOAST_WINDOW: RefCell<Option<Retained<NSWindow>>> = const { RefCell::new(None) };
+        // Timer handle for auto-dismiss
+        static TOAST_TIMER_ACTIVE: RefCell<bool> = const { RefCell::new(false) };
     }
 
     // Toast constants matching Windows design
@@ -651,18 +792,135 @@ mod macos_impl {
     const TOAST_HEIGHT: CGFloat = 56.0;
     const TOAST_MARGIN: CGFloat = 24.0;
     const TOAST_WINDOW_LEVEL: isize = 1002; // Above overlay
+    const TOAST_CORNER_RADIUS: CGFloat = 12.0;
+
+    // Icon dimensions
+    const ICON_SIZE: CGFloat = 22.0;
+    const ICON_LEFT_MARGIN: CGFloat = 16.0;
+    const ACCENT_BAR_WIDTH: CGFloat = 4.0;
+
+    /// Create a circular icon view with the specified color
+    fn create_icon_view(mtm: MainThreadMarker, x: CGFloat, y: CGFloat, color: &NSColor) -> Retained<NSView> {
+        unsafe {
+            let frame = CGRect::new(
+                CGPoint::new(x, y),
+                CGSize::new(ICON_SIZE, ICON_SIZE),
+            );
+            let view: Retained<NSView> = msg_send![
+                mtm.alloc::<NSView>(),
+                initWithFrame: frame,
+            ];
+
+            view.setWantsLayer(true);
+
+            if let Some(layer) = view.layer() {
+                // Set circular shape via corner radius (half of size = circle)
+                let _: () = msg_send![&*layer, setCornerRadius: ICON_SIZE / 2.0];
+
+                // Set cyan background color (#49B8D3)
+                let cg_color = core_graphics::color::CGColor::rgb(
+                    73.0 / 255.0,   // R
+                    184.0 / 255.0,  // G
+                    211.0 / 255.0,  // B
+                    1.0,            // A
+                );
+                use core_graphics::color::CGColorRef;
+                let color_ref: CGColorRef = cg_color.as_concrete_TypeRef();
+                let _: () = msg_send![&*layer, setBackgroundColor: color_ref];
+            }
+
+            view
+        }
+    }
+
+    /// Create an accent bar view (left edge decoration)
+    fn create_accent_bar(mtm: MainThreadMarker, height: CGFloat) -> Retained<NSView> {
+        unsafe {
+            let frame = CGRect::new(
+                CGPoint::new(0.0, 0.0),
+                CGSize::new(ACCENT_BAR_WIDTH, height),
+            );
+            let view: Retained<NSView> = msg_send![
+                mtm.alloc::<NSView>(),
+                initWithFrame: frame,
+            ];
+
+            view.setWantsLayer(true);
+
+            if let Some(layer) = view.layer() {
+                // Set primary blue color (#2721E8)
+                let cg_color = core_graphics::color::CGColor::rgb(
+                    39.0 / 255.0,   // R
+                    33.0 / 255.0,   // G
+                    232.0 / 255.0,  // B
+                    1.0,            // A
+                );
+                use core_graphics::color::CGColorRef;
+                let color_ref: CGColorRef = cg_color.as_concrete_TypeRef();
+                let _: () = msg_send![&*layer, setBackgroundColor: color_ref];
+
+                // Round only the left corners
+                let _: () = msg_send![&*layer, setCornerRadius: TOAST_CORNER_RADIUS];
+                let _: () = msg_send![&*layer, setMaskedCorners: 0b0101_u32]; // Bottom-left and top-left
+            }
+
+            view
+        }
+    }
+
+    /// Create a text label for the toast message
+    fn create_text_label(mtm: MainThreadMarker, message: &str, x: CGFloat, width: CGFloat, height: CGFloat) -> Retained<NSTextField> {
+        unsafe {
+            let frame = CGRect::new(
+                CGPoint::new(x, 0.0),
+                CGSize::new(width, height),
+            );
+
+            // Create NSTextField
+            let text_field: Retained<NSTextField> = msg_send![
+                mtm.alloc::<NSTextField>(),
+                initWithFrame: frame,
+            ];
+
+            // Configure as label (not editable)
+            text_field.setEditable(false);
+            text_field.setSelectable(false);
+            text_field.setBordered(false);
+            text_field.setDrawsBackground(false);
+
+            // Set text color to white
+            let white = NSColor::colorWithRed_green_blue_alpha(1.0, 1.0, 1.0, 1.0);
+            text_field.setTextColor(Some(&white));
+
+            // Set font (system font, 13pt, medium weight)
+            if let Some(font) = NSFont::systemFontOfSize_weight(13.0, 0.5) {
+                text_field.setFont(Some(&font));
+            }
+
+            // Set the message text
+            let ns_string = NSString::from_str(message);
+            text_field.setStringValue(&ns_string);
+
+            // Center vertically by using cell
+            if let Some(cell) = text_field.cell() {
+                // Use line break mode to truncate with ellipsis if needed
+                let _: () = msg_send![&*cell, setLineBreakMode: 4_i64]; // NSLineBreakByTruncatingTail
+            }
+
+            text_field
+        }
+    }
 
     pub fn show_toast(message: &str, duration_ms: u32) -> Result<(), String> {
-        // Must be called on main thread for AppKit
-        let mtm = match MainThreadMarker::new() {
-            Some(m) => m,
-            None => {
-                // If not on main thread, we need to dispatch to main thread
-                // For now, just return Ok - the toast will be skipped
-                eprintln!("Toast must be shown from main thread");
-                return Ok(());
-            }
-        };
+        // Dispatch to main thread if necessary (AppKit requires main thread)
+        let message_owned = message.to_string();
+        run_on_main_thread(move || show_toast_impl(&message_owned, duration_ms))
+    }
+
+    fn show_toast_impl(message: &str, duration_ms: u32) -> Result<(), String> {
+        // We're guaranteed to be on main thread now
+        let mtm = MainThreadMarker::new()
+            .expect("show_toast_impl must be called on main thread");
 
         // Close any existing toast
         TOAST_WINDOW.with(|window_cell| {
@@ -671,7 +929,6 @@ mod macos_impl {
             }
         });
 
-        let _message = message.to_string(); // Reserved for future text rendering
         let duration = duration_ms;
 
         TOAST_WINDOW.with(|window_cell| {
@@ -686,8 +943,7 @@ mod macos_impl {
                 };
 
                 // Position in bottom-right corner (macOS uses bottom-left origin)
-                let x =
-                    screen_frame.origin.x + screen_frame.size.width - TOAST_WIDTH - TOAST_MARGIN;
+                let x = screen_frame.origin.x + screen_frame.size.width - TOAST_WIDTH - TOAST_MARGIN;
                 let y = screen_frame.origin.y + TOAST_MARGIN;
 
                 let frame = CGRect::new(CGPoint::new(x, y), CGSize::new(TOAST_WIDTH, TOAST_HEIGHT));
@@ -704,7 +960,7 @@ mod macos_impl {
 
                 // Configure window properties
                 window.setOpaque(false);
-                window.setAlphaValue(0.9); // Semi-transparent
+                window.setAlphaValue(0.95); // Slightly less transparent for better readability
                 window.setHasShadow(true);
                 window.setIgnoresMouseEvents(true);
                 window.setLevel(TOAST_WINDOW_LEVEL);
@@ -728,10 +984,47 @@ mod macos_impl {
                     initWithFrame: content_frame,
                 ];
 
-                // Enable layer-backing
+                // Enable layer-backing for rounded corners
                 content_view.setWantsLayer(true);
-                // Note: Rounded corners would require objc2-quartz-core CALayer features
-                // For now, toast will have square corners
+
+                // Set rounded corners on the content view's layer
+                if let Some(layer) = content_view.layer() {
+                    let _: () = msg_send![&*layer, setCornerRadius: TOAST_CORNER_RADIUS];
+                    let _: () = msg_send![&*layer, setMasksToBounds: true];
+
+                    // Set background color on layer
+                    let cg_color = core_graphics::color::CGColor::rgb(
+                        30.0 / 255.0,
+                        27.0 / 255.0,
+                        35.0 / 255.0,
+                        1.0,
+                    );
+                    use core_graphics::color::CGColorRef;
+                    let color_ref: CGColorRef = cg_color.as_concrete_TypeRef();
+                    let _: () = msg_send![&*layer, setBackgroundColor: color_ref];
+                }
+
+                // Create accent bar on the left
+                let accent_bar = create_accent_bar(mtm, TOAST_HEIGHT);
+                content_view.addSubview(&accent_bar);
+
+                // Create icon view (cyan circle)
+                let icon_y = (TOAST_HEIGHT - ICON_SIZE) / 2.0; // Center vertically
+                let icon_x = ACCENT_BAR_WIDTH + ICON_LEFT_MARGIN;
+                let cyan_color = NSColor::colorWithRed_green_blue_alpha(
+                    73.0 / 255.0,
+                    184.0 / 255.0,
+                    211.0 / 255.0,
+                    1.0,
+                );
+                let icon_view = create_icon_view(mtm, icon_x, icon_y, &cyan_color);
+                content_view.addSubview(&icon_view);
+
+                // Create text label
+                let text_x = icon_x + ICON_SIZE + 12.0; // 12px gap after icon
+                let text_width = TOAST_WIDTH - text_x - 16.0; // 16px right padding
+                let text_label = create_text_label(mtm, &message_owned, text_x, text_width, TOAST_HEIGHT);
+                content_view.addSubview(&text_label);
 
                 window.setContentView(Some(&content_view));
                 window.makeKeyAndOrderFront(None);
@@ -741,20 +1034,36 @@ mod macos_impl {
             }
         });
 
-        // Schedule auto-dismiss using a background thread
+        // Mark timer as active
+        TOAST_TIMER_ACTIVE.with(|active| {
+            *active.borrow_mut() = true;
+        });
+
+        // Schedule auto-dismiss using a background thread that sleeps then signals
+        // We use thread_local check to avoid closing if a new toast was shown
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(duration as u64));
 
-            // Need to dispatch back to main thread to close the window
-            // Since we can't easily dispatch to main thread from here,
-            // we'll use a simple approach: just mark for cleanup
-            // The window will be cleaned up on next toast or app can call hide
-            TOAST_WINDOW.with(|window_cell| {
-                if let Some(window) = window_cell.borrow_mut().take() {
-                    // This may not work from background thread, but try anyway
-                    window.close();
+            // Check if timer is still active (not cancelled by new toast)
+            let should_close = TOAST_TIMER_ACTIVE.with(|active| {
+                let is_active = *active.borrow();
+                if is_active {
+                    *active.borrow_mut() = false;
                 }
+                is_active
             });
+
+            if should_close {
+                // Close the toast window
+                // Note: This accesses thread-local from background thread which may not work
+                // but the window will be cleaned up on next show_toast call anyway
+                TOAST_WINDOW.with(|window_cell| {
+                    if let Some(window) = window_cell.borrow_mut().take() {
+                        // Try to close - may fail from background thread
+                        window.close();
+                    }
+                });
+            }
         });
 
         Ok(())

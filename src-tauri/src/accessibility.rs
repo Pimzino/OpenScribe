@@ -93,11 +93,17 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
 // macOS implementation using Accessibility API
 #[cfg(target_os = "macos")]
 pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
-    use core_foundation::base::CFRelease;
+    use core_foundation::base::{CFRelease, CFTypeRef, TCFType};
+    use core_foundation::string::{CFString, CFStringRef};
     use std::ptr;
 
-    // macOS accessibility requires AXUIElementCopyElementAtPosition
-    // This is a simplified implementation - full implementation would use objc crate
+    // AX error code for success
+    const K_AX_ERROR_SUCCESS: i32 = 0;
+
+    // Attribute name constants
+    fn cf_string(s: &str) -> CFString {
+        CFString::new(s)
+    }
 
     unsafe {
         #[link(name = "ApplicationServices", kind = "framework")]
@@ -109,12 +115,10 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
                 y: f32,
                 element_at_position: *mut *mut std::ffi::c_void,
             ) -> i32;
-            // Reserved for future use when we implement full attribute reading
-            #[allow(dead_code)]
             fn AXUIElementCopyAttributeValue(
                 element: *mut std::ffi::c_void,
-                attribute: *const std::ffi::c_void,
-                value: *mut *mut std::ffi::c_void,
+                attribute: CFStringRef,
+                value: *mut CFTypeRef,
             ) -> i32;
         }
 
@@ -133,19 +137,118 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
 
         CFRelease(system_wide as *const _);
 
-        if result != 0 || element_at_pos.is_null() {
+        if result != K_AX_ERROR_SUCCESS || element_at_pos.is_null() {
             return None;
         }
 
-        // Get attributes - simplified, would need proper CFString handling
-        // For now return basic info
+        // Helper to get string attribute from an AX element
+        let get_string_attr = |element: *mut std::ffi::c_void, attr_name: &str| -> Option<String> {
+            let attr = cf_string(attr_name);
+            let mut value: CFTypeRef = ptr::null();
+            let result = AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef(), &mut value);
+            if result == K_AX_ERROR_SUCCESS && !value.is_null() {
+                // Try to interpret as CFString
+                let cf_str = CFString::wrap_under_create_rule(value as CFStringRef);
+                Some(cf_str.to_string())
+            } else {
+                None
+            }
+        };
+
+        // Get title (name) - try multiple attributes
+        let name = get_string_attr(element_at_pos, "AXTitle")
+            .or_else(|| get_string_attr(element_at_pos, "AXDescription"))
+            .or_else(|| get_string_attr(element_at_pos, "AXHelp"))
+            .unwrap_or_default();
+
+        // Get role (element type)
+        let role = get_string_attr(element_at_pos, "AXRole").unwrap_or_default();
+        // Convert AX role to human-readable type
+        let element_type = match role.as_str() {
+            "AXButton" => "Button".to_string(),
+            "AXTextField" => "Text Field".to_string(),
+            "AXStaticText" => "Text".to_string(),
+            "AXLink" => "Link".to_string(),
+            "AXCheckBox" => "Checkbox".to_string(),
+            "AXRadioButton" => "Radio Button".to_string(),
+            "AXPopUpButton" => "Dropdown".to_string(),
+            "AXComboBox" => "Combo Box".to_string(),
+            "AXSlider" => "Slider".to_string(),
+            "AXTabGroup" => "Tab Group".to_string(),
+            "AXTab" => "Tab".to_string(),
+            "AXTable" => "Table".to_string(),
+            "AXRow" => "Row".to_string(),
+            "AXCell" => "Cell".to_string(),
+            "AXImage" => "Image".to_string(),
+            "AXMenu" => "Menu".to_string(),
+            "AXMenuItem" => "Menu Item".to_string(),
+            "AXMenuBar" => "Menu Bar".to_string(),
+            "AXToolbar" => "Toolbar".to_string(),
+            "AXWindow" => "Window".to_string(),
+            "AXGroup" => "Group".to_string(),
+            "AXScrollArea" => "Scroll Area".to_string(),
+            "AXList" => "List".to_string(),
+            "AXOutline" => "Outline".to_string(),
+            "AXTextArea" => "Text Area".to_string(),
+            "AXWebArea" => "Web Content".to_string(),
+            _ => if role.starts_with("AX") { role[2..].to_string() } else { role },
+        };
+
+        // Get value
+        let value = get_string_attr(element_at_pos, "AXValue");
+
+        // Walk up the element tree to find the app name
+        let mut app_name: Option<String> = None;
+        let mut current_element = element_at_pos;
+        for _ in 0..20 {
+            // Get parent element
+            let attr = cf_string("AXParent");
+            let mut parent_value: CFTypeRef = ptr::null();
+            let result = AXUIElementCopyAttributeValue(current_element, attr.as_concrete_TypeRef(), &mut parent_value);
+
+            if result != K_AX_ERROR_SUCCESS || parent_value.is_null() {
+                break;
+            }
+
+            // Check if this element has a title we can use as app name
+            if let Some(title) = get_string_attr(parent_value as *mut std::ffi::c_void, "AXTitle") {
+                if !title.is_empty() {
+                    app_name = Some(title);
+                }
+            }
+
+            // Also check AXRoleDescription for top-level window/app
+            if let Some(role) = get_string_attr(parent_value as *mut std::ffi::c_void, "AXRole") {
+                if role == "AXApplication" {
+                    // Found the application - get its title
+                    if let Some(title) = get_string_attr(parent_value as *mut std::ffi::c_void, "AXTitle") {
+                        if !title.is_empty() {
+                            app_name = Some(title);
+                        }
+                    }
+                    CFRelease(parent_value);
+                    break;
+                }
+            }
+
+            // Release current element if it's not the original
+            if current_element != element_at_pos {
+                CFRelease(current_element as *const _);
+            }
+            current_element = parent_value as *mut std::ffi::c_void;
+        }
+
+        // Clean up remaining element references
+        if current_element != element_at_pos && !current_element.is_null() {
+            CFRelease(current_element as *const _);
+        }
         CFRelease(element_at_pos as *const _);
 
         Some(ElementInfo {
-            name: "UI Element".to_string(),
-            element_type: "unknown".to_string(),
-            value: None,
-            app_name: None,
+            name,
+            element_type,
+            value,
+            app_name,
         })
     }
 }
