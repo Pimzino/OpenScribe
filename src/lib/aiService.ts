@@ -588,8 +588,8 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
         throw error;
     }
 
-    // Generate title based on all step descriptions (better context)
-    const title = await generateTitle(stepDescriptions, openaiBaseUrl, openaiApiKey, openaiModel);
+    // Use the workflow title (recording name) as the document title
+    const title = config?.workflowTitle ?? 'Documentation';
 
     // Assemble the final document with screenshots
     let markdown = `# ${title}\n\n`;
@@ -1143,8 +1143,8 @@ export async function generateDocumentationStreaming(
         throw error;
     }
 
-    // Generate title
-    const title = await generateTitle(stepDescriptions, openaiBaseUrl, openaiApiKey, openaiModel);
+    // Use the workflow title (recording name) as the document title
+    const title = config?.workflowTitle ?? 'Documentation';
     callbacks.onTitleGenerated?.(title);
 
     // Build final markdown with title
