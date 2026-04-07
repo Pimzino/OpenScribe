@@ -510,7 +510,9 @@ mod macos_impl {
 
     #[link(name = "System", kind = "dylib")]
     extern "C" {
-        fn dispatch_get_main_queue() -> DispatchQueueT;
+        // dispatch_get_main_queue() is an inline function in newer macOS SDKs;
+        // the actual exported symbol is the _dispatch_main_q global variable.
+        static _dispatch_main_q: DispatchQueue;
         fn dispatch_sync_f(
             queue: DispatchQueueT,
             context: *mut std::ffi::c_void,
@@ -556,7 +558,7 @@ mod macos_impl {
             let data = (closure, result);
             unsafe {
                 dispatch_sync_f(
-                    dispatch_get_main_queue(),
+                    &_dispatch_main_q as *const DispatchQueue,
                     &data as *const _ as *mut std::ffi::c_void,
                     std::mem::transmute(trampoline::<F, R> as extern "C" fn(*mut std::ffi::c_void)),
                 );
