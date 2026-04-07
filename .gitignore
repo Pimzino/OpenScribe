@@ -33,4 +33,5 @@ src/lib/changelog-data.ts
 .vscode/
 
 # AI
-.cursor
+.cursor.serena/
+.serena/
