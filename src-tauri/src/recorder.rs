@@ -523,12 +523,12 @@ pub fn start_listener(
             // Check if we need to flush text buffer due to timeout
             if let Some(last_time) = last_key_time {
                 if last_time.elapsed() >= text_flush_timeout && !key_buffer.trim().is_empty() {
-                    // Check if typing is happening in OpenScribe - if so, discard the buffer
+                    // Check if typing is happening in StepSnap - if so, discard the buffer
                     let fg_app = get_foreground_window_app_name();
                     if is_stepsnap_app(&fg_app) {
                         key_buffer.clear();
                         last_key_time = None;
-                        continue; // Discard - was typing in OpenScribe
+                        continue; // Discard - was typing in StepSnap
                     }
 
                     // Get monitor containing the foreground window (where user is typing)
@@ -590,12 +590,12 @@ pub fn start_listener(
 
                     // Flush on Return or Tab - only if buffer has actual content (not just whitespace)
                     if (is_return || is_tab) && !key_buffer.trim().is_empty() {
-                        // Check if typing is happening in OpenScribe - if so, discard the buffer
+                        // Check if typing is happening in StepSnap - if so, discard the buffer
                         let fg_app = get_foreground_window_app_name();
                         if is_stepsnap_app(&fg_app) {
                             key_buffer.clear();
                             last_key_time = None;
-                            continue; // Discard - was typing in OpenScribe
+                            continue; // Discard - was typing in StepSnap
                         }
 
                         // Get monitor containing the foreground window (where user is typing)
@@ -664,7 +664,7 @@ pub fn start_listener(
                                 }
                             }
                         }
-                        continue; // Skip the click itself - it's within OpenScribe
+                        continue; // Skip the click itself - it's within StepSnap
                     }
 
                     // Capture Screenshot from the correct monitor
