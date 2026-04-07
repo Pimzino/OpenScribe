@@ -103,29 +103,13 @@ def create_horizontal_logo(source_img, text="StepSnap"):
     icon_size = 128
     icon = icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
     
-    # Create canvas
-    padding = 40
-    text_width = 300  # Space for text
-    width = icon_size + padding + text_width
-    height = max(icon_size + 40, 100)
-    
-    canvas = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-    
-    # Paste icon
-    icon_y = (height - icon_size) // 2
-    canvas.paste(icon, (padding, icon_y), icon)
-    
-    # Add text
-    draw = ImageDraw.Draw(canvas)
-    
-    # Try to load a nice font, fallback to default
+    # Try to load a nice font first to calculate sizes
     try:
-        # Try system fonts
         font_paths = [
-            "/System/Library/Fonts/Helvetica.ttc",  # macOS
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux
             "C:/Windows/Fonts/segoeui.ttf",  # Windows
             "C:/Windows/Fonts/arial.ttf",  # Windows fallback
+            "/System/Library/Fonts/Helvetica.ttc",  # macOS
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux
         ]
         
         font_large = None
@@ -139,23 +123,49 @@ def create_horizontal_logo(source_img, text="StepSnap"):
     except:
         font_large = ImageFont.load_default()
     
-    # Draw "Step" in dark blue
-    text_x = padding + icon_size + 30
-    text_y = (height - 72) // 2
-    
-    # Split text: "Step" in blue, "Snap" in cyan
+    # Calculate text widths first
     step_text = "Step"
     snap_text = "Snap"
     
-    # Draw "Step"
+    # Use textbbox to get accurate width
+    temp_img = Image.new('RGBA', (1, 1))
+    temp_draw = ImageDraw.Draw(temp_img)
+    
+    bbox_step = temp_draw.textbbox((0, 0), step_text, font=font_large)
+    step_width = bbox_step[2] - bbox_step[0]
+    
+    bbox_snap = temp_draw.textbbox((0, 0), snap_text, font=font_large)
+    snap_width = bbox_snap[2] - bbox_snap[0]
+    
+    total_text_width = step_width + snap_width + 5  # 5px gap between words
+    text_height = bbox_step[3] - bbox_step[1]
+    
+    # Create canvas with proper size
+    padding = 40
+    icon_text_gap = 30
+    extra_padding = 40  # Extra space on right to ensure text fits
+    width = padding + icon_size + icon_text_gap + total_text_width + extra_padding
+    height = max(icon_size + 40, text_height + 60)
+    
+    canvas = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    
+    # Paste icon
+    icon_y = (height - icon_size) // 2
+    canvas.paste(icon, (padding, icon_y), icon)
+    
+    # Add text
+    draw = ImageDraw.Draw(canvas)
+    
+    # Calculate vertical centering
+    text_x = padding + icon_size + icon_text_gap
+    text_y = (height - text_height) // 2 - 5  # Slight adjustment
+    
+    # Draw "Step" in dark blue
     draw.text((text_x, text_y), step_text, fill="#2721E8", font=font_large)
     
-    # Calculate width of "Step" to position "Snap"
-    bbox = draw.textbbox((text_x, text_y), step_text, font=font_large)
-    step_width = bbox[2] - bbox[0]
-    
     # Draw "Snap" in cyan
-    draw.text((text_x + step_width + 5, text_y), snap_text, fill="#49B8D3", font=font_large)
+    snap_x = text_x + step_width + 5
+    draw.text((snap_x, text_y), snap_text, fill="#49B8D3", font=font_large)
     
     return canvas
 
