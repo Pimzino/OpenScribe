@@ -520,8 +520,7 @@ mod macos_impl {
 
     /// Check if we're currently on the main thread
     fn is_main_thread() -> bool {
-        use objc2_foundation::NSThread;
-        NSThread::isMainThread()
+        MainThreadMarker::new().is_some()
     }
 
     /// Execute a closure on the main thread synchronously.
@@ -563,7 +562,8 @@ mod macos_impl {
                 );
             }
 
-            data.1.lock().unwrap().take().expect("Main thread execution failed")
+            let result = data.1.lock().unwrap().take().expect("Main thread execution failed");
+            result
         }
     }
 
@@ -594,19 +594,15 @@ mod macos_impl {
 
             // Get the layer and set its background color to green (#22c55e)
             if let Some(layer) = view.layer() {
-                // Create CGColor using core-graphics crate (uses its own CGFloat type)
-                let cg_color = core_graphics::color::CGColor::rgb(
+                // Create NSColor and get its CGColor via msg_send (avoids core-graphics type API issues)
+                let ns_color = NSColor::colorWithRed_green_blue_alpha(
                     34.0 / 255.0,   // R
                     197.0 / 255.0,  // G
                     94.0 / 255.0,   // B
                     1.0,            // A
                 );
-
-                // Use msg_send to set backgroundColor
-                // Pass the CGColorRef pointer to the Objective-C method
-                use core_graphics::color::CGColorRef;
-                let color_ref: CGColorRef = cg_color.as_concrete_TypeRef();
-                let _: () = msg_send![&*layer, setBackgroundColor: color_ref];
+                let cg_color: *const std::ffi::c_void = msg_send![&ns_color, CGColor];
+                let _: () = msg_send![&*layer, setBackgroundColor: cg_color];
             }
 
             view
@@ -817,16 +813,9 @@ mod macos_impl {
                 // Set circular shape via corner radius (half of size = circle)
                 let _: () = msg_send![&*layer, setCornerRadius: ICON_SIZE / 2.0];
 
-                // Set cyan background color (#49B8D3)
-                let cg_color = core_graphics::color::CGColor::rgb(
-                    73.0 / 255.0,   // R
-                    184.0 / 255.0,  // G
-                    211.0 / 255.0,  // B
-                    1.0,            // A
-                );
-                use core_graphics::color::CGColorRef;
-                let color_ref: CGColorRef = cg_color.as_concrete_TypeRef();
-                let _: () = msg_send![&*layer, setBackgroundColor: color_ref];
+                // Use the passed color parameter directly via CGColor
+                let cg_color: *const std::ffi::c_void = msg_send![color, CGColor];
+                let _: () = msg_send![&*layer, setBackgroundColor: cg_color];
             }
 
             view
@@ -848,16 +837,15 @@ mod macos_impl {
             view.setWantsLayer(true);
 
             if let Some(layer) = view.layer() {
-                // Set primary blue color (#2721E8)
-                let cg_color = core_graphics::color::CGColor::rgb(
+                // Set primary blue color (#2721E8) via NSColor.CGColor
+                let ns_color = NSColor::colorWithRed_green_blue_alpha(
                     39.0 / 255.0,   // R
                     33.0 / 255.0,   // G
                     232.0 / 255.0,  // B
                     1.0,            // A
                 );
-                use core_graphics::color::CGColorRef;
-                let color_ref: CGColorRef = cg_color.as_concrete_TypeRef();
-                let _: () = msg_send![&*layer, setBackgroundColor: color_ref];
+                let cg_color: *const std::ffi::c_void = msg_send![&ns_color, CGColor];
+                let _: () = msg_send![&*layer, setBackgroundColor: cg_color];
 
                 // Round only the left corners
                 let _: () = msg_send![&*layer, setCornerRadius: TOAST_CORNER_RADIUS];
@@ -893,9 +881,8 @@ mod macos_impl {
             text_field.setTextColor(Some(&white));
 
             // Set font (system font, 13pt, medium weight)
-            if let Some(font) = NSFont::systemFontOfSize_weight(13.0, 0.5) {
-                text_field.setFont(Some(&font));
-            }
+            let font = NSFont::systemFontOfSize_weight(13.0, 0.5);
+            text_field.setFont(Some(&font));
 
             // Set the message text
             let ns_string = NSString::from_str(message);
@@ -992,16 +979,15 @@ mod macos_impl {
                     let _: () = msg_send![&*layer, setCornerRadius: TOAST_CORNER_RADIUS];
                     let _: () = msg_send![&*layer, setMasksToBounds: true];
 
-                    // Set background color on layer
-                    let cg_color = core_graphics::color::CGColor::rgb(
+                    // Set background color on layer via NSColor.CGColor
+                    let ns_color = NSColor::colorWithRed_green_blue_alpha(
                         30.0 / 255.0,
                         27.0 / 255.0,
                         35.0 / 255.0,
                         1.0,
                     );
-                    use core_graphics::color::CGColorRef;
-                    let color_ref: CGColorRef = cg_color.as_concrete_TypeRef();
-                    let _: () = msg_send![&*layer, setBackgroundColor: color_ref];
+                    let cg_color: *const std::ffi::c_void = msg_send![&ns_color, CGColor];
+                    let _: () = msg_send![&*layer, setBackgroundColor: cg_color];
                 }
 
                 // Create accent bar on the left
@@ -1023,7 +1009,7 @@ mod macos_impl {
                 // Create text label
                 let text_x = icon_x + ICON_SIZE + 12.0; // 12px gap after icon
                 let text_width = TOAST_WIDTH - text_x - 16.0; // 16px right padding
-                let text_label = create_text_label(mtm, &message_owned, text_x, text_width, TOAST_HEIGHT);
+                let text_label = create_text_label(mtm, message, text_x, text_width, TOAST_HEIGHT);
                 content_view.addSubview(&text_label);
 
                 window.setContentView(Some(&content_view));
