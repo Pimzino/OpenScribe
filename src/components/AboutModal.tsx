@@ -49,6 +49,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 p-1 hover:bg-white/10 rounded-lg transition-colors"
+                    aria-label="Close modal"
                 >
                     <X size={16} />
                 </button>
