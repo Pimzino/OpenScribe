@@ -138,8 +138,8 @@ jobs:
       - name: Cleanup mounted DMG volumes (macOS)
         if: matrix.platform == 'macos-latest'
         run: |
-          # Unmount any existing openscribe volumes that might conflict with DMG creation
-          hdiutil info | grep -i "openscribe" | awk '{print $1}' | xargs -I {} hdiutil detach {} -force 2>/dev/null || true
+          # Unmount any existing stepsnap volumes that might conflict with DMG creation
+          hdiutil info | grep -i "stepsnap" | awk '{print $1}' | xargs -I {} hdiutil detach {} -force 2>/dev/null || true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -227,7 +227,7 @@ jobs:
       - name: Generate latest.json for updater
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
-          REPO="Pimzino/OpenScribe"
+          REPO="Pimzino/StepSnap"
 
           echo "Available release files:"
           ls -la release-files/
@@ -312,6 +312,6 @@ jobs:
 
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
-            --title "OpenScribe $TAG" \
+            --title "StepSnap $TAG" \
             --notes "${{ needs.validate.outputs.changelog }}" \
             release-files/*

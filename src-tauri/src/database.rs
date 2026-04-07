@@ -90,7 +90,7 @@ impl Database {
             rusqlite::Error::InvalidPath(app_data_dir.join(e.to_string()))
         })?;
 
-        let db_path = app_data_dir.join("openscribe.db");
+        let db_path = app_data_dir.join("stepsnap.db");
         let conn = Connection::open(&db_path)?;
 
         let db = Database {

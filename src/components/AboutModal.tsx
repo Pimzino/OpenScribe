@@ -54,9 +54,9 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 </button>
 
                 <div className="flex items-center gap-3 mb-4">
-                    <img src="/logo.png" alt="OpenScribe" className="w-12 h-12" />
+                    <img src="/logo.png" alt="StepSnap" className="w-12 h-12" />
                     <div>
-                        <h2 className="text-xl font-bold">OpenScribe</h2>
+                        <h2 className="text-xl font-bold">StepSnap</h2>
                         <button
                             onClick={() => setShowChangelog(true)}
                             className="text-sm text-white/50 hover:text-white/70 transition-colors"

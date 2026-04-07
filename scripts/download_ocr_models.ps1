@@ -1,4 +1,4 @@
-# Download PaddleOCR PP-OCRv5 ONNX models for OpenScribe OCR feature
+# Download PaddleOCR PP-OCRv5 ONNX models for StepSnap OCR feature
 # These models are required for text extraction from screenshots
 
 $ErrorActionPreference = "Stop"

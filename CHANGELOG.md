@@ -1,10 +1,22 @@
 # Changelog
 
-All notable changes to OpenScribe will be documented in this file.
+All notable changes to StepSnap will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [Unreleased]
+
+## [0.1.0] - 2026-04-07
+
+### Changed
+- **Rebranding**: Application renamed from OpenScribe to StepSnap
+  - New logo, branding, and application identity
+  - GitHub repository migrated to `Pimzino/StepSnap`
+- Automatic data migration from `openscribe` to `stepsnap` directory for existing users
+- Database file renamed from `openscribe.db` to `stepsnap.db`
+- All user-facing references updated from OpenScribe to StepSnap
 
 ## [0.0.10] - 2026-01-30
 
@@ -134,7 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.1] - 2025-11-25
 
 ### Added
-- Initial release of OpenScribe
+- Initial release of StepSnap (originally OpenScribe)
 - Click and keyboard interaction recording with automatic screenshots
 - UI element detection via accessibility APIs (element name, type, app name)
 - Click visualization overlay on captured screenshots

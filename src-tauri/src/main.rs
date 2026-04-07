@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    openscribe_lib::run()
+    stepsnap_lib::run()
 }

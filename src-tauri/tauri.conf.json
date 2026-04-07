@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "openscribe",
+  "productName": "stepsnap",
   "version": "../package.json",
-  "identifier": "openscribe",
+  "identifier": "stepsnap",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "OpenScribe",
+        "title": "StepSnap",
         "label": "main",
         "width": 1024,
         "height": 768,
@@ -55,7 +55,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDA4RTkxNzQ2Q0RFQUM3QUQKUldTdHgrck5SaGZwQ080WDJYMEFJNUVrK0tJWTc3MDlHZnpZT2ZRcG0xQXpJaU1CcG1HbW1PZGsK",
       "endpoints": [
-        "https://github.com/Pimzino/OpenScribe/releases/latest/download/latest.json"
+        "https://github.com/Pimzino/StepSnap/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

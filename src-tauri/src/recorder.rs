@@ -15,11 +15,11 @@ use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 use xcap::Monitor;
 
-/// Check if the given app name indicates this is the OpenScribe application
-fn is_openscribe_app(app_name: &Option<String>) -> bool {
+/// Check if the given app name indicates this is the StepSnap application
+fn is_stepsnap_app(app_name: &Option<String>) -> bool {
     if let Some(name) = app_name {
         let name_lower = name.to_lowercase();
-        name_lower.contains("openscribe")
+        name_lower.contains("stepsnap")
     } else {
         false
     }
@@ -420,7 +420,7 @@ pub fn start_listener(
     // Thread 3: Encoder/Emitter (Write to temp files - much faster than base64)
     thread::spawn(move || {
         // Create temp directory for screenshots
-        let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+        let temp_dir = std::env::temp_dir().join("stepsnap_screenshots");
         let _ = fs::create_dir_all(&temp_dir);
 
         for data in rx_encode {
@@ -525,7 +525,7 @@ pub fn start_listener(
                 if last_time.elapsed() >= text_flush_timeout && !key_buffer.trim().is_empty() {
                     // Check if typing is happening in OpenScribe - if so, discard the buffer
                     let fg_app = get_foreground_window_app_name();
-                    if is_openscribe_app(&fg_app) {
+                    if is_stepsnap_app(&fg_app) {
                         key_buffer.clear();
                         last_key_time = None;
                         continue; // Discard - was typing in OpenScribe
@@ -592,7 +592,7 @@ pub fn start_listener(
                     if (is_return || is_tab) && !key_buffer.trim().is_empty() {
                         // Check if typing is happening in OpenScribe - if so, discard the buffer
                         let fg_app = get_foreground_window_app_name();
-                        if is_openscribe_app(&fg_app) {
+                        if is_stepsnap_app(&fg_app) {
                             key_buffer.clear();
                             last_key_time = None;
                             continue; // Discard - was typing in OpenScribe
@@ -639,8 +639,8 @@ pub fn start_listener(
                     // Get element info at click point using accessibility APIs
                     let element_info = get_element_at_point(x, y);
 
-                    // Skip clicks within OpenScribe windows (but flush pending text first)
-                    if is_openscribe_app(&element_info.as_ref().and_then(|e| e.app_name.clone())) {
+                    // Skip clicks within StepSnap windows (but flush pending text first)
+                    if is_stepsnap_app(&element_info.as_ref().and_then(|e| e.app_name.clone())) {
                         // Still flush any pending text buffer - it was typed in another app
                         if !key_buffer.trim().is_empty() {
                             if let Some(mon) = get_monitor_for_foreground_window() {

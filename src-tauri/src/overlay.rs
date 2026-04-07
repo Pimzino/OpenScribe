@@ -71,7 +71,7 @@ mod windows_impl {
                     | WS_EX_TOPMOST
                     | WS_EX_TOOLWINDOW
                     | WS_EX_NOACTIVATE,
-                w!("OpenScribeOverlay"),
+                w!("StepSnapOverlay"),
                 w!(""),
                 WS_POPUP | WS_VISIBLE,
                 x,
@@ -155,7 +155,7 @@ mod windows_impl {
                 hCursor: LoadCursorW(HINSTANCE::default(), IDC_ARROW).unwrap_or_default(),
                 hbrBackground: HBRUSH::default(),
                 lpszMenuName: windows::core::PCWSTR::null(),
-                lpszClassName: w!("OpenScribeOverlay"),
+                lpszClassName: w!("StepSnapOverlay"),
                 hIconSm: HICON::default(),
             };
 
@@ -285,7 +285,7 @@ mod windows_impl {
                 // Create the toast window
                 let hwnd = match CreateWindowExW(
                     WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                    w!("OpenScribeToast"),
+                    w!("StepSnapToast"),
                     w!(""),
                     WS_POPUP | WS_VISIBLE,
                     x,
@@ -357,7 +357,7 @@ mod windows_impl {
                 hCursor: LoadCursorW(HINSTANCE::default(), IDC_ARROW).unwrap_or_default(),
                 hbrBackground: HBRUSH::default(),
                 lpszMenuName: windows::core::PCWSTR::null(),
-                lpszClassName: w!("OpenScribeToast"),
+                lpszClassName: w!("StepSnapToast"),
                 hIconSm: HICON::default(),
             };
 
@@ -1523,7 +1523,7 @@ mod linux_wayland_impl {
         // Log warning once about limited Wayland overlay support
         if !LAYER_SHELL_WARNED.swap(true, Ordering::SeqCst) {
             eprintln!(
-                "[OpenScribe] Wayland detected: Border overlays using layer-shell are not yet fully implemented. \
+                "[StepSnap] Wayland detected: Border overlays using layer-shell are not yet fully implemented. \
                  Overlay may not appear. Toast notifications will work via D-Bus."
             );
         }
@@ -1536,7 +1536,7 @@ mod linux_wayland_impl {
 
         // No XWayland available - overlay won't show but app continues
         eprintln!(
-            "[OpenScribe] Cannot show overlay: no XWayland available. \
+            "[StepSnap] Cannot show overlay: no XWayland available. \
              Overlay position would be: ({}, {}) size: {}x{}",
             x, y, width, height
         );
@@ -1561,7 +1561,7 @@ mod linux_wayland_impl {
     /// as long as a notification daemon is running (e.g., mako, dunst, fnott).
     pub fn show_toast(message: &str, duration_ms: u32) -> Result<(), String> {
         Notification::new()
-            .summary("OpenScribe")
+            .summary("StepSnap")
             .body(message)
             .icon("dialog-information")
             .timeout(duration_ms as i32)

@@ -382,7 +382,7 @@ fn validate_screenshot_path(path: String) -> Result<bool, String> {
     }
 
     // Check if writable by creating a temp file
-    let test_file = path.join(".openscribe_write_test");
+    let test_file = path.join(".stepsnap_write_test");
     match std::fs::write(&test_file, "test") {
         Ok(_) => {
             let _ = std::fs::remove_file(&test_file);
@@ -585,7 +585,7 @@ fn is_capturable_window(title: &str, app_name: &str) -> bool {
     }
 
     // Filter own windows
-    if title.contains("OpenScribe") || title.contains("Select Capture") || title.contains("monitor-picker") {
+    if title.contains("StepSnap") || title.contains("Select Capture") || title.contains("monitor-picker") {
         return false;
     }
 
@@ -747,7 +747,7 @@ async fn save_and_emit_capture(app: AppHandle, image: image::RgbaImage, prefix: 
     use std::io::BufWriter;
     use tokio::time::{sleep, Duration};
 
-    let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+    let temp_dir = std::env::temp_dir().join("stepsnap_screenshots");
     let _ = std::fs::create_dir_all(&temp_dir);
 
     let timestamp = std::time::SystemTime::now()
@@ -1003,7 +1003,7 @@ async fn capture_monitor(app: AppHandle, index: usize) -> Result<String, String>
     let image = monitor.capture_image().map_err(|e| e.to_string())?;
 
     // Save to temp file
-    let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+    let temp_dir = std::env::temp_dir().join("stepsnap_screenshots");
     let _ = std::fs::create_dir_all(&temp_dir);
 
     let timestamp = std::time::SystemTime::now()
@@ -1059,7 +1059,7 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
     let image = monitor.capture_image().map_err(|e| e.to_string())?;
 
     // Save to temp file
-    let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+    let temp_dir = std::env::temp_dir().join("stepsnap_screenshots");
     let _ = std::fs::create_dir_all(&temp_dir);
 
     let timestamp = std::time::SystemTime::now()
@@ -1130,7 +1130,7 @@ async fn capture_all_monitors(app: AppHandle) -> Result<String, String> {
     }
 
     // Save to temp file
-    let temp_dir = std::env::temp_dir().join("openscribe_screenshots");
+    let temp_dir = std::env::temp_dir().join("stepsnap_screenshots");
     let _ = std::fs::create_dir_all(&temp_dir);
 
     let timestamp = std::time::SystemTime::now()
@@ -1364,15 +1364,15 @@ fn update_settings_paths(settings_path: &std::path::Path, old_identifier: &str, 
         Ok(c) => c,
         Err(_) => return, // No settings file to update
     };
-    
+
     // Check if the old identifier is present in the content
     if !content.contains(old_identifier) {
         return; // Nothing to update
     }
-    
+
     // Replace old identifier with new identifier in all paths
     let updated_content = content.replace(old_identifier, new_identifier);
-    
+
     // Write back the updated settings
     if let Err(e) = std::fs::write(settings_path, updated_content) {
         eprintln!("Warning: Could not update paths in settings.json: {}", e);
@@ -1381,48 +1381,111 @@ fn update_settings_paths(settings_path: &std::path::Path, old_identifier: &str, 
     }
 }
 
-/// Migrate data from old "com.openscribe" identifier location to new "openscribe" location.
+/// Update paths in the database that reference the old directory.
+/// Updates both screenshot_path in steps table AND documentation in recordings table.
+fn update_database_paths(db_path: &std::path::Path, old_identifier: &str, new_identifier: &str) {
+    use rusqlite::Connection;
+
+    let conn = match Connection::open(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Warning: Could not open database for path migration: {}", e);
+            return;
+        }
+    };
+
+    // Update screenshot_path in steps table
+    let sql = format!(
+        "UPDATE steps SET screenshot_path = REPLACE(screenshot_path, '{}', '{}') WHERE screenshot_path LIKE '%{}%'",
+        old_identifier, new_identifier, old_identifier
+    );
+
+    match conn.execute(&sql, []) {
+        Ok(count) => {
+            if count > 0 {
+                println!("Updated {} screenshot paths in database: {} -> {}", count, old_identifier, new_identifier);
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Could not update screenshot paths in database: {}", e);
+        }
+    }
+
+    // Update documentation in recordings table (contains markdown with image paths)
+    let sql = format!(
+        "UPDATE recordings SET documentation = REPLACE(documentation, '{}', '{}') WHERE documentation LIKE '%{}%'",
+        old_identifier, new_identifier, old_identifier
+    );
+
+    match conn.execute(&sql, []) {
+        Ok(count) => {
+            if count > 0 {
+                println!("Updated {} documentation entries in database: {} -> {}", count, old_identifier, new_identifier);
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Could not update documentation paths in database: {}", e);
+        }
+    }
+}
+
+/// Migrate data from "openscribe" location to new "stepsnap" location.
 /// Returns Ok(Some(message)) if user notification is needed, Ok(None) if silent success or nothing to do.
-fn migrate_from_old_identifier(new_data_dir: &std::path::Path) -> Result<Option<String>, String> {
+fn migrate_from_openscribe(new_data_dir: &std::path::Path) -> Result<Option<String>, String> {
     // Get parent directory (e.g., %APPDATA% on Windows)
     let parent = match new_data_dir.parent() {
         Some(p) => p,
         None => return Ok(None),
     };
-    
-    // Old location with "com.openscribe" identifier
-    let old_data_dir = parent.join("com.openscribe");
-    
+
+    // Old location with "openscribe" identifier
+    let old_data_dir = parent.join("openscribe");
+
     // Check if old location exists
     if !old_data_dir.exists() {
         return Ok(None); // Nothing to migrate
     }
-    
+
     // Check if old location has a valid database (required for migration)
     let old_db_path = old_data_dir.join("openscribe.db");
     if !old_db_path.exists() {
         return Ok(None); // No database to migrate
     }
-    
+
     // Check if new location already exists
     if new_data_dir.exists() {
         // Both locations exist - user needs to manually resolve
         return Ok(Some(format!(
-            "Data exists in both old and new locations. You may want to manually check: {}",
+            "Data exists in both old (openscribe) and new (stepsnap) locations. You may want to manually check: {}",
             old_data_dir.display()
         )));
     }
-    
+
     // Attempt to rename old folder to new location
     match std::fs::rename(&old_data_dir, new_data_dir) {
         Ok(_) => {
-            println!("Successfully migrated data from {} to {}", 
+            println!("Successfully migrated data from {} to {}",
                      old_data_dir.display(), new_data_dir.display());
-            
+
+            // Rename the database file from openscribe.db to stepsnap.db
+            let old_db_in_new_dir = new_data_dir.join("openscribe.db");
+            let new_db_path = new_data_dir.join("stepsnap.db");
+            if old_db_in_new_dir.exists() {
+                if let Err(e) = std::fs::rename(&old_db_in_new_dir, &new_db_path) {
+                    eprintln!("Warning: Could not rename database file: {}", e);
+                } else {
+                    println!("Renamed database: openscribe.db -> stepsnap.db");
+                }
+            }
+
+            // Update screenshot paths in database that reference the old directory
+            // This is critical - screenshot_path values are absolute paths
+            update_database_paths(&new_db_path, "openscribe", "stepsnap");
+
             // Update paths in settings.json that reference the old identifier
             let settings_path = new_data_dir.join("settings.json");
-            update_settings_paths(&settings_path, "com.openscribe", "openscribe");
-            
+            update_settings_paths(&settings_path, "openscribe", "stepsnap");
+
             Ok(None) // Silent success
         }
         Err(e) => {
@@ -1433,6 +1496,140 @@ fn migrate_from_old_identifier(new_data_dir: &std::path::Path) -> Result<Option<
             )))
         }
     }
+}
+
+/// Migrate data from old "com.openscribe" identifier location to new "stepsnap" location.
+/// This handles very old installations (v0.0.7 and earlier).
+/// Returns Ok(Some(message)) if user notification is needed, Ok(None) if silent success or nothing to do.
+fn migrate_from_old_identifier(new_data_dir: &std::path::Path) -> Result<Option<String>, String> {
+    // Get parent directory (e.g., %APPDATA% on Windows)
+    let parent = match new_data_dir.parent() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    // Old location with "com.openscribe" identifier
+    let old_data_dir = parent.join("com.openscribe");
+
+    // Check if old location exists
+    if !old_data_dir.exists() {
+        return Ok(None); // Nothing to migrate
+    }
+
+    // Check if old location has a valid database (required for migration)
+    let old_db_path = old_data_dir.join("openscribe.db");
+    if !old_db_path.exists() {
+        return Ok(None); // No database to migrate
+    }
+
+    // Check if new location already exists
+    if new_data_dir.exists() {
+        // Both locations exist - user needs to manually resolve
+        return Ok(Some(format!(
+            "Data exists in both old and new locations. You may want to manually check: {}",
+            old_data_dir.display()
+        )));
+    }
+
+    // Attempt to rename old folder to new location
+    match std::fs::rename(&old_data_dir, new_data_dir) {
+        Ok(_) => {
+            println!("Successfully migrated data from {} to {}",
+                     old_data_dir.display(), new_data_dir.display());
+
+            // Rename the database file from openscribe.db to stepsnap.db
+            let old_db_in_new_dir = new_data_dir.join("openscribe.db");
+            let new_db_path = new_data_dir.join("stepsnap.db");
+            if old_db_in_new_dir.exists() {
+                if let Err(e) = std::fs::rename(&old_db_in_new_dir, &new_db_path) {
+                    eprintln!("Warning: Could not rename database file: {}", e);
+                } else {
+                    println!("Renamed database: openscribe.db -> stepsnap.db");
+                }
+            }
+
+            // Update screenshot paths in database that reference the old directory
+            // This is critical - screenshot_path values are absolute paths
+            update_database_paths(&new_db_path, "com.openscribe", "stepsnap");
+
+            // Update paths in settings.json that reference the old identifier
+            let settings_path = new_data_dir.join("settings.json");
+            update_settings_paths(&settings_path, "com.openscribe", "stepsnap");
+
+            Ok(None) // Silent success
+        }
+        Err(e) => {
+            // Migration failed - notify user
+            Ok(Some(format!(
+                "Could not migrate data from old location. Your data may be at: {} (Error: {})",
+                old_data_dir.display(), e
+            )))
+        }
+    }
+}
+
+/// Repair any stale paths that still reference old directory names.
+/// This handles the case where migration already happened but paths weren't updated.
+/// Fixes both screenshot_path in steps table AND documentation in recordings table.
+fn repair_stale_screenshot_paths(app_data_dir: &std::path::Path) {
+    use rusqlite::Connection;
+
+    let db_path = app_data_dir.join("stepsnap.db");
+    if !db_path.exists() {
+        return; // No database to repair
+    }
+
+    let conn = match Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    // Check if any paths still reference old identifiers (in steps or documentation)
+    let has_old_paths: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM steps WHERE screenshot_path LIKE '%openscribe%' OR screenshot_path LIKE '%com.openscribe%'
+                UNION
+                SELECT 1 FROM recordings WHERE documentation LIKE '%openscribe%' OR documentation LIKE '%com.openscribe%'
+            )",
+            [],
+            |row| row.get(0)
+        )
+        .unwrap_or(false);
+
+    if !has_old_paths {
+        return; // Nothing to repair
+    }
+
+    println!("Repairing stale paths in database...");
+
+    // Fix screenshot_path in steps table
+    // Fix paths that reference 'com.openscribe' (oldest format)
+    let _ = conn.execute(
+        "UPDATE steps SET screenshot_path = REPLACE(screenshot_path, 'com.openscribe', 'stepsnap') WHERE screenshot_path LIKE '%com.openscribe%'",
+        []
+    );
+
+    // Fix paths that reference 'openscribe' (previous format)
+    let _ = conn.execute(
+        "UPDATE steps SET screenshot_path = REPLACE(screenshot_path, 'openscribe', 'stepsnap') WHERE screenshot_path LIKE '%openscribe%' AND screenshot_path NOT LIKE '%stepsnap%'",
+        []
+    );
+
+    // Fix documentation in recordings table (contains markdown with image paths)
+    // Fix paths that reference 'com.openscribe' (oldest format)
+    let _ = conn.execute(
+        "UPDATE recordings SET documentation = REPLACE(documentation, 'com.openscribe', 'stepsnap') WHERE documentation LIKE '%com.openscribe%'",
+        []
+    );
+
+    // Fix paths that reference 'openscribe' (previous format)
+    let _ = conn.execute(
+        "UPDATE recordings SET documentation = REPLACE(documentation, 'openscribe', 'stepsnap') WHERE documentation LIKE '%openscribe%' AND documentation NOT LIKE '%stepsnap%'",
+        []
+    );
+
+    println!("Path repair complete");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1470,9 +1667,17 @@ pub fn run() {
             // Initialize database
             let app_data_dir = app.path().app_data_dir()
                 .expect("Failed to get app data directory");
-            
-            // Migrate from old "com.openscribe" identifier if needed
-            if let Ok(Some(warning_message)) = migrate_from_old_identifier(&app_data_dir) {
+
+            // Migration chain: try openscribe -> stepsnap first, then com.openscribe -> stepsnap
+            // This handles both v0.0.8-v0.0.10 users (openscribe) and v0.0.7 and earlier (com.openscribe)
+            let migration_result = migrate_from_openscribe(&app_data_dir)
+                .or_else(|_| migrate_from_old_identifier(&app_data_dir));
+
+            // Repair any stale screenshot paths that weren't updated during migration
+            // This handles users who already migrated but have old paths in their database
+            repair_stale_screenshot_paths(&app_data_dir);
+
+            if let Ok(Some(warning_message)) = migration_result {
                 // Emit warning to frontend - user may need to take action
                 let app_handle = app.handle().clone();
                 let msg = warning_message.clone();

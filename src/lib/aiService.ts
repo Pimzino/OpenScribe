@@ -398,6 +398,7 @@ This description reveals the user's INTENT. Incorporate this information into yo
 }
 
 // Generate a title for the documentation based on the workflow
+// @ts-ignore - Reserved for future use
 async function generateTitle(
     stepDescriptions: string[],
     openaiBaseUrl: string,
