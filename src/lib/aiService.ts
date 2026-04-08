@@ -209,9 +209,12 @@ async function fileToBase64(filePath: string): Promise<string> {
     try {
         const data = await readFile(filePath);
         const bytes = new Uint8Array(data);
+        // Use chunked conversion to avoid O(n²) string concatenation
+        const CHUNK_SIZE = 0x8000; // 32KB
         let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
+        for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+            const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+            binary += String.fromCharCode.apply(null, Array.from(chunk));
         }
         return btoa(binary);
     } catch (error) {

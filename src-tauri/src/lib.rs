@@ -42,9 +42,30 @@ fn stop_recording(state: State<'_, RecordingState>) {
     *is_recording = false;
 }
 
+/// Validate that a file path is within an allowed directory (screenshots dir or temp dir).
+/// Returns the canonical path if valid, or an error if the path escapes allowed directories.
+fn validate_path_within_allowed_dirs(path: &std::path::Path, app_data_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let canonical = path.canonicalize().map_err(|e| format!("Invalid path: {}", e))?;
+    let canonical_app_data = app_data_dir.canonicalize().unwrap_or_else(|_| app_data_dir.to_path_buf());
+    let temp_dir = std::env::temp_dir();
+    let canonical_temp = temp_dir.canonicalize().unwrap_or_else(|_| temp_dir);
+
+    if canonical.starts_with(&canonical_app_data) || canonical.starts_with(&canonical_temp) {
+        Ok(canonical)
+    } else {
+        Err(format!("Path is outside allowed directories: {}", path.display()))
+    }
+}
+
 #[tauri::command]
-fn delete_screenshot(path: String) -> Result<(), String> {
-    std::fs::remove_file(&path).map_err(|e| e.to_string())
+fn delete_screenshot(path: String, db: State<'_, DatabaseState>) -> Result<(), String> {
+    let path = PathBuf::from(&path);
+    let app_data_dir = safe_db_lock(&db)?
+        .data_dir()
+        .to_path_buf();
+    // Validate path is within allowed directories before deleting
+    let validated_path = validate_path_within_allowed_dirs(&path, &app_data_dir)?;
+    std::fs::remove_file(&validated_path).map_err(|e| e.to_string())
 }
 
 // Convert HotkeyBinding to Shortcut
@@ -178,32 +199,28 @@ fn set_hotkeys(app: AppHandle, state: State<'_, RecordingState>, start: HotkeyBi
 // Database commands
 #[tauri::command]
 fn create_recording(db: State<'_, DatabaseState>, name: String) -> Result<String, String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .create_recording(name)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn save_steps(db: State<'_, DatabaseState>, recording_id: String, steps: Vec<StepInput>) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .save_steps(&recording_id, steps)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn save_documentation(db: State<'_, DatabaseState>, recording_id: String, documentation: String) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .save_documentation(&recording_id, &documentation)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn list_recordings(db: State<'_, DatabaseState>) -> Result<Vec<Recording>, String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .list_recordings()
         .map_err(|e| e.to_string())
 }
@@ -215,16 +232,14 @@ fn list_recordings_paginated(
     per_page: i32,
     search: Option<String>
 ) -> Result<PaginatedRecordings, String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .list_recordings_paginated(page, per_page, search.as_deref())
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn get_recording(db: State<'_, DatabaseState>, id: String) -> Result<Option<RecordingWithSteps>, String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .get_recording(&id)
         .map_err(|e| e.to_string())
 }
@@ -253,7 +268,7 @@ fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) ->
 
     // Get cleanup info from database (this also deletes DB records)
     let cleanup: DeleteRecordingCleanup = {
-        let db = db.0.lock().map_err(|e| e.to_string())?;
+        let db = safe_db_lock(&db)?;
         db.delete_recording(&id).map_err(|e| e.to_string())?
     };
 
@@ -353,16 +368,14 @@ fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) ->
 
 #[tauri::command]
 fn update_recording_name(db: State<'_, DatabaseState>, id: String, name: String) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .update_recording_name(&id, &name)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn get_default_screenshot_path(db: State<'_, DatabaseState>) -> Result<String, String> {
-    let path = db.0.lock()
-        .map_err(|e| e.to_string())?
+    let path = safe_db_lock(&db)?
         .get_default_screenshot_path();
     Ok(path.to_string_lossy().to_string())
 }
@@ -393,26 +406,39 @@ fn validate_screenshot_path(path: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn register_asset_scope(app: AppHandle, path: String) -> Result<(), String> {
+fn register_asset_scope(app: AppHandle, path: String, db: State<'_, DatabaseState>) -> Result<(), String> {
     let path = PathBuf::from(&path);
 
     if path.as_os_str().is_empty() {
         return Ok(());
     }
 
+    // Validate path is within allowed directories before registering
+    let app_data_dir = safe_db_lock(&db)?
+        .data_dir()
+        .to_path_buf();
+    let validated_path = validate_path_within_allowed_dirs(&path, &app_data_dir)?;
+
     // Ensure directory exists
-    if !path.exists() {
-        let _ = std::fs::create_dir_all(&path);
+    if !validated_path.exists() {
+        let _ = std::fs::create_dir_all(&validated_path);
     }
 
     // Add the directory and all subdirectories to the asset protocol scope
     app.asset_protocol_scope()
-        .allow_directory(&path, true)
+        .allow_directory(&validated_path, true)
         .map_err(|e| format!("Failed to register asset scope: {}", e))
 }
 
 #[tauri::command]
-fn save_cropped_image(path: String, base64_data: String) -> Result<String, String> {
+fn save_cropped_image(path: String, base64_data: String, db: State<'_, DatabaseState>) -> Result<String, String> {
+    // Validate path is within allowed directories before writing
+    let path_buf = PathBuf::from(&path);
+    let app_data_dir = safe_db_lock(&db)?
+        .data_dir()
+        .to_path_buf();
+    let validated_path = validate_path_within_allowed_dirs(&path_buf, &app_data_dir)?;
+
     // Decode base64 to bytes
     use base64::{Engine as _, engine::general_purpose};
     let image_data = general_purpose::STANDARD
@@ -420,12 +446,12 @@ fn save_cropped_image(path: String, base64_data: String) -> Result<String, Strin
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
     // Write to file
-    let mut file = std::fs::File::create(&path)
+    let mut file = std::fs::File::create(&validated_path)
         .map_err(|e| format!("Failed to create file: {}", e))?;
     file.write_all(&image_data)
         .map_err(|e| format!("Failed to write file: {}", e))?;
 
-    Ok(path)
+    Ok(validated_path.to_string_lossy().to_string())
 }
 
 /// Copy a screenshot from temp location to permanent storage immediately.
@@ -448,8 +474,7 @@ fn copy_screenshot_to_permanent(
     // Get the base directory (custom path or default)
     let base_dir = match custom_screenshot_path {
         Some(ref path) if !path.is_empty() => PathBuf::from(path),
-        _ => db.0.lock()
-            .map_err(|e| e.to_string())?
+        _ => safe_db_lock(&db)?
             .screenshots_dir(),
     };
 
@@ -476,32 +501,28 @@ fn copy_screenshot_to_permanent(
 
 #[tauri::command]
 fn update_step_screenshot(db: State<'_, DatabaseState>, step_id: String, screenshot_path: String, is_cropped: bool) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .update_step_screenshot(&step_id, &screenshot_path, is_cropped)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn reorder_steps(db: State<'_, DatabaseState>, recording_id: String, step_ids: Vec<String>) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .reorder_steps(&recording_id, step_ids)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn update_step_description(db: State<'_, DatabaseState>, step_id: String, description: String) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .update_step_description(&step_id, &description)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn delete_step(db: State<'_, DatabaseState>, step_id: String) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .delete_step(&step_id)
         .map_err(|e| e.to_string())
 }
@@ -514,8 +535,7 @@ fn save_steps_with_path(
     steps: Vec<StepInput>,
     screenshot_path: Option<String>
 ) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .save_steps_with_path(&recording_id, &recording_name, steps, screenshot_path.as_deref())
         .map_err(|e| e.to_string())
 }
@@ -895,6 +915,19 @@ where
     }
 }
 
+/// Safe wrapper for database mutex lock that handles poisoned mutexes.
+/// A poisoned mutex means a previous operation panicked, but the data may still be valid.
+/// We recover by taking the inner value and continuing.
+fn safe_db_lock(db: &DatabaseState) -> Result<std::sync::MutexGuard<'_, Database>, String> {
+    match db.0.lock() {
+        Ok(guard) => Ok(guard),
+        Err(poisoned) => {
+            eprintln!("Database mutex poisoned, recovering");
+            Ok(poisoned.into_inner())
+        }
+    }
+}
+
 #[tauri::command]
 async fn capture_window_and_close_picker(
     app: AppHandle,
@@ -1247,8 +1280,7 @@ fn update_step_ocr(
     ocr_text: Option<String>,
     ocr_status: String,
 ) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .update_step_ocr(&step_id, ocr_text.as_deref(), &ocr_status)
         .map_err(|e| e.to_string())
 }
@@ -1262,8 +1294,7 @@ fn create_notification(
     message: String,
     variant: String,
 ) -> Result<Notification, String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .create_notification(title.as_deref(), &message, &variant)
         .map_err(|e| e.to_string())
 }
@@ -1274,48 +1305,42 @@ fn list_notifications(
     limit: i32,
     offset: i32,
 ) -> Result<Vec<Notification>, String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .list_notifications(limit, offset)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn get_unread_notification_count(db: State<'_, DatabaseState>) -> Result<i64, String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .get_unread_notification_count()
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn mark_notification_read(db: State<'_, DatabaseState>, id: String) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .mark_notification_read(&id)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn mark_all_notifications_read(db: State<'_, DatabaseState>) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .mark_all_notifications_read()
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn delete_notification(db: State<'_, DatabaseState>, id: String) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .delete_notification(&id)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn clear_all_notifications(db: State<'_, DatabaseState>) -> Result<(), String> {
-    db.0.lock()
-        .map_err(|e| e.to_string())?
+    safe_db_lock(&db)?
         .delete_all_notifications()
         .map_err(|e| e.to_string())
 }
@@ -1461,13 +1486,14 @@ fn update_database_paths(db_path: &std::path::Path, old_identifier: &str, new_id
         }
     };
 
-    // Update screenshot_path in steps table
-    let sql = format!(
-        "UPDATE steps SET screenshot_path = REPLACE(screenshot_path, '{}', '{}') WHERE screenshot_path LIKE '%{}%'",
-        old_identifier, new_identifier, old_identifier
-    );
+    // Build LIKE pattern with parameterized query to prevent SQL injection
+    let like_pattern = format!("%{}%", old_identifier);
 
-    match conn.execute(&sql, []) {
+    // Update screenshot_path in steps table using parameterized query
+    match conn.execute(
+        "UPDATE steps SET screenshot_path = REPLACE(screenshot_path, ?1, ?2) WHERE screenshot_path LIKE ?3",
+        rusqlite::params![old_identifier, new_identifier, like_pattern],
+    ) {
         Ok(count) => {
             if count > 0 {
                 println!("Updated {} screenshot paths in database: {} -> {}", count, old_identifier, new_identifier);
@@ -1479,12 +1505,10 @@ fn update_database_paths(db_path: &std::path::Path, old_identifier: &str, new_id
     }
 
     // Update documentation in recordings table (contains markdown with image paths)
-    let sql = format!(
-        "UPDATE recordings SET documentation = REPLACE(documentation, '{}', '{}') WHERE documentation LIKE '%{}%'",
-        old_identifier, new_identifier, old_identifier
-    );
-
-    match conn.execute(&sql, []) {
+    match conn.execute(
+        "UPDATE recordings SET documentation = REPLACE(documentation, ?1, ?2) WHERE documentation LIKE ?3",
+        rusqlite::params![old_identifier, new_identifier, like_pattern],
+    ) {
         Ok(count) => {
             if count > 0 {
                 println!("Updated {} documentation entries in database: {} -> {}", count, old_identifier, new_identifier);

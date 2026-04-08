@@ -717,6 +717,7 @@ export default function RecordingDetail() {
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
                             <button
+                                aria-label="Go back"
                                 onClick={async () => {
                                     if (hasUnsavedChanges) {
                                         const confirmed = window.confirm("You have unsaved changes. Do you want to discard them?");
@@ -742,6 +743,8 @@ export default function RecordingDetail() {
                                         onKeyDown={handleNameKeyDown}
                                         disabled={nameSaving}
                                         autoFocus
+                                        aria-label="Recording name"
+                                        placeholder="Enter recording name"
                                         className="text-2xl font-bold bg-white/10 border border-white/20 rounded-md px-2 py-1 focus:outline-none focus:border-[#2721E8] disabled:opacity-50"
                                         style={{ minWidth: '200px' }}
                                     />
@@ -770,6 +773,7 @@ export default function RecordingDetail() {
                                     <>
                                         <Tooltip content="Discard changes">
                                             <button
+                                                aria-label="Discard changes"
                                                 onClick={handleDiscardChanges}
                                                 className="p-2 bg-white/10 hover:bg-white/15 rounded-md transition-colors"
                                             >
@@ -835,6 +839,7 @@ export default function RecordingDetail() {
                                     <>
                                         <Tooltip content="Cancel">
                                             <button
+                                                aria-label="Cancel editing"
                                                 onClick={handleCancelEdit}
                                                 className="p-2 hover:bg-white/10 rounded-md transition-colors"
                                             >
@@ -843,6 +848,7 @@ export default function RecordingDetail() {
                                         </Tooltip>
                                         <Tooltip content="Save">
                                             <button
+                                                aria-label="Save documentation"
                                                 onClick={handleSaveEdit}
                                                 className="p-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors"
                                             >
@@ -854,6 +860,7 @@ export default function RecordingDetail() {
                                     <>
                                         <Tooltip content="Edit documentation">
                                             <button
+                                                aria-label="Edit documentation"
                                                 onClick={handleStartEdit}
                                                 className="p-2 bg-white/10 hover:bg-white/15 rounded-md transition-colors"
                                             >
@@ -871,6 +878,7 @@ export default function RecordingDetail() {
                         {!isEditing && (
                             <Tooltip content="Regenerate documentation">
                                 <button
+                                    aria-label="Regenerate documentation"
                                     onClick={handleRegenerate}
                                     disabled={isGenerating}
                                     className="p-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors disabled:opacity-50"

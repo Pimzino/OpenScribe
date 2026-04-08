@@ -257,6 +257,7 @@ export default function NewRecording() {
                     <div className="flex items-center gap-4">
                         <Tooltip content="Go back">
                             <button
+                                aria-label="Go back"
                                 onClick={() => navigate('/')}
                                 className="p-2 hover:bg-white/10 rounded-md transition-colors"
                             >
@@ -271,6 +272,7 @@ export default function NewRecording() {
                             steps.length === 0 ? (
                                 <Tooltip content="Start recording">
                                     <button
+                                        aria-label="Start recording"
                                         onClick={startRecording}
                                         className="p-2 bg-[#2721E8] hover:bg-[#4a45f5] rounded-md transition-colors"
                                     >
@@ -280,6 +282,7 @@ export default function NewRecording() {
                             ) : (
                                 <Tooltip content="Resume recording">
                                     <button
+                                        aria-label="Resume recording"
                                         onClick={startRecording}
                                         className="p-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors"
                                     >
@@ -290,6 +293,7 @@ export default function NewRecording() {
                         ) : (
                             <Tooltip content="Stop recording">
                                 <button
+                                    aria-label="Stop recording"
                                     onClick={stopRecording}
                                     className="p-2 bg-red-600 hover:bg-red-700 rounded-md transition-colors animate-pulse"
                                 >
@@ -302,6 +306,7 @@ export default function NewRecording() {
                             <>
                                 <Tooltip content="Save recording">
                                     <button
+                                        aria-label="Save recording"
                                         onClick={handleSave}
                                         className="p-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors"
                                     >
@@ -310,6 +315,7 @@ export default function NewRecording() {
                                 </Tooltip>
                                 <Tooltip content="Generate documentation">
                                     <button
+                                        aria-label="Generate documentation"
                                         onClick={handleGenerateDocs}
                                         className="p-2 bg-[#49B8D3] hover:bg-[#5fc5e0] rounded-md transition-colors"
                                     >

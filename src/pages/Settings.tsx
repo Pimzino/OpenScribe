@@ -304,6 +304,7 @@ export default function Settings() {
                                     />
                                     <Tooltip content="Browse for folder" position="top">
                                         <button
+                                            aria-label="Browse for folder"
                                             onClick={handleBrowseFolder}
                                             className="px-3 py-2 bg-white/10 border border-white/10 rounded-md hover:bg-white/15 transition-colors"
                                         >
@@ -312,6 +313,7 @@ export default function Settings() {
                                     </Tooltip>
                                     <Tooltip content="Reset to default" position="top">
                                         <button
+                                            aria-label="Reset to default"
                                             onClick={handleResetPath}
                                             className="px-3 py-2 bg-white/10 border border-white/10 rounded-md hover:bg-white/15 transition-colors"
                                         >
@@ -473,6 +475,7 @@ export default function Settings() {
                                     </div>
                                     <Tooltip content="Refresh models list" position="top">
                                         <button
+                                            aria-label="Refresh models list"
                                             onClick={handleFetchModels}
                                             disabled={fetchingModels || !openaiBaseUrl}
                                             className="px-3 py-2 bg-white/10 border border-white/10 rounded-md hover:bg-white/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -570,6 +573,7 @@ export default function Settings() {
                                     </p>
                                 </div>
                                 <button
+                                    aria-label={`Send screenshots to AI: ${sendScreenshotsToAi ? 'enabled' : 'disabled'}`}
                                     onClick={() => setSendScreenshotsToAi(!sendScreenshotsToAi)}
                                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                         sendScreenshotsToAi ? 'bg-[#2721E8]' : 'bg-white/20'
@@ -604,6 +608,7 @@ export default function Settings() {
                                     </p>
                                 </div>
                                 <button
+                                    aria-label={`Auto-retry on rate limit: ${enableAutoRetry ? 'enabled' : 'disabled'}`}
                                     onClick={() => setEnableAutoRetry(!enableAutoRetry)}
                                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                         enableAutoRetry ? 'bg-[#2721E8]' : 'bg-white/20'
@@ -632,6 +637,7 @@ export default function Settings() {
                                                 max="10"
                                                 value={maxRetryAttempts}
                                                 onChange={(e) => setMaxRetryAttempts(parseInt(e.target.value))}
+                                                aria-label="Max retry attempts"
                                                 className="flex-1 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#2721E8]"
                                             />
                                             <span className="text-sm text-white/80 w-8 text-center">{maxRetryAttempts}</span>
@@ -651,6 +657,7 @@ export default function Settings() {
                                                 step="100"
                                                 value={initialRetryDelayMs}
                                                 onChange={(e) => setInitialRetryDelayMs(parseInt(e.target.value))}
+                                                aria-label="Initial retry delay in milliseconds"
                                                 className="flex-1 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#2721E8]"
                                             />
                                             <span className="text-sm text-white/80 w-16 text-right">{initialRetryDelayMs}ms</span>
@@ -673,6 +680,7 @@ export default function Settings() {
                                     </p>
                                 </div>
                                 <button
+                                    aria-label={`Request throttling: ${enableRequestThrottling ? 'enabled' : 'disabled'}`}
                                     onClick={() => setEnableRequestThrottling(!enableRequestThrottling)}
                                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                         enableRequestThrottling ? 'bg-[#2721E8]' : 'bg-white/20'
@@ -700,6 +708,7 @@ export default function Settings() {
                                             step="100"
                                             value={throttleDelayMs}
                                             onChange={(e) => setThrottleDelayMs(parseInt(e.target.value))}
+                                            aria-label="Delay between requests in milliseconds"
                                             className="flex-1 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#2721E8]"
                                         />
                                         <span className="text-sm text-white/80 w-16 text-right">{throttleDelayMs}ms</span>

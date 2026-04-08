@@ -12,13 +12,14 @@
       "allow": [
         { "path": "$APPDATA/**" },
         { "path": "$TEMP/**" },
-        { "path": "**" }
+        { "path": "$HOME/**" }
       ]
     },
     {
       "identifier": "fs:allow-write-file",
       "allow": [
-        { "path": "**" }
+        { "path": "$APPDATA/**" },
+        { "path": "$TEMP/**" }
       ]
     },
     "store:default",

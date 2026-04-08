@@ -249,6 +249,10 @@ impl Database {
         Ok(())
     }
 
+    pub fn data_dir(&self) -> &PathBuf {
+        &self.data_dir
+    }
+
     pub fn screenshots_dir(&self) -> PathBuf {
         let dir = self.data_dir.join("screenshots");
         let _ = fs::create_dir_all(&dir);
