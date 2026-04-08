@@ -15,7 +15,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use tauri::{AppHandle, State, Manager, Emitter};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use recorder::{RecordingState, HotkeyBinding};
-use database::{Database, StepInput, Recording, RecordingWithSteps, DeleteRecordingCleanup, PaginatedRecordings};
+use database::{Database, StepInput, Recording, RecordingWithSteps, DeleteRecordingCleanup, PaginatedRecordings, Notification};
 
 pub struct DatabaseState(pub Mutex<Database>);
 
@@ -1253,6 +1253,73 @@ fn update_step_ocr(
         .map_err(|e| e.to_string())
 }
 
+// ── Notification commands ──────────────────────────────────────────────
+
+#[tauri::command]
+fn create_notification(
+    db: State<'_, DatabaseState>,
+    title: Option<String>,
+    message: String,
+    variant: String,
+) -> Result<Notification, String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .create_notification(title.as_deref(), &message, &variant)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_notifications(
+    db: State<'_, DatabaseState>,
+    limit: i32,
+    offset: i32,
+) -> Result<Vec<Notification>, String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .list_notifications(limit, offset)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_unread_notification_count(db: State<'_, DatabaseState>) -> Result<i64, String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .get_unread_notification_count()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mark_notification_read(db: State<'_, DatabaseState>, id: String) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .mark_notification_read(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mark_all_notifications_read(db: State<'_, DatabaseState>) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .mark_all_notifications_read()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_notification(db: State<'_, DatabaseState>, id: String) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .delete_notification(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn clear_all_notifications(db: State<'_, DatabaseState>) -> Result<(), String> {
+    db.0.lock()
+        .map_err(|e| e.to_string())?
+        .delete_all_notifications()
+        .map_err(|e| e.to_string())
+}
+
 // Permission status response
 #[derive(Clone, serde::Serialize)]
 pub struct PermissionStatus {
@@ -1770,6 +1837,14 @@ pub fn run() {
             set_ocr_enabled,
             get_ocr_enabled,
             update_step_ocr,
+            // Notification commands
+            create_notification,
+            list_notifications,
+            get_unread_notification_count,
+            mark_notification_read,
+            mark_all_notifications_read,
+            delete_notification,
+            clear_all_notifications,
             // Permission commands (macOS)
             check_screen_recording_permission,
             request_screen_recording_permission,

@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import AboutModal from "./AboutModal";
 import ChangelogModal from "./ChangelogModal";
+import NotificationBell from "./notifications/NotificationBell";
 
 type Page = "recordings" | "settings" | "new-recording" | "recording-detail";
 
@@ -24,10 +25,13 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
     return (
         <>
             <aside className="w-64 glass-surface-1 border-r border-white/8 p-4 flex flex-col h-full">
-                <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-                    <img src="/logo.png" alt="StepSnap" className="w-8 h-8" />
-                    StepSnap
-                </h1>
+                <div className="flex items-center justify-between mb-8">
+                    <h1 className="text-xl font-bold flex items-center gap-2">
+                        <img src="/logo.png" alt="StepSnap" className="w-8 h-8" />
+                        StepSnap
+                    </h1>
+                    <NotificationBell />
+                </div>
 
                 <nav className="space-y-2 flex-1">
                     <button

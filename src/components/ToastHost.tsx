@@ -31,7 +31,7 @@ export default function ToastHost() {
                 style={{ backgroundColor: accentColor }}
               />
 
-              <div className="flex-1 text-sm text-white/90 leading-snug">{toast.message}</div>
+              <div className="flex-1 text-sm text-white/90 leading-snug break-words line-clamp-4">{toast.message}</div>
 
               <button
                 type="button"

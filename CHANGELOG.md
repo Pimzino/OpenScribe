@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-08
+
+### Added
+- **Notification tray** - Bell icon in sidebar with unread badge to access all notifications
+- Persistent notification storage in SQLite database, surviving app restarts
+- Expandable notification cards with full message content for long notifications
+- Mark as read (individual and all), delete (individual and clear all) actions
+- Relative timestamps on notifications ("2m ago", "1h ago", "Yesterday")
+- 30-day automatic cleanup of old notifications on app startup
+- Toast notifications can now optionally persist to the notification tray via `persist: true`
+
+### Improved
+- Long toast messages (e.g. migration warnings) are no longer cut off - they can be expanded in the notification tray
+
 ## [0.1.0] - 2026-04-07
 
 ### Fixed

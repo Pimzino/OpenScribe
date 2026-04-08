@@ -164,6 +164,22 @@ body {
     border-color: rgba(39, 33, 232, 0.4);
     box-shadow: 0 0 15px rgba(39, 33, 232, 0.15);
   }
+
+  /* Notification tray fade-in animation */
+  .animate-tray-in {
+    animation: trayFadeIn 0.15s ease-out;
+  }
+}
+
+@keyframes trayFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* ============================================

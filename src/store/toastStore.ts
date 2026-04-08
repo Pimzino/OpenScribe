@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useNotificationStore } from './notificationStore';
 
 export type ToastVariant = 'info' | 'success' | 'error';
 
@@ -14,6 +15,8 @@ interface ShowToastInput {
     message: string;
     variant: ToastVariant;
     durationMs?: number;
+    persist?: boolean;
+    title?: string;
 }
 
 interface ToastState {
@@ -39,7 +42,7 @@ function generateToastId(): string {
 export const useToastStore = create<ToastState>((set) => ({
     toasts: [],
 
-    showToast: ({ message, variant, durationMs }) => {
+    showToast: ({ message, variant, durationMs, persist, title }) => {
         const id = generateToastId();
         const finalDurationMs = durationMs ?? DEFAULT_DURATION_MS;
         const createdAt = Date.now();
@@ -52,6 +55,14 @@ export const useToastStore = create<ToastState>((set) => ({
             useToastStore.getState().dismissToast(id);
         }, finalDurationMs);
         toastTimeouts.set(id, timeoutId);
+
+        if (persist) {
+            useNotificationStore.getState().addNotification({
+                title,
+                message,
+                variant,
+            }).catch(console.error);
+        }
 
         return id;
     },

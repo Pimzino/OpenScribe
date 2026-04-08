@@ -78,6 +78,16 @@ pub struct PaginatedRecordings {
     pub total_pages: i32,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Notification {
+    pub id: String,
+    pub title: Option<String>,
+    pub message: String,
+    pub variant: String,
+    pub is_read: bool,
+    pub created_at: i64,
+}
+
 pub struct Database {
     conn: Connection,
     data_dir: PathBuf,
@@ -205,6 +215,35 @@ impl Database {
             "UPDATE recordings SET documentation_generated_at = updated_at
              WHERE documentation IS NOT NULL AND documentation_generated_at IS NULL",
             [],
+        )?;
+
+        // Migration: Create notifications table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS notifications (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                message TEXT NOT NULL,
+                variant TEXT NOT NULL DEFAULT 'info',
+                is_read INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC)",
+            [],
+        )?;
+
+        // Cleanup: Remove notifications older than 30 days
+        let thirty_days_ago = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64
+            - (30 * 24 * 60 * 60 * 1000);
+        self.conn.execute(
+            "DELETE FROM notifications WHERE created_at < ?1",
+            params![thirty_days_ago],
         )?;
 
         Ok(())
@@ -707,6 +746,95 @@ impl Database {
             "UPDATE steps SET ocr_text = ?1, ocr_status = ?2 WHERE id = ?3",
             params![ocr_text, ocr_status, step_id],
         )?;
+        Ok(())
+    }
+
+    // ── Notification CRUD ──────────────────────────────────────────────
+
+    pub fn create_notification(&self, title: Option<&str>, message: &str, variant: &str) -> Result<Notification> {
+        let id = Uuid::new_v4().to_string();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        self.conn.execute(
+            "INSERT INTO notifications (id, title, message, variant, is_read, created_at)
+             VALUES (?1, ?2, ?3, ?4, 0, ?5)",
+            params![id, title, message, variant, now],
+        )?;
+
+        Ok(Notification {
+            id,
+            title: title.map(|s| s.to_string()),
+            message: message.to_string(),
+            variant: variant.to_string(),
+            is_read: false,
+            created_at: now,
+        })
+    }
+
+    pub fn list_notifications(&self, limit: i32, offset: i32) -> Result<Vec<Notification>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, message, variant, is_read, created_at
+             FROM notifications
+             ORDER BY created_at DESC
+             LIMIT ?1 OFFSET ?2"
+        )?;
+
+        let rows = stmt.query_map(params![limit, offset], |row| {
+            Ok(Notification {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                message: row.get(2)?,
+                variant: row.get(3)?,
+                is_read: row.get::<_, i32>(4)? != 0,
+                created_at: row.get(5)?,
+            })
+        })?;
+
+        let mut notifications = Vec::new();
+        for row in rows {
+            notifications.push(row?);
+        }
+        Ok(notifications)
+    }
+
+    pub fn get_unread_notification_count(&self) -> Result<i64> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM notifications WHERE is_read = 0",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    pub fn mark_notification_read(&self, id: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE notifications SET is_read = 1 WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_all_notifications_read(&self) -> Result<()> {
+        self.conn.execute(
+            "UPDATE notifications SET is_read = 1 WHERE is_read = 0",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_notification(&self, id: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM notifications WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_all_notifications(&self) -> Result<()> {
+        self.conn.execute("DELETE FROM notifications", [])?;
         Ok(())
     }
 }

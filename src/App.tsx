@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import ToastHost from "./components/ToastHost";
+import NotificationTray from "./components/notifications/NotificationTray";
 
 // Lazy load pages
 const NewRecording = lazy(() => import("./pages/NewRecording"));
@@ -18,6 +19,7 @@ import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { useToastStore } from "./store/toastStore";
 import { useUpdateStore } from "./store/updateStore";
+import { useNotificationStore } from "./store/notificationStore";
 import UpdateNotification from "./components/UpdateNotification";
 
 // Loading fallback component
@@ -78,6 +80,8 @@ function App() {
         message: event.payload,
         variant: "info",
         durationMs: 10000, // 10 seconds - important message
+        persist: true,
+        title: "Migration",
       });
     });
 
@@ -93,6 +97,11 @@ function App() {
     }, 3000);
 
     return () => clearTimeout(timer);
+  }, []);
+
+  // Fetch unread notification count on mount
+  useEffect(() => {
+    useNotificationStore.getState().fetchUnreadCount();
   }, []);
 
   // Listen for hotkey events
@@ -148,6 +157,7 @@ function App() {
     <>
       <ToastHost />
       <UpdateNotification />
+      <NotificationTray />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<RecordingsList />} />
