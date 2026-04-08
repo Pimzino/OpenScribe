@@ -306,12 +306,15 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ needs.validate.outputs.changelog }}
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
           TAG="v$VERSION"
 
+          echo "$RELEASE_NOTES" > release-notes.md
+
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
             --title "StepSnap $TAG" \
-            --notes "${{ needs.validate.outputs.changelog }}" \
+            --notes-file release-notes.md \
             release-files/*
