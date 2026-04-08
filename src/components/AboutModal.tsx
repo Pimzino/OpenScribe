@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { X, RefreshCw } from "lucide-react";
+import { X, RefreshCw, FileText } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import ChangelogModal from "./ChangelogModal";
+import UpdateChangelogModal from "./UpdateChangelogModal";
 import { useUpdateStore } from "../store/updateStore";
 
 interface AboutModalProps {
@@ -12,9 +13,10 @@ interface AboutModalProps {
 export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
     const [version, setVersion] = useState("");
     const [showChangelog, setShowChangelog] = useState(false);
+    const [showUpdateChangelog, setShowUpdateChangelog] = useState(false);
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
     const [updateMessage, setUpdateMessage] = useState<string | null>(null);
-    const { checkForUpdates, updateAvailable } = useUpdateStore();
+    const { checkForUpdates, updateAvailable, updateInfo } = useUpdateStore();
 
     useEffect(() => {
         if (isOpen && !version) {
@@ -29,8 +31,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
         try {
             const hasUpdate = await checkForUpdates();
             if (hasUpdate) {
-                setUpdateMessage("Update available! Check the notification.");
-                onClose();
+                setUpdateMessage("Update available!");
             } else {
                 setUpdateMessage("You're running the latest version.");
             }
@@ -81,13 +82,25 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 </button>
 
                 {updateMessage && (
-                    <p className={`text-xs mt-2 ${updateAvailable ? "text-[#49B8D3]" : "text-white/50"}`}>
-                        {updateMessage}
-                    </p>
+                    <div className="mt-2">
+                        <p className={`text-xs ${updateAvailable ? "text-[#49B8D3]" : "text-white/50"}`}>
+                            {updateMessage}
+                        </p>
+                        {updateAvailable && updateInfo?.body && (
+                            <button
+                                onClick={() => setShowUpdateChangelog(true)}
+                                className="flex items-center gap-1 text-xs text-[#49B8D3] hover:text-[#5ec8e3] mt-1 transition-colors"
+                            >
+                                <FileText size={12} />
+                                <span>View Changes in v{updateInfo.version}</span>
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
 
             <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
+            <UpdateChangelogModal isOpen={showUpdateChangelog} onClose={() => setShowUpdateChangelog(false)} />
         </div>
     );
 }

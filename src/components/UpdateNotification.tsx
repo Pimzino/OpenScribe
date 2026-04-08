@@ -1,5 +1,7 @@
-import { Download, X, RefreshCw, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Download, X, RefreshCw, AlertCircle, FileText } from 'lucide-react';
 import { useUpdateStore } from '../store/updateStore';
+import UpdateChangelogModal from './UpdateChangelogModal';
 
 export default function UpdateNotification() {
     const {
@@ -13,6 +15,7 @@ export default function UpdateNotification() {
         downloadAndInstall,
         dismissUpdate,
     } = useUpdateStore();
+    const [showChangelog, setShowChangelog] = useState(false);
 
     // Don't show if no update, dismissed, or installing (app will restart)
     if (!updateAvailable || dismissed || isInstalling) {
@@ -20,6 +23,7 @@ export default function UpdateNotification() {
     }
 
     return (
+        <>
         <div className="fixed bottom-6 left-6 z-[9998] w-80">
             <div
                 className="glass-surface-2 rounded-xl shadow-xl border border-white/10 text-white overflow-hidden"
@@ -45,9 +49,20 @@ export default function UpdateNotification() {
 
                     {/* Version info */}
                     {updateInfo && (
-                        <p className="text-sm text-white/70 mb-3">
-                            Version {updateInfo.version} is ready to install.
-                        </p>
+                        <div className="mb-3">
+                            <p className="text-sm text-white/70">
+                                Version {updateInfo.version} is ready to install.
+                            </p>
+                            {updateInfo.body && (
+                                <button
+                                    onClick={() => setShowChangelog(true)}
+                                    className="flex items-center gap-1 text-xs text-[#49B8D3] hover:text-[#5ec8e3] mt-1 transition-colors"
+                                >
+                                    <FileText size={12} />
+                                    <span>View Changes</span>
+                                </button>
+                            )}
+                        </div>
                     )}
 
                     {/* Error state */}
@@ -105,5 +120,7 @@ export default function UpdateNotification() {
                 </div>
             </div>
         </div>
+        <UpdateChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
+        </>
     );
 }

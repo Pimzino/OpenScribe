@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Relative timestamps on notifications ("2m ago", "1h ago", "Yesterday")
 - 30-day automatic cleanup of old notifications on app startup
 - Toast notifications can now optionally persist to the notification tray via `persist: true`
+- **View changelog before updating** - See what's new in an update from the update notification or About dialog before installing
 
 ### Improved
 - Long toast messages (e.g. migration warnings) are no longer cut off - they can be expanded in the notification tray
