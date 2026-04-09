@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-09
+
+### Security
+- Fixed SQL injection vulnerability in `update_database_paths()` by using parameterized queries
+- Enabled Content Security Policy (CSP) headers
+- Restricted filesystem access to specific directories ($APPDATA, $TEMP, $HOME)
+- Added path validation to prevent directory traversal attacks
+
+### Reliability
+- Added `safe_db_lock()` helper to handle poisoned mutexes gracefully
+- Replaced all direct mutex locks with safe locking across database commands
+- Added `data_dir()` accessor to Database struct for path validation
+
+### Performance
+- Fixed O(n²) base64 encoding in `fileToBase64()` using chunked conversion
+
+### Accessibility
+- Added `aria-label` attributes to all icon-only buttons
+- Added `aria-label` and `placeholder` to form inputs
+- Fixed linter errors for inline styles (moved to Tailwind classes)
+
+### Code Quality
+- Added backend database tests for CRUD operations
+- Applied consistent code formatting across Rust files
+
 ## [0.1.1] - 2026-04-08
 
 ### Added

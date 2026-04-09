@@ -1121,8 +1121,8 @@ export default function ImageEditor({ imageSrc, onSave, onCancel }: ImageEditorP
                         </ReactCrop>
                     ) : (
                         <div
-                            ref={canvasContainerRef} touch-none"k"
-                            style={{ touchAction: 'none' }}
+                            ref={canvasContainerRef}
+                            className="relative inline-block touch-none"
                         >
                             <img
                                 src={workingImageSrc}
