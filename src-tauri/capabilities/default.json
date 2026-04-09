@@ -10,16 +10,13 @@
     {
       "identifier": "fs:allow-read-file",
       "allow": [
-        { "path": "$APPDATA/**" },
-        { "path": "$TEMP/**" },
-        { "path": "$HOME/**" }
+        { "path": "**" }
       ]
     },
     {
       "identifier": "fs:allow-write-file",
       "allow": [
-        { "path": "$APPDATA/**" },
-        { "path": "$TEMP/**" }
+        { "path": "**" }
       ]
     },
     "store:default",

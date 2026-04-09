@@ -1,21 +1,24 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-mod recorder;
 mod accessibility;
 mod database;
-mod overlay;
 mod ocr;
+mod overlay;
+mod recorder;
 
 #[cfg(target_os = "linux")]
 mod display;
 
-use std::sync::Mutex;
-use std::path::PathBuf;
+use database::{
+    Database, DeleteRecordingCleanup, Notification, PaginatedRecordings, Recording,
+    RecordingWithSteps, StepInput,
+};
+use recorder::{HotkeyBinding, RecordingState};
 use std::io::Write;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use tauri::{AppHandle, State, Manager, Emitter};
+use std::path::PathBuf;
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-use recorder::{RecordingState, HotkeyBinding};
-use database::{Database, StepInput, Recording, RecordingWithSteps, DeleteRecordingCleanup, PaginatedRecordings, Notification};
 
 pub struct DatabaseState(pub Mutex<Database>);
 
@@ -42,29 +45,68 @@ fn stop_recording(state: State<'_, RecordingState>) {
     *is_recording = false;
 }
 
-/// Validate that a file path is within an allowed directory (screenshots dir or temp dir).
-/// Returns the canonical path if valid, or an error if the path escapes allowed directories.
-fn validate_path_within_allowed_dirs(path: &std::path::Path, app_data_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let canonical = path.canonicalize().map_err(|e| format!("Invalid path: {}", e))?;
-    let canonical_app_data = app_data_dir.canonicalize().unwrap_or_else(|_| app_data_dir.to_path_buf());
-    let temp_dir = std::env::temp_dir();
-    let canonical_temp = temp_dir.canonicalize().unwrap_or_else(|_| temp_dir);
-
-    if canonical.starts_with(&canonical_app_data) || canonical.starts_with(&canonical_temp) {
-        Ok(canonical)
-    } else {
-        Err(format!("Path is outside allowed directories: {}", path.display()))
+/// Normalize an absolute file path into a stable canonical path.
+/// If the file does not exist yet, canonicalize the nearest existing parent and
+/// append the final file name so first-run writes still work.
+fn normalize_file_path(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    if !path.is_absolute() {
+        return Err(format!("Path must be absolute: {}", path.display()));
     }
+
+    if path.exists() {
+        return path
+            .canonicalize()
+            .map_err(|e| format!("Invalid path: {}", e));
+    }
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Path has no parent directory: {}", path.display()))?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("Path has no file name: {}", path.display()))?;
+    let canonical_parent = parent
+        .canonicalize()
+        .map_err(|e| format!("Invalid path: {}", e))?;
+
+    Ok(canonical_parent.join(file_name))
+}
+
+/// Normalize an absolute directory path into a stable canonical path.
+/// If the directory does not exist yet, canonicalize the nearest existing parent and
+/// append the final directory name so the caller can create it afterwards.
+fn normalize_directory_path(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    if !path.is_absolute() {
+        return Err(format!("Path must be absolute: {}", path.display()));
+    }
+
+    if path.exists() {
+        if !path.is_dir() {
+            return Err(format!("Path is not a directory: {}", path.display()));
+        }
+        return path
+            .canonicalize()
+            .map_err(|e| format!("Invalid path: {}", e));
+    }
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Path has no parent directory: {}", path.display()))?;
+    let dir_name = path
+        .file_name()
+        .ok_or_else(|| format!("Path has no directory name: {}", path.display()))?;
+    let canonical_parent = parent
+        .canonicalize()
+        .map_err(|e| format!("Invalid path: {}", e))?;
+
+    Ok(canonical_parent.join(dir_name))
 }
 
 #[tauri::command]
 fn delete_screenshot(path: String, db: State<'_, DatabaseState>) -> Result<(), String> {
     let path = PathBuf::from(&path);
-    let app_data_dir = safe_db_lock(&db)?
-        .data_dir()
-        .to_path_buf();
-    // Validate path is within allowed directories before deleting
-    let validated_path = validate_path_within_allowed_dirs(&path, &app_data_dir)?;
+    drop(safe_db_lock(&db)?);
+    let validated_path = normalize_file_path(&path)?;
     std::fs::remove_file(&validated_path).map_err(|e| e.to_string())
 }
 
@@ -142,7 +184,13 @@ fn binding_to_shortcut(binding: &HotkeyBinding) -> Option<Shortcut> {
 }
 
 #[tauri::command]
-fn set_hotkeys(app: AppHandle, state: State<'_, RecordingState>, start: HotkeyBinding, stop: HotkeyBinding, capture: Option<HotkeyBinding>) -> Result<(), String> {
+fn set_hotkeys(
+    app: AppHandle,
+    state: State<'_, RecordingState>,
+    start: HotkeyBinding,
+    stop: HotkeyBinding,
+    capture: Option<HotkeyBinding>,
+) -> Result<(), String> {
     let global_shortcut = app.global_shortcut();
 
     // Get old shortcuts to unregister
@@ -163,29 +211,35 @@ fn set_hotkeys(app: AppHandle, state: State<'_, RecordingState>, start: HotkeyBi
 
     // Register new shortcuts
     if let Some(shortcut) = binding_to_shortcut(&start) {
-        global_shortcut.on_shortcut(shortcut, move |_app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                let _ = _app.emit("hotkey-start", ());
-            }
-        }).map_err(|e| e.to_string())?;
+        global_shortcut
+            .on_shortcut(shortcut, move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    let _ = _app.emit("hotkey-start", ());
+                }
+            })
+            .map_err(|e| e.to_string())?;
     }
 
     if let Some(shortcut) = binding_to_shortcut(&stop) {
-        global_shortcut.on_shortcut(shortcut, move |_app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                let _ = _app.emit("hotkey-stop", ());
-            }
-        }).map_err(|e| e.to_string())?;
+        global_shortcut
+            .on_shortcut(shortcut, move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    let _ = _app.emit("hotkey-stop", ());
+                }
+            })
+            .map_err(|e| e.to_string())?;
     }
 
     // Register capture hotkey if provided
     let capture_binding = capture.unwrap_or_else(|| old_capture.clone());
     if let Some(shortcut) = binding_to_shortcut(&capture_binding) {
-        global_shortcut.on_shortcut(shortcut, move |_app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                let _ = _app.emit("hotkey-capture", ());
-            }
-        }).map_err(|e| e.to_string())?;
+        global_shortcut
+            .on_shortcut(shortcut, move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    let _ = _app.emit("hotkey-capture", ());
+                }
+            })
+            .map_err(|e| e.to_string())?;
     }
 
     // Update state
@@ -205,14 +259,22 @@ fn create_recording(db: State<'_, DatabaseState>, name: String) -> Result<String
 }
 
 #[tauri::command]
-fn save_steps(db: State<'_, DatabaseState>, recording_id: String, steps: Vec<StepInput>) -> Result<(), String> {
+fn save_steps(
+    db: State<'_, DatabaseState>,
+    recording_id: String,
+    steps: Vec<StepInput>,
+) -> Result<(), String> {
     safe_db_lock(&db)?
         .save_steps(&recording_id, steps)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn save_documentation(db: State<'_, DatabaseState>, recording_id: String, documentation: String) -> Result<(), String> {
+fn save_documentation(
+    db: State<'_, DatabaseState>,
+    recording_id: String,
+    documentation: String,
+) -> Result<(), String> {
     safe_db_lock(&db)?
         .save_documentation(&recording_id, &documentation)
         .map_err(|e| e.to_string())
@@ -230,7 +292,7 @@ fn list_recordings_paginated(
     db: State<'_, DatabaseState>,
     page: i32,
     per_page: i32,
-    search: Option<String>
+    search: Option<String>,
 ) -> Result<PaginatedRecordings, String> {
     safe_db_lock(&db)?
         .list_recordings_paginated(page, per_page, search.as_deref())
@@ -238,7 +300,10 @@ fn list_recordings_paginated(
 }
 
 #[tauri::command]
-fn get_recording(db: State<'_, DatabaseState>, id: String) -> Result<Option<RecordingWithSteps>, String> {
+fn get_recording(
+    db: State<'_, DatabaseState>,
+    id: String,
+) -> Result<Option<RecordingWithSteps>, String> {
     safe_db_lock(&db)?
         .get_recording(&id)
         .map_err(|e| e.to_string())
@@ -254,17 +319,24 @@ struct DeleteProgress {
 }
 
 #[tauri::command]
-fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) -> Result<(), String> {
+fn delete_recording(
+    db: State<'_, DatabaseState>,
+    id: String,
+    app: AppHandle,
+) -> Result<(), String> {
     use std::fs;
     use std::io;
 
     // Emit initial progress
-    let _ = app.emit("delete-progress", DeleteProgress {
-        phase: "preparing".to_string(),
-        current: 0,
-        total: 0,
-        message: "Preparing to delete recording...".to_string(),
-    });
+    let _ = app.emit(
+        "delete-progress",
+        DeleteProgress {
+            phase: "preparing".to_string(),
+            current: 0,
+            total: 0,
+            message: "Preparing to delete recording...".to_string(),
+        },
+    );
 
     // Get cleanup info from database (this also deletes DB records)
     let cleanup: DeleteRecordingCleanup = {
@@ -273,12 +345,15 @@ fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) ->
     };
 
     // Emit database deletion complete
-    let _ = app.emit("delete-progress", DeleteProgress {
-        phase: "database".to_string(),
-        current: 1,
-        total: 1,
-        message: "Database records removed".to_string(),
-    });
+    let _ = app.emit(
+        "delete-progress",
+        DeleteProgress {
+            phase: "database".to_string(),
+            current: 1,
+            total: 1,
+            message: "Database records removed".to_string(),
+        },
+    );
 
     let total_files = cleanup.files.len() as u32;
     let mut deleted_count: u32 = 0;
@@ -286,16 +361,20 @@ fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) ->
 
     // Delete screenshot files synchronously with progress
     for file in &cleanup.files {
-        let filename = file.file_name()
+        let filename = file
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "file".to_string());
-        
-        let _ = app.emit("delete-progress", DeleteProgress {
-            phase: "screenshots".to_string(),
-            current: deleted_count + 1,
-            total: total_files,
-            message: format!("Deleting screenshot: {}", filename),
-        });
+
+        let _ = app.emit(
+            "delete-progress",
+            DeleteProgress {
+                phase: "screenshots".to_string(),
+                current: deleted_count + 1,
+                total: total_files,
+                message: format!("Deleting screenshot: {}", filename),
+            },
+        );
 
         match fs::remove_file(file) {
             Ok(_) => deleted_count += 1,
@@ -323,16 +402,20 @@ fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) ->
         }
 
         dir_count += 1;
-        let dirname = dir.file_name()
+        let dirname = dir
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "folder".to_string());
 
-        let _ = app.emit("delete-progress", DeleteProgress {
-            phase: "directories".to_string(),
-            current: dir_count,
-            total: total_dirs,
-            message: format!("Cleaning up folder: {}", dirname),
-        });
+        let _ = app.emit(
+            "delete-progress",
+            DeleteProgress {
+                phase: "directories".to_string(),
+                current: dir_count,
+                total: total_dirs,
+                message: format!("Cleaning up folder: {}", dirname),
+            },
+        );
 
         match fs::remove_dir(&dir) {
             Ok(_) => {}
@@ -351,12 +434,15 @@ fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) ->
         format!("Recording deleted with {} warning(s)", warnings.len())
     };
 
-    let _ = app.emit("delete-progress", DeleteProgress {
-        phase: "complete".to_string(),
-        current: total_files,
-        total: total_files,
-        message: final_message,
-    });
+    let _ = app.emit(
+        "delete-progress",
+        DeleteProgress {
+            phase: "complete".to_string(),
+            current: total_files,
+            total: total_files,
+            message: final_message,
+        },
+    );
 
     // Log any warnings to stderr for debugging
     for warning in &warnings {
@@ -367,7 +453,11 @@ fn delete_recording(db: State<'_, DatabaseState>, id: String, app: AppHandle) ->
 }
 
 #[tauri::command]
-fn update_recording_name(db: State<'_, DatabaseState>, id: String, name: String) -> Result<(), String> {
+fn update_recording_name(
+    db: State<'_, DatabaseState>,
+    id: String,
+    name: String,
+) -> Result<(), String> {
     safe_db_lock(&db)?
         .update_recording_name(&id, &name)
         .map_err(|e| e.to_string())
@@ -375,8 +465,7 @@ fn update_recording_name(db: State<'_, DatabaseState>, id: String, name: String)
 
 #[tauri::command]
 fn get_default_screenshot_path(db: State<'_, DatabaseState>) -> Result<String, String> {
-    let path = safe_db_lock(&db)?
-        .get_default_screenshot_path();
+    let path = safe_db_lock(&db)?.get_default_screenshot_path();
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -401,27 +490,29 @@ fn validate_screenshot_path(path: String) -> Result<bool, String> {
             let _ = std::fs::remove_file(&test_file);
             Ok(true)
         }
-        Err(e) => Err(format!("Directory is not writable: {}", e))
+        Err(e) => Err(format!("Directory is not writable: {}", e)),
     }
 }
 
 #[tauri::command]
-fn register_asset_scope(app: AppHandle, path: String, db: State<'_, DatabaseState>) -> Result<(), String> {
+fn register_asset_scope(
+    app: AppHandle,
+    path: String,
+    db: State<'_, DatabaseState>,
+) -> Result<(), String> {
     let path = PathBuf::from(&path);
 
     if path.as_os_str().is_empty() {
         return Ok(());
     }
 
-    // Validate path is within allowed directories before registering
-    let app_data_dir = safe_db_lock(&db)?
-        .data_dir()
-        .to_path_buf();
-    let validated_path = validate_path_within_allowed_dirs(&path, &app_data_dir)?;
+    drop(safe_db_lock(&db)?);
+    let validated_path = normalize_directory_path(&path)?;
 
     // Ensure directory exists
     if !validated_path.exists() {
-        let _ = std::fs::create_dir_all(&validated_path);
+        std::fs::create_dir_all(&validated_path)
+            .map_err(|e| format!("Failed to create directory: {}", e))?;
     }
 
     // Add the directory and all subdirectories to the asset protocol scope
@@ -431,19 +522,25 @@ fn register_asset_scope(app: AppHandle, path: String, db: State<'_, DatabaseStat
 }
 
 #[tauri::command]
-fn save_cropped_image(path: String, base64_data: String, db: State<'_, DatabaseState>) -> Result<String, String> {
-    // Validate path is within allowed directories before writing
+fn save_cropped_image(
+    path: String,
+    base64_data: String,
+    db: State<'_, DatabaseState>,
+) -> Result<String, String> {
     let path_buf = PathBuf::from(&path);
-    let app_data_dir = safe_db_lock(&db)?
-        .data_dir()
-        .to_path_buf();
-    let validated_path = validate_path_within_allowed_dirs(&path_buf, &app_data_dir)?;
+    drop(safe_db_lock(&db)?);
+    let validated_path = normalize_file_path(&path_buf)?;
 
     // Decode base64 to bytes
-    use base64::{Engine as _, engine::general_purpose};
+    use base64::{engine::general_purpose, Engine as _};
     let image_data = general_purpose::STANDARD
         .decode(&base64_data)
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    if let Some(parent) = validated_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+    }
 
     // Write to file
     let mut file = std::fs::File::create(&validated_path)
@@ -462,7 +559,7 @@ fn copy_screenshot_to_permanent(
     temp_path: String,
     recording_id: String,
     recording_name: String,
-    custom_screenshot_path: Option<String>
+    custom_screenshot_path: Option<String>,
 ) -> Result<String, String> {
     use uuid::Uuid;
 
@@ -474,8 +571,7 @@ fn copy_screenshot_to_permanent(
     // Get the base directory (custom path or default)
     let base_dir = match custom_screenshot_path {
         Some(ref path) if !path.is_empty() => PathBuf::from(path),
-        _ => safe_db_lock(&db)?
-            .screenshots_dir(),
+        _ => safe_db_lock(&db)?.screenshots_dir(),
     };
 
     // Create recording-specific subfolder with sanitized name
@@ -500,21 +596,34 @@ fn copy_screenshot_to_permanent(
 }
 
 #[tauri::command]
-fn update_step_screenshot(db: State<'_, DatabaseState>, step_id: String, screenshot_path: String, is_cropped: bool) -> Result<(), String> {
+fn update_step_screenshot(
+    db: State<'_, DatabaseState>,
+    step_id: String,
+    screenshot_path: String,
+    is_cropped: bool,
+) -> Result<(), String> {
     safe_db_lock(&db)?
         .update_step_screenshot(&step_id, &screenshot_path, is_cropped)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn reorder_steps(db: State<'_, DatabaseState>, recording_id: String, step_ids: Vec<String>) -> Result<(), String> {
+fn reorder_steps(
+    db: State<'_, DatabaseState>,
+    recording_id: String,
+    step_ids: Vec<String>,
+) -> Result<(), String> {
     safe_db_lock(&db)?
         .reorder_steps(&recording_id, step_ids)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn update_step_description(db: State<'_, DatabaseState>, step_id: String, description: String) -> Result<(), String> {
+fn update_step_description(
+    db: State<'_, DatabaseState>,
+    step_id: String,
+    description: String,
+) -> Result<(), String> {
     safe_db_lock(&db)?
         .update_step_description(&step_id, &description)
         .map_err(|e| e.to_string())
@@ -533,10 +642,15 @@ fn save_steps_with_path(
     recording_id: String,
     recording_name: String,
     steps: Vec<StepInput>,
-    screenshot_path: Option<String>
+    screenshot_path: Option<String>,
 ) -> Result<(), String> {
     safe_db_lock(&db)?
-        .save_steps_with_path(&recording_id, &recording_name, steps, screenshot_path.as_deref())
+        .save_steps_with_path(
+            &recording_id,
+            &recording_name,
+            steps,
+            screenshot_path.as_deref(),
+        )
         .map_err(|e| e.to_string())
 }
 
@@ -584,7 +698,9 @@ fn get_monitors() -> Result<Vec<MonitorInfo>, String> {
     for (index, mon) in monitors.iter().enumerate() {
         result.push(MonitorInfo {
             index,
-            name: mon.name().unwrap_or_else(|_| format!("Monitor {}", index + 1)),
+            name: mon
+                .name()
+                .unwrap_or_else(|_| format!("Monitor {}", index + 1)),
             x: mon.x().unwrap_or(0),
             y: mon.y().unwrap_or(0),
             width: mon.width().unwrap_or(0),
@@ -605,7 +721,10 @@ fn is_capturable_window(title: &str, app_name: &str) -> bool {
     }
 
     // Filter own windows
-    if title.contains("StepSnap") || title.contains("Select Capture") || title.contains("monitor-picker") {
+    if title.contains("StepSnap")
+        || title.contains("Select Capture")
+        || title.contains("monitor-picker")
+    {
         return false;
     }
 
@@ -652,9 +771,9 @@ fn is_capturable_window(title: &str, app_name: &str) -> bool {
         let system_titles = [
             "Menu Bar",
             "Menubar",
-            "Item-0",  // Menu bar items
+            "Item-0", // Menu bar items
             "Notification Center",
-            "Focus",   // Focus mode overlay
+            "Focus", // Focus mode overlay
         ];
         if system_titles.iter().any(|s| title.eq_ignore_ascii_case(s)) {
             return false;
@@ -669,13 +788,7 @@ fn is_capturable_window(title: &str, app_name: &str) -> bool {
     // Linux-specific system windows
     #[cfg(target_os = "linux")]
     {
-        let system_titles = [
-            "Desktop",
-            "gnome-shell",
-            "mutter",
-            "plasmashell",
-            "kwin",
-        ];
+        let system_titles = ["Desktop", "gnome-shell", "mutter", "plasmashell", "kwin"];
         if system_titles.iter().any(|s| title.eq_ignore_ascii_case(s)) {
             return false;
         }
@@ -729,7 +842,9 @@ async fn show_window_highlight(window_id: u32) -> Result<(), String> {
     use xcap::Window;
 
     let windows = Window::all().map_err(|e| e.to_string())?;
-    let target = windows.iter().find(|w| w.id().ok().unwrap_or(0) == window_id)
+    let target = windows
+        .iter()
+        .find(|w| w.id().ok().unwrap_or(0) == window_id)
         .ok_or("Window not found")?;
 
     // Don't show highlight for minimized windows (no valid position)
@@ -762,7 +877,11 @@ async fn show_highlight_at_bounds(bounds: HighlightBounds) -> Result<(), String>
 }
 
 // Helper to save capture and emit events
-async fn save_and_emit_capture(app: AppHandle, image: image::RgbaImage, prefix: &str) -> Result<String, String> {
+async fn save_and_emit_capture(
+    app: AppHandle,
+    image: image::RgbaImage,
+    prefix: &str,
+) -> Result<String, String> {
     use image::codecs::jpeg::JpegEncoder;
     use std::io::BufWriter;
     use tokio::time::{sleep, Duration};
@@ -783,7 +902,10 @@ async fn save_and_emit_capture(app: AppHandle, image: image::RgbaImage, prefix: 
     let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
     encoder.encode_image(&image).map_err(|e| e.to_string())?;
 
-    let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+    let _ = app.emit(
+        "manual-capture-complete",
+        file_path.to_string_lossy().to_string(),
+    );
 
     // Show native toast notification (2.5 seconds)
     let _ = overlay::show_toast("Screenshot captured", 2500);
@@ -829,10 +951,8 @@ fn is_window_valid(window_id: u32) -> bool {
 
     unsafe {
         // Query for this specific window
-        let window_list = CGWindowListCopyWindowInfo(
-            K_CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW,
-            window_id,
-        );
+        let window_list =
+            CGWindowListCopyWindowInfo(K_CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW, window_id);
 
         if window_list.is_null() {
             return false;
@@ -868,7 +988,8 @@ fn restore_macos_window(app_name: &str) -> Result<(), String> {
 
     // AppleScript to activate the app and unminimize its windows
     // This brings the app to the front and restores any minimized windows
-    let script = format!(r#"
+    let script = format!(
+        r#"
         tell application "{}"
             activate
         end tell
@@ -885,7 +1006,9 @@ fn restore_macos_window(app_name: &str) -> Result<(), String> {
                 end repeat
             end tell
         end tell
-    "#, app_name, app_name);
+    "#,
+        app_name, app_name
+    );
 
     let output = Command::new("osascript")
         .args(["-e", &script])
@@ -933,10 +1056,10 @@ async fn capture_window_and_close_picker(
     app: AppHandle,
     state: State<'_, RecordingState>,
     window_id: u32,
-    is_minimized: bool
+    is_minimized: bool,
 ) -> Result<String, String> {
-    use xcap::Window;
     use tokio::time::{sleep, Duration};
+    use xcap::Window;
 
     // IMPORTANT: Hide highlight overlay FIRST and ensure it's destroyed
     let _ = overlay::hide_monitor_border();
@@ -964,7 +1087,9 @@ async fn capture_window_and_close_picker(
     #[cfg(target_os = "windows")]
     if is_minimized {
         use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SetForegroundWindow, SW_RESTORE};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SetForegroundWindow, ShowWindow, SW_RESTORE,
+        };
 
         unsafe {
             let hwnd = HWND(window_id as isize as *mut std::ffi::c_void);
@@ -999,7 +1124,8 @@ async fn capture_window_and_close_picker(
 
     // Now it's safe to call Window::all() - the window is restored if it was minimized
     let windows = Window::all().map_err(|e| e.to_string())?;
-    let target = windows.into_iter()
+    let target = windows
+        .into_iter()
         .find(|w| w.id().ok().unwrap_or(0) == window_id)
         .ok_or("Window not found")?;
 
@@ -1011,9 +1137,7 @@ async fn capture_window_and_close_picker(
     }
 
     // Safely attempt capture with panic recovery
-    let capture_result = catch_unwind(AssertUnwindSafe(|| {
-        target.capture_image()
-    }));
+    let capture_result = catch_unwind(AssertUnwindSafe(|| target.capture_image()));
 
     let image = match capture_result {
         Ok(Ok(img)) => img,
@@ -1026,9 +1150,9 @@ async fn capture_window_and_close_picker(
 
 #[tauri::command]
 async fn capture_monitor(app: AppHandle, index: usize) -> Result<String, String> {
-    use xcap::Monitor;
     use image::codecs::jpeg::JpegEncoder;
     use std::io::BufWriter;
+    use xcap::Monitor;
 
     let monitors = Monitor::all().map_err(|e| e.to_string())?;
     let monitor = monitors.get(index).ok_or("Invalid monitor index")?;
@@ -1054,21 +1178,27 @@ async fn capture_monitor(app: AppHandle, index: usize) -> Result<String, String>
     encoder.encode_image(&image).map_err(|e| e.to_string())?;
 
     // Emit capture event to recorder
-    let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+    let _ = app.emit(
+        "manual-capture-complete",
+        file_path.to_string_lossy().to_string(),
+    );
 
     Ok(file_path.to_string_lossy().to_string())
 }
-
 
 /// Combined command that closes picker first, then captures the monitor
 /// The picker window is closed (not just hidden) to ensure it's fully removed
 /// from the screen before capturing, preventing "ghost window" artifacts
 #[tauri::command]
-async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, RecordingState>, index: usize) -> Result<String, String> {
-    use xcap::Monitor;
+async fn capture_monitor_and_close_picker(
+    app: AppHandle,
+    state: State<'_, RecordingState>,
+    index: usize,
+) -> Result<String, String> {
     use image::codecs::jpeg::JpegEncoder;
     use std::io::BufWriter;
     use tokio::time::{sleep, Duration};
+    use xcap::Monitor;
 
     // Hide highlight overlay first - this is synchronous with message flush
     if let Err(e) = overlay::hide_monitor_border() {
@@ -1110,7 +1240,10 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
     encoder.encode_image(&image).map_err(|e| e.to_string())?;
 
     // Emit capture event to recorder
-    let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+    let _ = app.emit(
+        "manual-capture-complete",
+        file_path.to_string_lossy().to_string(),
+    );
 
     // Show native toast notification (2.5 seconds)
     let _ = overlay::show_toast("Screenshot captured", 2500);
@@ -1120,9 +1253,9 @@ async fn capture_monitor_and_close_picker(app: AppHandle, state: State<'_, Recor
 
 #[tauri::command]
 async fn capture_all_monitors(app: AppHandle) -> Result<String, String> {
-    use xcap::Monitor;
-    use image::{RgbaImage, codecs::jpeg::JpegEncoder};
+    use image::{codecs::jpeg::JpegEncoder, RgbaImage};
     use std::io::BufWriter;
+    use xcap::Monitor;
 
     let monitors = Monitor::all().map_err(|e| e.to_string())?;
 
@@ -1179,17 +1312,25 @@ async fn capture_all_monitors(app: AppHandle) -> Result<String, String> {
     let mut encoder = JpegEncoder::new_with_quality(&mut writer, 85);
 
     let rgb_image = image::DynamicImage::ImageRgba8(composite).to_rgb8();
-    encoder.encode_image(&rgb_image).map_err(|e| e.to_string())?;
+    encoder
+        .encode_image(&rgb_image)
+        .map_err(|e| e.to_string())?;
 
     // Emit capture event
-    let _ = app.emit("manual-capture-complete", file_path.to_string_lossy().to_string());
+    let _ = app.emit(
+        "manual-capture-complete",
+        file_path.to_string_lossy().to_string(),
+    );
 
     Ok(file_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -> Result<(), String> {
-    use tauri::{WebviewWindowBuilder, WebviewUrl};
+async fn show_monitor_picker(
+    app: AppHandle,
+    state: State<'_, RecordingState>,
+) -> Result<(), String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
 
     // Always show picker UI so user can select monitors OR windows
     safe_mutex_set(&state.is_picker_open, true);
@@ -1206,26 +1347,25 @@ async fn show_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -
     let url = WebviewUrl::App("/#/monitor-picker".into());
 
     // Window size for monitor cards + dropdown
-    let _window = WebviewWindowBuilder::new(
-        &app,
-        "monitor-picker",
-        url
-    )
-    .title("Select Capture Target")
-    .inner_size(500.0, 520.0)
-    .resizable(false)
-    .decorations(false)
-    .always_on_top(true)
-    .center()
-    .focused(true)
-    .build()
-    .map_err(|e| e.to_string())?;
+    let _window = WebviewWindowBuilder::new(&app, "monitor-picker", url)
+        .title("Select Capture Target")
+        .inner_size(500.0, 520.0)
+        .resizable(false)
+        .decorations(false)
+        .always_on_top(true)
+        .center()
+        .focused(true)
+        .build()
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
 
 #[tauri::command]
-async fn close_monitor_picker(app: AppHandle, state: State<'_, RecordingState>) -> Result<(), String> {
+async fn close_monitor_picker(
+    app: AppHandle,
+    state: State<'_, RecordingState>,
+) -> Result<(), String> {
     // Always ensure the highlight overlay is hidden when picker closes
     let _ = overlay::hide_monitor_border();
 
@@ -1250,7 +1390,10 @@ async fn show_monitor_highlight(_app: AppHandle, index: usize) -> Result<(), Str
     let width = monitor.width().unwrap_or(0);
     let height = monitor.height().unwrap_or(0);
 
-    println!("Monitor {}: pos=({}, {}), size={}x{}", index, x, y, width, height);
+    println!(
+        "Monitor {}: pos=({}, {}), size={}x{}",
+        index, x, y, width, height
+    );
 
     // Use native overlay instead of Tauri webview windows
     overlay::show_monitor_border(x, y, width, height)
@@ -1450,7 +1593,11 @@ fn get_permission_status() -> PermissionStatus {
 
 /// Update paths in settings.json that reference the old identifier.
 /// This is called after a successful folder migration.
-fn update_settings_paths(settings_path: &std::path::Path, old_identifier: &str, new_identifier: &str) {
+fn update_settings_paths(
+    settings_path: &std::path::Path,
+    old_identifier: &str,
+    new_identifier: &str,
+) {
     // Read settings file if it exists
     let content = match std::fs::read_to_string(settings_path) {
         Ok(c) => c,
@@ -1469,7 +1616,10 @@ fn update_settings_paths(settings_path: &std::path::Path, old_identifier: &str, 
     if let Err(e) = std::fs::write(settings_path, updated_content) {
         eprintln!("Warning: Could not update paths in settings.json: {}", e);
     } else {
-        println!("Updated paths in settings.json: {} -> {}", old_identifier, new_identifier);
+        println!(
+            "Updated paths in settings.json: {} -> {}",
+            old_identifier, new_identifier
+        );
     }
 }
 
@@ -1555,8 +1705,11 @@ fn migrate_from_openscribe(new_data_dir: &std::path::Path) -> Result<Option<Stri
     // Attempt to rename old folder to new location
     match std::fs::rename(&old_data_dir, new_data_dir) {
         Ok(_) => {
-            println!("Successfully migrated data from {} to {}",
-                     old_data_dir.display(), new_data_dir.display());
+            println!(
+                "Successfully migrated data from {} to {}",
+                old_data_dir.display(),
+                new_data_dir.display()
+            );
 
             // Rename the database file from openscribe.db to stepsnap.db
             let old_db_in_new_dir = new_data_dir.join("openscribe.db");
@@ -1583,7 +1736,8 @@ fn migrate_from_openscribe(new_data_dir: &std::path::Path) -> Result<Option<Stri
             // Migration failed - notify user
             Ok(Some(format!(
                 "Could not migrate data from old location. Your data may be at: {} (Error: {})",
-                old_data_dir.display(), e
+                old_data_dir.display(),
+                e
             )))
         }
     }
@@ -1625,8 +1779,11 @@ fn migrate_from_old_identifier(new_data_dir: &std::path::Path) -> Result<Option<
     // Attempt to rename old folder to new location
     match std::fs::rename(&old_data_dir, new_data_dir) {
         Ok(_) => {
-            println!("Successfully migrated data from {} to {}",
-                     old_data_dir.display(), new_data_dir.display());
+            println!(
+                "Successfully migrated data from {} to {}",
+                old_data_dir.display(),
+                new_data_dir.display()
+            );
 
             // Rename the database file from openscribe.db to stepsnap.db
             let old_db_in_new_dir = new_data_dir.join("openscribe.db");
@@ -1653,7 +1810,8 @@ fn migrate_from_old_identifier(new_data_dir: &std::path::Path) -> Result<Option<
             // Migration failed - notify user
             Ok(Some(format!(
                 "Could not migrate data from old location. Your data may be at: {} (Error: {})",
-                old_data_dir.display(), e
+                old_data_dir.display(),
+                e
             )))
         }
     }
@@ -1703,7 +1861,7 @@ fn repair_stale_screenshot_paths(app_data_dir: &std::path::Path) {
 
     // Fix paths that reference 'openscribe' (previous format)
     let _ = conn.execute(
-        "UPDATE steps SET screenshot_path = REPLACE(screenshot_path, 'openscribe', 'stepsnap') WHERE screenshot_path LIKE '%openscribe%' AND screenshot_path NOT LIKE '%stepsnap%'",
+        "UPDATE steps SET screenshot_path = REPLACE(screenshot_path, 'openscribe', 'stepsnap') WHERE screenshot_path LIKE '%openscribe%'",
         []
     );
 
@@ -1716,7 +1874,7 @@ fn repair_stale_screenshot_paths(app_data_dir: &std::path::Path) {
 
     // Fix paths that reference 'openscribe' (previous format)
     let _ = conn.execute(
-        "UPDATE recordings SET documentation = REPLACE(documentation, 'openscribe', 'stepsnap') WHERE documentation LIKE '%openscribe%' AND documentation NOT LIKE '%stepsnap%'",
+        "UPDATE recordings SET documentation = REPLACE(documentation, 'openscribe', 'stepsnap') WHERE documentation LIKE '%openscribe%'",
         []
     );
 
@@ -1729,8 +1887,7 @@ pub fn run() {
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::UI::HiDpi::{
-            SetProcessDpiAwarenessContext,
-            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+            SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
         };
         unsafe {
             let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -1756,7 +1913,9 @@ pub fn run() {
         .manage(recording_state)
         .setup(move |app| {
             // Initialize database
-            let app_data_dir = app.path().app_data_dir()
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
                 .expect("Failed to get app data directory");
 
             // Migration chain: try openscribe -> stepsnap first, then com.openscribe -> stepsnap
@@ -1778,13 +1937,17 @@ pub fn run() {
                     let _ = app_handle.emit("migration-warning", msg);
                 });
             }
-            
-            let db = Database::new(app_data_dir)
-                .expect("Failed to initialize database");
+
+            let db = Database::new(app_data_dir).expect("Failed to initialize database");
             app.manage(DatabaseState(Mutex::new(db)));
 
             // Start the global input listener in a background thread (for recording)
-            recorder::start_listener(app.handle().clone(), is_recording_clone, is_picker_open_clone, ocr_enabled_clone);
+            recorder::start_listener(
+                app.handle().clone(),
+                is_recording_clone,
+                is_picker_open_clone,
+                ocr_enabled_clone,
+            );
 
             // Register default hotkeys
             let global_shortcut = app.global_shortcut();
@@ -1878,4 +2041,188 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::Database;
+    use rusqlite::{params, Connection};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use uuid::Uuid;
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!("stepsnap_test_{}", Uuid::new_v4()));
+            fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn init_db(test_dir: &TestDir) -> PathBuf {
+        let _db = Database::new(test_dir.path().to_path_buf()).unwrap();
+        test_dir.path().join("stepsnap.db")
+    }
+
+    #[test]
+    fn normalize_file_path_accepts_existing_absolute_path() {
+        let test_dir = TestDir::new();
+        let file_path = test_dir.path().join("example.txt");
+        fs::write(&file_path, "hello").unwrap();
+
+        let normalized = normalize_file_path(&file_path).unwrap();
+
+        assert_eq!(normalized, file_path.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn normalize_file_path_accepts_missing_file_under_existing_parent() {
+        let test_dir = TestDir::new();
+        let file_path = test_dir.path().join("new-file.txt");
+
+        let normalized = normalize_file_path(&file_path).unwrap();
+        let expected = test_dir.path().canonicalize().unwrap().join("new-file.txt");
+
+        assert_eq!(normalized, expected);
+    }
+
+    #[test]
+    fn normalize_file_path_rejects_relative_paths() {
+        let error = normalize_file_path(Path::new("relative/file.txt")).unwrap_err();
+
+        assert!(error.contains("absolute"));
+    }
+
+    #[test]
+    fn normalize_directory_path_accepts_missing_directory_under_existing_parent() {
+        let test_dir = TestDir::new();
+        let directory_path = test_dir.path().join("screenshots");
+
+        let normalized = normalize_directory_path(&directory_path).unwrap();
+        let expected = test_dir.path().canonicalize().unwrap().join("screenshots");
+
+        assert_eq!(normalized, expected);
+    }
+
+    #[test]
+    fn update_settings_paths_rewrites_old_identifiers() {
+        let test_dir = TestDir::new();
+        let settings_path = test_dir.path().join("settings.json");
+        fs::write(
+            &settings_path,
+            r#"{"screenshotPath":"C:\\Users\\me\\AppData\\Roaming\\openscribe\\screenshots"}"#,
+        )
+        .unwrap();
+
+        update_settings_paths(&settings_path, "openscribe", "stepsnap");
+
+        let updated = fs::read_to_string(&settings_path).unwrap();
+        assert!(updated.contains("stepsnap"));
+        assert!(!updated.contains("openscribe"));
+    }
+
+    #[test]
+    fn update_database_paths_rewrites_step_and_documentation_paths() {
+        let test_dir = TestDir::new();
+        let db_path = init_db(&test_dir);
+        let conn = Connection::open(&db_path).unwrap();
+
+        conn.execute(
+            "INSERT INTO recordings (id, name, created_at, updated_at, documentation) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["rec-1", "Recording", 1_i64, 1_i64, "![img](C:/data/openscribe/example.png)"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO steps (id, recording_id, type_, timestamp, screenshot_path, order_index, is_cropped) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params!["step-1", "rec-1", "capture", 1_i64, "C:/data/openscribe/example.png", 0_i32, 0_i32],
+        )
+        .unwrap();
+
+        update_database_paths(&db_path, "openscribe", "stepsnap");
+
+        let step_path: String = conn
+            .query_row(
+                "SELECT screenshot_path FROM steps WHERE id = ?1",
+                params!["step-1"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let documentation: String = conn
+            .query_row(
+                "SELECT documentation FROM recordings WHERE id = ?1",
+                params!["rec-1"],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(step_path, "C:/data/stepsnap/example.png");
+        assert!(documentation.contains("stepsnap"));
+        assert!(!documentation.contains("openscribe"));
+    }
+
+    #[test]
+    fn repair_stale_screenshot_paths_updates_all_legacy_identifiers() {
+        let test_dir = TestDir::new();
+        let db_path = init_db(&test_dir);
+        let conn = Connection::open(&db_path).unwrap();
+
+        conn.execute(
+            "INSERT INTO recordings (id, name, created_at, updated_at, documentation) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["rec-1", "Recording", 1_i64, 1_i64, "![old](C:/data/com.openscribe/a.png)\n![older](C:/data/openscribe/b.png)"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO steps (id, recording_id, type_, timestamp, screenshot_path, order_index, is_cropped) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params!["step-1", "rec-1", "capture", 1_i64, "C:/data/com.openscribe/a.png", 0_i32, 0_i32],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO steps (id, recording_id, type_, timestamp, screenshot_path, order_index, is_cropped) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params!["step-2", "rec-1", "capture", 2_i64, "C:/data/openscribe/b.png", 1_i32, 0_i32],
+        )
+        .unwrap();
+
+        repair_stale_screenshot_paths(test_dir.path());
+
+        let step_paths: Vec<String> = conn
+            .prepare("SELECT screenshot_path FROM steps ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(|row| row.unwrap())
+            .collect();
+        let documentation: String = conn
+            .query_row(
+                "SELECT documentation FROM recordings WHERE id = ?1",
+                params!["rec-1"],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(
+            step_paths,
+            vec![
+                "C:/data/stepsnap/a.png".to_string(),
+                "C:/data/stepsnap/b.png".to_string(),
+            ]
+        );
+        assert!(documentation.contains("stepsnap/a.png"));
+        assert!(documentation.contains("stepsnap/b.png"));
+        assert!(!documentation.contains("openscribe"));
+    }
 }

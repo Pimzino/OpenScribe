@@ -1,7 +1,7 @@
-use rusqlite::{Connection, params, Result, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -96,9 +96,8 @@ pub struct Database {
 impl Database {
     pub fn new(app_data_dir: PathBuf) -> Result<Self> {
         // Ensure directory exists
-        fs::create_dir_all(&app_data_dir).map_err(|e| {
-            rusqlite::Error::InvalidPath(app_data_dir.join(e.to_string()))
-        })?;
+        fs::create_dir_all(&app_data_dir)
+            .map_err(|e| rusqlite::Error::InvalidPath(app_data_dir.join(e.to_string())))?;
 
         let db_path = app_data_dir.join("stepsnap.db");
         let conn = Connection::open(&db_path)?;
@@ -150,19 +149,19 @@ impl Database {
         )?;
 
         // Migration: Add description column if it doesn't exist
-        let has_description: bool = self.conn
+        let has_description: bool = self
+            .conn
             .prepare("SELECT description FROM steps LIMIT 1")
             .is_ok();
 
         if !has_description {
-            self.conn.execute(
-                "ALTER TABLE steps ADD COLUMN description TEXT",
-                [],
-            )?;
+            self.conn
+                .execute("ALTER TABLE steps ADD COLUMN description TEXT", [])?;
         }
 
         // Migration: Add is_cropped column if it doesn't exist
-        let has_is_cropped: bool = self.conn
+        let has_is_cropped: bool = self
+            .conn
             .prepare("SELECT is_cropped FROM steps LIMIT 1")
             .is_ok();
 
@@ -174,19 +173,19 @@ impl Database {
         }
 
         // Migration: Add ocr_text column if it doesn't exist
-        let has_ocr_text: bool = self.conn
+        let has_ocr_text: bool = self
+            .conn
             .prepare("SELECT ocr_text FROM steps LIMIT 1")
             .is_ok();
 
         if !has_ocr_text {
-            self.conn.execute(
-                "ALTER TABLE steps ADD COLUMN ocr_text TEXT",
-                [],
-            )?;
+            self.conn
+                .execute("ALTER TABLE steps ADD COLUMN ocr_text TEXT", [])?;
         }
 
         // Migration: Add ocr_status column if it doesn't exist
-        let has_ocr_status: bool = self.conn
+        let has_ocr_status: bool = self
+            .conn
             .prepare("SELECT ocr_status FROM steps LIMIT 1")
             .is_ok();
 
@@ -198,7 +197,8 @@ impl Database {
         }
 
         // Migration: Add documentation_generated_at column to recordings if it doesn't exist
-        let has_doc_generated_at: bool = self.conn
+        let has_doc_generated_at: bool = self
+            .conn
             .prepare("SELECT documentation_generated_at FROM recordings LIMIT 1")
             .is_ok();
 
@@ -275,9 +275,8 @@ impl Database {
 
         // Windows reserved names
         let reserved_names = [
-            "CON", "PRN", "AUX", "NUL",
-            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+            "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
         ];
 
         let mut sanitized: String = name
@@ -309,7 +308,9 @@ impl Database {
         // Truncate to 255 characters
         if sanitized.len() > 255 {
             sanitized.truncate(255);
-            sanitized = sanitized.trim_end_matches(|c| c == '.' || c == ' ').to_string();
+            sanitized = sanitized
+                .trim_end_matches(|c| c == '.' || c == ' ')
+                .to_string();
         }
 
         // Fallback if empty
@@ -396,7 +397,7 @@ impl Database {
         recording_id: &str,
         recording_name: &str,
         steps: Vec<StepInput>,
-        custom_screenshot_path: Option<&str>
+        custom_screenshot_path: Option<&str>,
     ) -> Result<()> {
         // Determine base screenshots directory
         let base_dir = match custom_screenshot_path {
@@ -504,32 +505,35 @@ impl Database {
         recordings.collect()
     }
 
-    pub fn list_recordings_paginated(&self, page: i32, per_page: i32, search: Option<&str>) -> Result<PaginatedRecordings> {
+    pub fn list_recordings_paginated(
+        &self,
+        page: i32,
+        per_page: i32,
+        search: Option<&str>,
+    ) -> Result<PaginatedRecordings> {
         let offset = (page - 1) * per_page;
-        
+
         // Build the WHERE clause for search
         let search_clause = if search.is_some() {
             "WHERE r.name LIKE ?1"
         } else {
             ""
         };
-        
+
         // Get total count
-        let count_sql = format!(
-            "SELECT COUNT(*) FROM recordings r {}",
-            search_clause
-        );
-        
+        let count_sql = format!("SELECT COUNT(*) FROM recordings r {}", search_clause);
+
         let total_count: i64 = if let Some(ref search_term) = search {
             let search_pattern = format!("%{}%", search_term);
-            self.conn.query_row(&count_sql, params![search_pattern], |row| row.get(0))?
+            self.conn
+                .query_row(&count_sql, params![search_pattern], |row| row.get(0))?
         } else {
             self.conn.query_row(&count_sql, [], |row| row.get(0))?
         };
-        
+
         // Calculate total pages
         let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i32;
-        
+
         // Get paginated recordings
         let query_sql = format!(
             "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation, r.documentation_generated_at,
@@ -542,7 +546,7 @@ impl Database {
             if search.is_some() { "2" } else { "1" },
             if search.is_some() { "3" } else { "2" }
         );
-        
+
         let recordings: Vec<Recording> = if let Some(ref search_term) = search {
             let search_pattern = format!("%{}%", search_term);
             let mut stmt = self.conn.prepare(&query_sql)?;
@@ -573,7 +577,7 @@ impl Database {
             })?;
             rows.collect::<Result<Vec<_>>>()?
         };
-        
+
         Ok(PaginatedRecordings {
             recordings,
             total_count,
@@ -590,17 +594,19 @@ impl Database {
              FROM recordings r WHERE r.id = ?1"
         )?;
 
-        let recording: Option<Recording> = stmt.query_row(params![id], |row| {
-            Ok(Recording {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                created_at: row.get(2)?,
-                updated_at: row.get(3)?,
-                documentation: row.get(4)?,
-                documentation_generated_at: row.get(5)?,
-                step_count: row.get(6)?,
+        let recording: Option<Recording> = stmt
+            .query_row(params![id], |row| {
+                Ok(Recording {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    created_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    documentation: row.get(4)?,
+                    documentation_generated_at: row.get(5)?,
+                    step_count: row.get(6)?,
+                })
             })
-        }).optional()?;
+            .optional()?;
 
         match recording {
             Some(rec) => {
@@ -611,27 +617,29 @@ impl Database {
                      FROM steps WHERE recording_id = ?1 ORDER BY order_index"
                 )?;
 
-                let steps = stmt.query_map(params![id], |row| {
-                    Ok(Step {
-                        id: row.get(0)?,
-                        recording_id: row.get(1)?,
-                        type_: row.get(2)?,
-                        x: row.get(3)?,
-                        y: row.get(4)?,
-                        text: row.get(5)?,
-                        timestamp: row.get(6)?,
-                        screenshot_path: row.get(7)?,
-                        element_name: row.get(8)?,
-                        element_type: row.get(9)?,
-                        element_value: row.get(10)?,
-                        app_name: row.get(11)?,
-                        order_index: row.get(12)?,
-                        description: row.get(13)?,
-                        is_cropped: row.get::<_, Option<i32>>(14)?.map(|v| v != 0),
-                        ocr_text: row.get(15)?,
-                        ocr_status: row.get(16)?,
-                    })
-                })?.collect::<Result<Vec<_>>>()?;
+                let steps = stmt
+                    .query_map(params![id], |row| {
+                        Ok(Step {
+                            id: row.get(0)?,
+                            recording_id: row.get(1)?,
+                            type_: row.get(2)?,
+                            x: row.get(3)?,
+                            y: row.get(4)?,
+                            text: row.get(5)?,
+                            timestamp: row.get(6)?,
+                            screenshot_path: row.get(7)?,
+                            element_name: row.get(8)?,
+                            element_type: row.get(9)?,
+                            element_value: row.get(10)?,
+                            app_name: row.get(11)?,
+                            order_index: row.get(12)?,
+                            description: row.get(13)?,
+                            is_cropped: row.get::<_, Option<i32>>(14)?.map(|v| v != 0),
+                            ocr_text: row.get(15)?,
+                            ocr_status: row.get(16)?,
+                        })
+                    })?
+                    .collect::<Result<Vec<_>>>()?;
 
                 Ok(Some(RecordingWithSteps {
                     recording: rec,
@@ -666,8 +674,10 @@ impl Database {
         }
 
         // Delete from database.
-        self.conn.execute("DELETE FROM steps WHERE recording_id = ?1", params![id])?;
-        self.conn.execute("DELETE FROM recordings WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM steps WHERE recording_id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM recordings WHERE id = ?1", params![id])?;
 
         // Protect the default screenshots directory from deletion, even if it is empty.
         let protected_dir = self.get_default_screenshot_path();
@@ -688,7 +698,12 @@ impl Database {
         Ok(())
     }
 
-    pub fn update_step_screenshot(&self, step_id: &str, screenshot_path: &str, is_cropped: bool) -> Result<()> {
+    pub fn update_step_screenshot(
+        &self,
+        step_id: &str,
+        screenshot_path: &str,
+        is_cropped: bool,
+    ) -> Result<()> {
         self.conn.execute(
             "UPDATE steps SET screenshot_path = ?1, is_cropped = ?2 WHERE id = ?3",
             params![screenshot_path, is_cropped as i32, step_id],
@@ -723,11 +738,12 @@ impl Database {
 
     pub fn delete_step(&self, step_id: &str) -> Result<()> {
         // Get screenshot path before deleting
-        let screenshot_path: Option<String> = self.conn
+        let screenshot_path: Option<String> = self
+            .conn
             .query_row(
                 "SELECT screenshot_path FROM steps WHERE id = ?1",
                 params![step_id],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .optional()?;
 
@@ -737,15 +753,18 @@ impl Database {
         }
 
         // Delete from database
-        self.conn.execute(
-            "DELETE FROM steps WHERE id = ?1",
-            params![step_id],
-        )?;
+        self.conn
+            .execute("DELETE FROM steps WHERE id = ?1", params![step_id])?;
 
         Ok(())
     }
 
-    pub fn update_step_ocr(&self, step_id: &str, ocr_text: Option<&str>, ocr_status: &str) -> Result<()> {
+    pub fn update_step_ocr(
+        &self,
+        step_id: &str,
+        ocr_text: Option<&str>,
+        ocr_status: &str,
+    ) -> Result<()> {
         self.conn.execute(
             "UPDATE steps SET ocr_text = ?1, ocr_status = ?2 WHERE id = ?3",
             params![ocr_text, ocr_status, step_id],
@@ -755,7 +774,12 @@ impl Database {
 
     // ── Notification CRUD ──────────────────────────────────────────────
 
-    pub fn create_notification(&self, title: Option<&str>, message: &str, variant: &str) -> Result<Notification> {
+    pub fn create_notification(
+        &self,
+        title: Option<&str>,
+        message: &str,
+        variant: &str,
+    ) -> Result<Notification> {
         let id = Uuid::new_v4().to_string();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -783,7 +807,7 @@ impl Database {
             "SELECT id, title, message, variant, is_read, created_at
              FROM notifications
              ORDER BY created_at DESC
-             LIMIT ?1 OFFSET ?2"
+             LIMIT ?1 OFFSET ?2",
         )?;
 
         let rows = stmt.query_map(params![limit, offset], |row| {
@@ -822,23 +846,166 @@ impl Database {
     }
 
     pub fn mark_all_notifications_read(&self) -> Result<()> {
-        self.conn.execute(
-            "UPDATE notifications SET is_read = 1 WHERE is_read = 0",
-            [],
-        )?;
+        self.conn
+            .execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0", [])?;
         Ok(())
     }
 
     pub fn delete_notification(&self, id: &str) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM notifications WHERE id = ?1",
-            params![id],
-        )?;
+        self.conn
+            .execute("DELETE FROM notifications WHERE id = ?1", params![id])?;
         Ok(())
     }
 
     pub fn delete_all_notifications(&self) -> Result<()> {
         self.conn.execute("DELETE FROM notifications", [])?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!("stepsnap_db_test_{}", Uuid::new_v4()));
+            fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn sample_step_input(
+        screenshot: Option<String>,
+        screenshot_is_permanent: Option<bool>,
+    ) -> StepInput {
+        StepInput {
+            type_: "capture".to_string(),
+            x: None,
+            y: None,
+            text: None,
+            timestamp: 123,
+            screenshot,
+            element_name: None,
+            element_type: None,
+            element_value: None,
+            app_name: None,
+            description: Some("desc".to_string()),
+            is_cropped: Some(false),
+            order_index: Some(0),
+            screenshot_is_permanent,
+        }
+    }
+
+    #[test]
+    fn save_steps_with_path_copies_temp_screenshots_into_custom_directory() {
+        let test_dir = TestDir::new();
+        let db = Database::new(test_dir.path().to_path_buf()).unwrap();
+        let recording_id = db.create_recording("Recording".to_string()).unwrap();
+        let custom_root = test_dir.path().join("custom-root");
+        let temp_file = test_dir.path().join("temp.jpg");
+        fs::write(&temp_file, b"image-bytes").unwrap();
+
+        db.save_steps_with_path(
+            &recording_id,
+            "Recording",
+            vec![sample_step_input(
+                Some(temp_file.to_string_lossy().to_string()),
+                Some(false),
+            )],
+            Some(custom_root.to_string_lossy().as_ref()),
+        )
+        .unwrap();
+
+        let stored_path: String = db
+            .conn
+            .query_row(
+                "SELECT screenshot_path FROM steps WHERE recording_id = ?1",
+                params![recording_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert!(stored_path.starts_with(custom_root.to_string_lossy().as_ref()));
+        assert!(stored_path.contains("Recording"));
+        assert!(!temp_file.exists());
+        assert!(PathBuf::from(stored_path).exists());
+    }
+
+    #[test]
+    fn save_steps_with_path_preserves_existing_permanent_screenshot_paths() {
+        let test_dir = TestDir::new();
+        let db = Database::new(test_dir.path().to_path_buf()).unwrap();
+        let recording_id = db.create_recording("Recording".to_string()).unwrap();
+        let permanent_file = test_dir.path().join("already-there.jpg");
+        fs::write(&permanent_file, b"image-bytes").unwrap();
+
+        db.save_steps_with_path(
+            &recording_id,
+            "Recording",
+            vec![sample_step_input(
+                Some(permanent_file.to_string_lossy().to_string()),
+                Some(true),
+            )],
+            None,
+        )
+        .unwrap();
+
+        let stored_path: String = db
+            .conn
+            .query_row(
+                "SELECT screenshot_path FROM steps WHERE recording_id = ?1",
+                params![recording_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(stored_path, permanent_file.to_string_lossy().to_string());
+        assert!(permanent_file.exists());
+    }
+
+    #[test]
+    fn delete_recording_keeps_default_screenshots_root_protected() {
+        let test_dir = TestDir::new();
+        let db = Database::new(test_dir.path().to_path_buf()).unwrap();
+        let recording_id = db.create_recording("Recording".to_string()).unwrap();
+        let screenshots_dir = db.screenshots_dir();
+        let screenshot_path = screenshots_dir.join("shot.jpg");
+        fs::write(&screenshot_path, b"image-bytes").unwrap();
+
+        db.conn
+            .execute(
+                "INSERT INTO steps (id, recording_id, type_, timestamp, screenshot_path, order_index, is_cropped) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params!["step-1", recording_id, "capture", 1_i64, screenshot_path.to_string_lossy(), 0_i32, 0_i32],
+            )
+            .unwrap();
+
+        let cleanup = db.delete_recording(&recording_id).unwrap();
+
+        assert_eq!(cleanup.files, vec![screenshot_path]);
+        assert_eq!(cleanup.protected_dir, screenshots_dir);
+        assert!(!cleanup.dirs.contains(&cleanup.protected_dir));
+    }
+
+    #[test]
+    fn sanitize_dirname_public_handles_invalid_names() {
+        let sanitized = Database::sanitize_dirname_public("CON");
+
+        assert_eq!(sanitized, "_CON");
     }
 }
