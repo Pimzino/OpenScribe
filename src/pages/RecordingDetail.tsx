@@ -745,8 +745,7 @@ export default function RecordingDetail() {
                                         autoFocus
                                         aria-label="Recording name"
                                         placeholder="Enter recording name"
-                                        className="text-2xl font-bold bg-white/10 border border-white/20 rounded-md px-2 py-1 focus:outline-none focus:border-[#2721E8] disabled:opacity-50"
-                                        style={{ minWidth: '200px' }}
+                                        className="text-2xl font-bold bg-white/10 border border-white/20 rounded-md px-2 py-1 focus:outline-none focus:border-[#2721E8] disabled:opacity-50 min-w-[200px]"
                                     />
                                     {nameSaving && <Spinner size="sm" />}
                                 </div>

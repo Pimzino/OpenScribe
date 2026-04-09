@@ -301,6 +301,7 @@ function ColorPicker({ currentColor, onColorChange }: ColorPickerProps) {
             >
                 <div className="relative">
                     <Palette size={20} />
+                    {/* eslint-disable-next-line react/forbid-dom-props -- Dynamic color value requires inline style */}
                     <div
                         className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#1a1a1a]"
                         style={{ backgroundColor: currentColor }}
@@ -312,16 +313,16 @@ function ColorPicker({ currentColor, onColorChange }: ColorPickerProps) {
             {isOpen && createPortal(
                 <div
                     data-color-picker
-                    className="fixed p-2 bg-[#2a2a2a] rounded-lg shadow-xl border border-white/10 grid grid-cols-4 gap-1 z-[100]"
+                    className="fixed p-2 bg-[#2a2a2a] rounded-lg shadow-xl border border-white/10 grid grid-cols-4 gap-1 z-[100] -translate-x-1/2 -translate-y-full"
                     style={{
                         top: dropdownPosition.top,
                         left: dropdownPosition.left,
-                        transform: 'translate(-50%, -100%)',
                     }}
                 >
                     {COLORS.map((color) => (
                         <button
                             key={color}
+                            title={`Select color ${color}`}
                             onMouseDown={(e) => {
                                 e.preventDefault(); // Prevent focus loss
                                 e.stopPropagation();
@@ -329,6 +330,7 @@ function ColorPicker({ currentColor, onColorChange }: ColorPickerProps) {
                             }}
                             className={`w-7 h-7 rounded-md border-2 transition-transform hover:scale-110 ${currentColor === color ? 'border-white' : 'border-transparent'
                                 }`}
+                            // eslint-disable-next-line react/forbid-dom-props -- Dynamic color value requires inline style
                             style={{ backgroundColor: color }}
                         />
                     ))}
@@ -354,6 +356,7 @@ function StrokeWidthPicker({ currentWidth, onWidthChange }: StrokeWidthPickerPro
                 max="10"
                 value={currentWidth}
                 onChange={(e) => onWidthChange(Number(e.target.value))}
+                aria-label="Stroke width"
                 className="w-16 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-[#2721E8]"
             />
             <span className="text-[10px] text-gray-300 w-4">{currentWidth}</span>
@@ -998,6 +1001,7 @@ export default function ImageEditor({ imageSrc, onSave, onCancel }: ImageEditorP
                     <h3 className="text-lg font-semibold text-white">Edit Screenshot</h3>
                     <button
                         onClick={onCancel}
+                        title="Close editor"
                         className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white"
                     >
                         <X size={20} />
@@ -1117,8 +1121,7 @@ export default function ImageEditor({ imageSrc, onSave, onCancel }: ImageEditorP
                         </ReactCrop>
                     ) : (
                         <div
-                            ref={canvasContainerRef}
-                            className="relative inline-block"
+                            ref={canvasContainerRef} touch-none"k"
                             style={{ touchAction: 'none' }}
                         >
                             <img

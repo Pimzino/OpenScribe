@@ -484,11 +484,9 @@ mod windows_impl {
 
 #[cfg(target_os = "macos")]
 mod macos_impl {
-    use objc2::rc::Retained;
     use objc2::msg_send;
-    use objc2_app_kit::{
-        NSColor, NSScreen, NSView, NSWindow, NSWindowStyleMask,
-    };
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSColor, NSScreen, NSView, NSWindow, NSWindowStyleMask};
     use objc2_core_foundation::{CGFloat, CGPoint, CGRect, CGSize};
     use objc2_foundation::MainThreadMarker;
     use objc2_quartz_core::CALayer;
@@ -564,7 +562,12 @@ mod macos_impl {
                 );
             }
 
-            let result = data.1.lock().unwrap().take().expect("Main thread execution failed");
+            let result = data
+                .1
+                .lock()
+                .unwrap()
+                .take()
+                .expect("Main thread execution failed");
             result
         }
     }
@@ -598,10 +601,10 @@ mod macos_impl {
             if let Some(layer) = view.layer() {
                 // Create NSColor and get its CGColor via msg_send (avoids core-graphics type API issues)
                 let ns_color = NSColor::colorWithRed_green_blue_alpha(
-                    34.0 / 255.0,   // R
-                    197.0 / 255.0,  // G
-                    94.0 / 255.0,   // B
-                    1.0,            // A
+                    34.0 / 255.0,  // R
+                    197.0 / 255.0, // G
+                    94.0 / 255.0,  // B
+                    1.0,           // A
                 );
                 let cg_color: *const std::ffi::c_void = msg_send![&ns_color, CGColor];
                 let _: () = msg_send![&*layer, setBackgroundColor: cg_color];
@@ -645,8 +648,7 @@ mod macos_impl {
 
     fn show_border_impl(x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
         // We're guaranteed to be on main thread now
-        let mtm = MainThreadMarker::new()
-            .expect("show_border_impl must be called on main thread");
+        let mtm = MainThreadMarker::new().expect("show_border_impl must be called on main thread");
 
         OVERLAY_WINDOW.with(|window_cell| {
             BORDER_VIEWS.with(|views_cell| {
@@ -709,25 +711,37 @@ mod macos_impl {
                     ];
 
                     // Create 4 border views (top, bottom, left, right) with green background
-                    let top_view = create_border_view(mtm, CGRect::new(
-                        CGPoint::new(0.0, height as CGFloat - BORDER_WIDTH),
-                        CGSize::new(width as CGFloat, BORDER_WIDTH),
-                    ));
+                    let top_view = create_border_view(
+                        mtm,
+                        CGRect::new(
+                            CGPoint::new(0.0, height as CGFloat - BORDER_WIDTH),
+                            CGSize::new(width as CGFloat, BORDER_WIDTH),
+                        ),
+                    );
 
-                    let bottom_view = create_border_view(mtm, CGRect::new(
-                        CGPoint::new(0.0, 0.0),
-                        CGSize::new(width as CGFloat, BORDER_WIDTH),
-                    ));
+                    let bottom_view = create_border_view(
+                        mtm,
+                        CGRect::new(
+                            CGPoint::new(0.0, 0.0),
+                            CGSize::new(width as CGFloat, BORDER_WIDTH),
+                        ),
+                    );
 
-                    let left_view = create_border_view(mtm, CGRect::new(
-                        CGPoint::new(0.0, 0.0),
-                        CGSize::new(BORDER_WIDTH, height as CGFloat),
-                    ));
+                    let left_view = create_border_view(
+                        mtm,
+                        CGRect::new(
+                            CGPoint::new(0.0, 0.0),
+                            CGSize::new(BORDER_WIDTH, height as CGFloat),
+                        ),
+                    );
 
-                    let right_view = create_border_view(mtm, CGRect::new(
-                        CGPoint::new(width as CGFloat - BORDER_WIDTH, 0.0),
-                        CGSize::new(BORDER_WIDTH, height as CGFloat),
-                    ));
+                    let right_view = create_border_view(
+                        mtm,
+                        CGRect::new(
+                            CGPoint::new(width as CGFloat - BORDER_WIDTH, 0.0),
+                            CGSize::new(BORDER_WIDTH, height as CGFloat),
+                        ),
+                    );
 
                     // Add border views to content view
                     content_view.addSubview(&top_view);
@@ -776,7 +790,7 @@ mod macos_impl {
     // Toast Notification Implementation
     // ============================================================================
 
-    use objc2_app_kit::{NSTextField, NSFont, NSTextFieldCell};
+    use objc2_app_kit::{NSFont, NSTextField, NSTextFieldCell};
     use objc2_foundation::NSString;
 
     thread_local! {
@@ -798,12 +812,14 @@ mod macos_impl {
     const ACCENT_BAR_WIDTH: CGFloat = 4.0;
 
     /// Create a circular icon view with the specified color
-    fn create_icon_view(mtm: MainThreadMarker, x: CGFloat, y: CGFloat, color: &NSColor) -> Retained<NSView> {
+    fn create_icon_view(
+        mtm: MainThreadMarker,
+        x: CGFloat,
+        y: CGFloat,
+        color: &NSColor,
+    ) -> Retained<NSView> {
         unsafe {
-            let frame = CGRect::new(
-                CGPoint::new(x, y),
-                CGSize::new(ICON_SIZE, ICON_SIZE),
-            );
+            let frame = CGRect::new(CGPoint::new(x, y), CGSize::new(ICON_SIZE, ICON_SIZE));
             let view: Retained<NSView> = msg_send![
                 mtm.alloc::<NSView>(),
                 initWithFrame: frame,
@@ -841,10 +857,10 @@ mod macos_impl {
             if let Some(layer) = view.layer() {
                 // Set primary blue color (#2721E8) via NSColor.CGColor
                 let ns_color = NSColor::colorWithRed_green_blue_alpha(
-                    39.0 / 255.0,   // R
-                    33.0 / 255.0,   // G
-                    232.0 / 255.0,  // B
-                    1.0,            // A
+                    39.0 / 255.0,  // R
+                    33.0 / 255.0,  // G
+                    232.0 / 255.0, // B
+                    1.0,           // A
                 );
                 let cg_color: *const std::ffi::c_void = msg_send![&ns_color, CGColor];
                 let _: () = msg_send![&*layer, setBackgroundColor: cg_color];
@@ -859,12 +875,15 @@ mod macos_impl {
     }
 
     /// Create a text label for the toast message
-    fn create_text_label(mtm: MainThreadMarker, message: &str, x: CGFloat, width: CGFloat, height: CGFloat) -> Retained<NSTextField> {
+    fn create_text_label(
+        mtm: MainThreadMarker,
+        message: &str,
+        x: CGFloat,
+        width: CGFloat,
+        height: CGFloat,
+    ) -> Retained<NSTextField> {
         unsafe {
-            let frame = CGRect::new(
-                CGPoint::new(x, 0.0),
-                CGSize::new(width, height),
-            );
+            let frame = CGRect::new(CGPoint::new(x, 0.0), CGSize::new(width, height));
 
             // Create NSTextField
             let text_field: Retained<NSTextField> = msg_send![
@@ -908,8 +927,7 @@ mod macos_impl {
 
     fn show_toast_impl(message: &str, duration_ms: u32) -> Result<(), String> {
         // We're guaranteed to be on main thread now
-        let mtm = MainThreadMarker::new()
-            .expect("show_toast_impl must be called on main thread");
+        let mtm = MainThreadMarker::new().expect("show_toast_impl must be called on main thread");
 
         // Close any existing toast
         TOAST_WINDOW.with(|window_cell| {
@@ -932,7 +950,8 @@ mod macos_impl {
                 };
 
                 // Position in bottom-right corner (macOS uses bottom-left origin)
-                let x = screen_frame.origin.x + screen_frame.size.width - TOAST_WIDTH - TOAST_MARGIN;
+                let x =
+                    screen_frame.origin.x + screen_frame.size.width - TOAST_WIDTH - TOAST_MARGIN;
                 let y = screen_frame.origin.y + TOAST_MARGIN;
 
                 let frame = CGRect::new(CGPoint::new(x, y), CGSize::new(TOAST_WIDTH, TOAST_HEIGHT));

@@ -22,37 +22,43 @@ impl Default for ElementInfo {
 // Windows implementation using UI Automation
 #[cfg(target_os = "windows")]
 pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
-    use windows::Win32::System::Com::{CoInitializeEx, CoCreateInstance, COINIT_MULTITHREADED, CLSCTX_INPROC_SERVER};
-    use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
     use windows::Win32::Foundation::POINT;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+    };
+    use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
 
     unsafe {
         // Initialize COM
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
 
         // Create UI Automation instance
-        let automation: IUIAutomation = match CoCreateInstance(
-            &CUIAutomation,
-            None,
-            CLSCTX_INPROC_SERVER,
-        ) {
-            Ok(a) => a,
-            Err(_) => return None,
-        };
+        let automation: IUIAutomation =
+            match CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) {
+                Ok(a) => a,
+                Err(_) => return None,
+            };
 
         // Get element at point
-        let point = POINT { x: x as i32, y: y as i32 };
+        let point = POINT {
+            x: x as i32,
+            y: y as i32,
+        };
         let element = match automation.ElementFromPoint(point) {
             Ok(e) => e,
             Err(_) => return None,
         };
 
         // Get element properties using direct methods
-        let name = element.CurrentName().ok()
+        let name = element
+            .CurrentName()
+            .ok()
             .map(|s| s.to_string())
             .unwrap_or_default();
 
-        let element_type = element.CurrentLocalizedControlType().ok()
+        let element_type = element
+            .CurrentLocalizedControlType()
+            .ok()
             .map(|s| s.to_string())
             .unwrap_or_default();
 
@@ -128,12 +134,8 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
         }
 
         let mut element_at_pos: *mut std::ffi::c_void = ptr::null_mut();
-        let result = AXUIElementCopyElementAtPosition(
-            system_wide,
-            x as f32,
-            y as f32,
-            &mut element_at_pos,
-        );
+        let result =
+            AXUIElementCopyElementAtPosition(system_wide, x as f32, y as f32, &mut element_at_pos);
 
         CFRelease(system_wide as *const _);
 
@@ -145,7 +147,8 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
         let get_string_attr = |element: *mut std::ffi::c_void, attr_name: &str| -> Option<String> {
             let attr = cf_string(attr_name);
             let mut value: CFTypeRef = ptr::null();
-            let result = AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef(), &mut value);
+            let result =
+                AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef(), &mut value);
             if result == K_AX_ERROR_SUCCESS && !value.is_null() {
                 // Try to interpret as CFString
                 let cf_str = CFString::wrap_under_create_rule(value as CFStringRef);
@@ -191,7 +194,13 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
             "AXOutline" => "Outline".to_string(),
             "AXTextArea" => "Text Area".to_string(),
             "AXWebArea" => "Web Content".to_string(),
-            _ => if role.starts_with("AX") { role[2..].to_string() } else { role },
+            _ => {
+                if role.starts_with("AX") {
+                    role[2..].to_string()
+                } else {
+                    role
+                }
+            }
         };
 
         // Get value
@@ -204,7 +213,11 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
             // Get parent element
             let attr = cf_string("AXParent");
             let mut parent_value: CFTypeRef = ptr::null();
-            let result = AXUIElementCopyAttributeValue(current_element, attr.as_concrete_TypeRef(), &mut parent_value);
+            let result = AXUIElementCopyAttributeValue(
+                current_element,
+                attr.as_concrete_TypeRef(),
+                &mut parent_value,
+            );
 
             if result != K_AX_ERROR_SUCCESS || parent_value.is_null() {
                 break;
@@ -221,7 +234,9 @@ pub fn get_element_at_point(x: f64, y: f64) -> Option<ElementInfo> {
             if let Some(role) = get_string_attr(parent_value as *mut std::ffi::c_void, "AXRole") {
                 if role == "AXApplication" {
                     // Found the application - get its title
-                    if let Some(title) = get_string_attr(parent_value as *mut std::ffi::c_void, "AXTitle") {
+                    if let Some(title) =
+                        get_string_attr(parent_value as *mut std::ffi::c_void, "AXTitle")
+                    {
                         if !title.is_empty() {
                             app_name = Some(title);
                         }
