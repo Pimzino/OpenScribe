@@ -1,5 +1,16 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export type AIProviderId =
+    | "openai"
+    | "ollama"
+    | "lmstudio"
+    | "anthropic"
+    | "openrouter"
+    | "chutes"
+    | "custom";
+
 export interface AIProvider {
-    id: string;
+    id: AIProviderId;
     name: string;
     defaultBaseUrl: string;
     requiresApiKey: boolean;
@@ -87,109 +98,25 @@ export function getDefaultProvider(): AIProvider {
     return PROVIDERS[0]; // OpenAI
 }
 
+interface TestConnectionResult {
+    success: boolean;
+    message: string;
+    models?: string[];
+}
+
 // Test connection to the AI provider
 export async function testConnection(
     baseUrl: string,
     apiKey: string,
     requiresApiKey: boolean
-): Promise<{ success: boolean; message: string; models?: string[] }> {
+): Promise<TestConnectionResult> {
     try {
-        // Try to fetch models list
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        
-        if (apiKey && requiresApiKey) {
-            headers['Authorization'] = `Bearer ${apiKey}`;
-        }
-
-        const response = await fetch(`${baseUrl}/models`, {
-            method: 'GET',
-            headers,
-            signal: AbortSignal.timeout(10000), // 10 second timeout
+        return await invoke<TestConnectionResult>("ai_test_connection", {
+            baseUrl,
+            apiKey,
+            requiresApiKey,
         });
-
-        if (!response.ok) {
-            if (response.status === 401) {
-                return { success: false, message: 'Authentication failed. Check your API key.' };
-            }
-            if (response.status === 404) {
-                // Some providers don't have /models endpoint, try a simple completion
-                return await testWithCompletion(baseUrl, apiKey, requiresApiKey);
-            }
-            return { success: false, message: `Server returned ${response.status}: ${response.statusText}` };
-        }
-
-        const data = await response.json();
-        const models = data.data?.map((m: { id: string }) => m.id) || [];
-        
-        return {
-            success: true,
-            message: `Connected successfully. ${models.length} model${models.length !== 1 ? 's' : ''} available.`,
-            models,
-        };
     } catch (error) {
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-            return {
-                success: false,
-                message: 'Connection refused. Make sure the server is running.',
-            };
-        }
-        if (error instanceof DOMException && error.name === 'AbortError') {
-            return {
-                success: false,
-                message: 'Connection timed out. Check the server URL.',
-            };
-        }
-        return {
-            success: false,
-            message: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        };
-    }
-}
-
-// Fallback test using a minimal completion request
-async function testWithCompletion(
-    baseUrl: string,
-    apiKey: string,
-    requiresApiKey: boolean
-): Promise<{ success: boolean; message: string }> {
-    try {
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        
-        if (apiKey && requiresApiKey) {
-            headers['Authorization'] = `Bearer ${apiKey}`;
-        }
-
-        const response = await fetch(`${baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-                model: 'gpt-4o', // This will be ignored by local models
-                messages: [{ role: 'user', content: 'Hi' }],
-                max_tokens: 1,
-            }),
-            signal: AbortSignal.timeout(15000),
-        });
-
-        if (response.ok) {
-            return { success: true, message: 'Connected successfully.' };
-        }
-        
-        if (response.status === 401) {
-            return { success: false, message: 'Authentication failed. Check your API key.' };
-        }
-        
-        return { success: false, message: `Server returned ${response.status}: ${response.statusText}` };
-    } catch (error) {
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-            return {
-                success: false,
-                message: 'Connection refused. Make sure the server is running.',
-            };
-        }
         return {
             success: false,
             message: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -204,26 +131,11 @@ export async function fetchModels(
     requiresApiKey: boolean
 ): Promise<string[]> {
     try {
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        
-        if (apiKey && requiresApiKey) {
-            headers['Authorization'] = `Bearer ${apiKey}`;
-        }
-
-        const response = await fetch(`${baseUrl}/models`, {
-            method: 'GET',
-            headers,
-            signal: AbortSignal.timeout(10000),
+        return await invoke<string[]>("ai_fetch_models", {
+            baseUrl,
+            apiKey,
+            requiresApiKey,
         });
-
-        if (!response.ok) {
-            return [];
-        }
-
-        const data = await response.json();
-        return data.data?.map((m: { id: string }) => m.id) || [];
     } catch {
         return [];
     }

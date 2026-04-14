@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "../components/Sidebar";
 import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
+import { resolveModelPolicy } from "../lib/aiPolicy";
 import { PROVIDERS, getProvider, testConnection, fetchModels } from "../lib/providers";
 import {
     TONE_OPTIONS,
@@ -23,6 +24,10 @@ export default function Settings() {
         openaiBaseUrl,
         openaiApiKey,
         openaiModel,
+        useProviderDefaults,
+        temperatureOverride,
+        outputTokenLimitOverride,
+        contextWindowOverride,
         screenshotPath,
         sendScreenshotsToAi,
         writingStyle,
@@ -38,6 +43,10 @@ export default function Settings() {
         setOpenaiBaseUrl,
         setOpenaiApiKey,
         setOpenaiModel,
+        setUseProviderDefaults,
+        setTemperatureOverride,
+        setOutputTokenLimitOverride,
+        setContextWindowOverride,
         setScreenshotPath,
         setSendScreenshotsToAi,
         setWritingStyleTone,
@@ -68,9 +77,34 @@ export default function Settings() {
     const [availableModels, setAvailableModels] = useState<string[]>([]);
     const [fetchingModels, setFetchingModels] = useState(false);
     const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+    const [advancedAiExpanded, setAdvancedAiExpanded] = useState(false);
     const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
 
     const currentProvider = getProvider(aiProvider);
+    const resolvedStepPolicy = resolveModelPolicy({
+        providerId: currentProvider?.id ?? "custom",
+        model: openaiModel,
+        purpose: "step-description",
+        supportsVision: currentProvider?.supportsVision ?? true,
+        settings: {
+            useProviderDefaults,
+            temperatureOverride,
+            outputTokenLimitOverride,
+            contextWindowOverride,
+        },
+    });
+    const resolvedTitlePolicy = resolveModelPolicy({
+        providerId: currentProvider?.id ?? "custom",
+        model: openaiModel,
+        purpose: "title",
+        supportsVision: currentProvider?.supportsVision ?? true,
+        settings: {
+            useProviderDefaults,
+            temperatureOverride,
+            outputTokenLimitOverride,
+            contextWindowOverride,
+        },
+    });
 
     const validateApiKey = (key: string): string | null => {
         // Skip validation if provider doesn't require API key
@@ -717,6 +751,167 @@ export default function Settings() {
                                         {throttleDelayMs === 0 ? 'No delay between requests' :
                                          `Adds ${(throttleDelayMs / 1000).toFixed(1)}s between each API call`}
                                     </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Advanced AI - Collapsible Section */}
+                        <div className="mt-6 border-t border-white/8 pt-6">
+                            <button
+                                onClick={() => setAdvancedAiExpanded(!advancedAiExpanded)}
+                                className="w-full flex items-center justify-between text-left"
+                            >
+                                <div>
+                                    <h4 className="text-sm font-medium text-white/80">
+                                        Advanced AI
+                                    </h4>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        Optional overrides for temperature, output limit, context window, and detected model policy
+                                    </p>
+                                </div>
+                                <ChevronDown
+                                    size={16}
+                                    className={`text-white/50 transition-transform ${advancedAiExpanded ? 'rotate-180' : ''}`}
+                                />
+                            </button>
+
+                            {advancedAiExpanded && (
+                                <div className="mt-4 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <label className="block text-sm font-medium text-white/80">
+                                                Use Provider Defaults
+                                            </label>
+                                            <p className="text-xs text-white/50 mt-1">
+                                                Recommended. Disable only if you need to override the app's conservative model policy.
+                                            </p>
+                                        </div>
+                                        <button
+                                            aria-label={`Use provider defaults: ${useProviderDefaults ? 'enabled' : 'disabled'}`}
+                                            onClick={() => setUseProviderDefaults(!useProviderDefaults)}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                                useProviderDefaults ? 'bg-[#2721E8]' : 'bg-white/20'
+                                            }`}
+                                        >
+                                            <span
+                                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                    useProviderDefaults ? 'translate-x-6' : 'translate-x-1'
+                                                }`}
+                                            />
+                                        </button>
+                                    </div>
+
+                                    <div className={`grid gap-4 md:grid-cols-2 ${useProviderDefaults ? 'opacity-60' : ''}`}>
+                                        <div>
+                                            <label className="block text-sm font-medium text-white/60 mb-2">
+                                                Temperature Override
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="2"
+                                                step="0.1"
+                                                value={temperatureOverride ?? ""}
+                                                disabled={useProviderDefaults}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    setTemperatureOverride(value === "" ? null : parseFloat(value));
+                                                }}
+                                                placeholder="Auto"
+                                                className="w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/40 focus:outline-none focus:border-[#2721E8] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                            />
+                                            <p className="text-xs text-white/40 mt-1">
+                                                Leave empty to use the detected default or omit temperature for reasoning models.
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-white/60 mb-2">
+                                                Output Token Override
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="16"
+                                                max="8192"
+                                                step="1"
+                                                value={outputTokenLimitOverride ?? ""}
+                                                disabled={useProviderDefaults}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    setOutputTokenLimitOverride(value === "" ? null : parseInt(value, 10));
+                                                }}
+                                                placeholder="Auto"
+                                                className="w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/40 focus:outline-none focus:border-[#2721E8] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                            />
+                                            <p className="text-xs text-white/40 mt-1">
+                                                Applies to chat completion output caps. Title generation uses its own smaller resolved cap.
+                                            </p>
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-white/60 mb-2">
+                                                Context Window Override
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1024"
+                                                step="1024"
+                                                value={contextWindowOverride ?? ""}
+                                                disabled={useProviderDefaults}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    setContextWindowOverride(value === "" ? null : parseInt(value, 10));
+                                                }}
+                                                placeholder="Auto"
+                                                className="w-full px-4 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/40 focus:outline-none focus:border-[#2721E8] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                            />
+                                            <p className="text-xs text-white/40 mt-1">
+                                                Mainly for unknown or custom models. The app still keeps a safety buffer and will trim old step context first.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+                                        <div>
+                                            <h5 className="text-sm font-medium text-white/80">Detected Policy</h5>
+                                            <p className="text-xs text-white/50 mt-1">
+                                                Effective policy for the current provider and model selection.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid gap-3 md:grid-cols-2">
+                                            <div className="rounded-lg bg-black/20 p-3">
+                                                <div className="text-xs uppercase tracking-wide text-white/40">Step Descriptions</div>
+                                                <div className="mt-2 text-sm text-white/80 space-y-1">
+                                                    <div>Context window: {resolvedStepPolicy.contextWindow.toLocaleString()} tokens</div>
+                                                    <div>Prompt budget: {resolvedStepPolicy.promptTokenBudget.toLocaleString()} tokens</div>
+                                                    <div>Output cap: {resolvedStepPolicy.maxOutputTokens.toLocaleString()} tokens</div>
+                                                    <div>Temperature: {resolvedStepPolicy.temperature === null ? "Omitted" : resolvedStepPolicy.temperature}</div>
+                                                    <div>Reasoning model: {resolvedStepPolicy.reasoningModel ? "Yes" : "No"}</div>
+                                                    <div>Vision support: {resolvedStepPolicy.supportsVision ? "Yes" : "No"}</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="rounded-lg bg-black/20 p-3">
+                                                <div className="text-xs uppercase tracking-wide text-white/40">Titles</div>
+                                                <div className="mt-2 text-sm text-white/80 space-y-1">
+                                                    <div>Output cap: {resolvedTitlePolicy.maxOutputTokens.toLocaleString()} tokens</div>
+                                                    <div>Temperature: {resolvedTitlePolicy.temperature === null ? "Omitted" : resolvedTitlePolicy.temperature}</div>
+                                                    <div>Matched rule: {resolvedStepPolicy.matchedRuleId ?? "Provider fallback"}</div>
+                                                    <div>Image reserve: {resolvedStepPolicy.estimatedImageTokens.toLocaleString()} tokens</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="text-xs uppercase tracking-wide text-white/40 mb-2">Notes</div>
+                                            <div className="space-y-1 text-xs text-white/55">
+                                                {resolvedStepPolicy.notes.map((note) => (
+                                                    <div key={note}>{note}</div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>

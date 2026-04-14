@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { load, Store } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
 import { getProvider, getDefaultProvider } from "../lib/providers";
+import { getDefaultAdvancedAiSettings, type AdvancedAiSettings } from "../lib/aiPolicy";
 import {
     WritingStyleOptions,
     ToneOption,
@@ -23,6 +24,10 @@ interface SettingsState {
     openaiBaseUrl: string;
     openaiApiKey: string;
     openaiModel: string;
+    useProviderDefaults: boolean;
+    temperatureOverride: number | null;
+    outputTokenLimitOverride: number | null;
+    contextWindowOverride: number | null;
     screenshotPath: string;
     sendScreenshotsToAi: boolean;
     // Structured writing style options
@@ -41,6 +46,10 @@ interface SettingsState {
     setOpenaiBaseUrl: (url: string) => void;
     setOpenaiApiKey: (key: string) => void;
     setOpenaiModel: (model: string) => void;
+    setUseProviderDefaults: (enabled: boolean) => void;
+    setTemperatureOverride: (value: number | null) => void;
+    setOutputTokenLimitOverride: (value: number | null) => void;
+    setContextWindowOverride: (value: number | null) => void;
     setScreenshotPath: (path: string) => void;
     setSendScreenshotsToAi: (enabled: boolean) => void;
     setWritingStyleTone: (tone: ToneOption) => void;
@@ -80,6 +89,7 @@ const defaultMaxRetryAttempts = 3;
 const defaultInitialRetryDelayMs = 1000;
 const defaultEnableRequestThrottling = false;
 const defaultThrottleDelayMs = 500;
+const defaultAdvancedAiSettings: AdvancedAiSettings = getDefaultAdvancedAiSettings();
 
 // Debounced auto-save mechanism
 let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -104,6 +114,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     openaiBaseUrl: getDefaultProvider().defaultBaseUrl,
     openaiApiKey: "",
     openaiModel: getDefaultProvider().defaultModel || "",
+    useProviderDefaults: defaultAdvancedAiSettings.useProviderDefaults,
+    temperatureOverride: defaultAdvancedAiSettings.temperatureOverride,
+    outputTokenLimitOverride: defaultAdvancedAiSettings.outputTokenLimitOverride,
+    contextWindowOverride: defaultAdvancedAiSettings.contextWindowOverride,
     screenshotPath: "",
     sendScreenshotsToAi: true, // Default: send screenshots to AI
     writingStyle: { ...DEFAULT_WRITING_STYLE },
@@ -134,6 +148,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     setOpenaiBaseUrl: (url) => set({ openaiBaseUrl: url }),
     setOpenaiApiKey: (key) => set({ openaiApiKey: key }),
     setOpenaiModel: (model) => set({ openaiModel: model }),
+    setUseProviderDefaults: (enabled) => set({ useProviderDefaults: enabled }),
+    setTemperatureOverride: (value) => set({
+        temperatureOverride: value === null || !Number.isFinite(value)
+            ? null
+            : Math.max(0, Math.min(2, value)),
+    }),
+    setOutputTokenLimitOverride: (value) => set({
+        outputTokenLimitOverride: value === null || !Number.isFinite(value)
+            ? null
+            : Math.max(16, Math.min(8192, Math.round(value))),
+    }),
+    setContextWindowOverride: (value) => set({
+        contextWindowOverride: value === null || !Number.isFinite(value)
+            ? null
+            : Math.max(1024, Math.min(1_000_000, Math.round(value))),
+    }),
     setScreenshotPath: (path) => set({ screenshotPath: path }),
     setSendScreenshotsToAi: (enabled) => set({ sendScreenshotsToAi: enabled }),
     setWritingStyleTone: (tone) => set((state) => ({
@@ -174,6 +204,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             const baseUrl = await store.get<string>("openaiBaseUrl");
             const apiKey = await store.get<string>("openaiApiKey");
             const model = await store.get<string>("openaiModel");
+            const useProviderDefaults = await store.get<boolean>("useProviderDefaults");
+            const temperatureOverride = await store.get<number>("temperatureOverride");
+            const outputTokenLimitOverride = await store.get<number>("outputTokenLimitOverride");
+            const contextWindowOverride = await store.get<number>("contextWindowOverride");
             const screenshotPath = await store.get<string>("screenshotPath");
             const sendScreenshotsToAi = await store.get<boolean>("sendScreenshotsToAi");
             const writingStyle = await store.get<WritingStyleOptions>("writingStyle");
@@ -228,6 +262,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 openaiBaseUrl: baseUrl || providerConfig?.defaultBaseUrl || defaultProvider.defaultBaseUrl,
                 openaiApiKey: apiKey || "",
                 openaiModel: model || providerConfig?.defaultModel || "",
+                useProviderDefaults: useProviderDefaults ?? defaultAdvancedAiSettings.useProviderDefaults,
+                temperatureOverride: temperatureOverride ?? defaultAdvancedAiSettings.temperatureOverride,
+                outputTokenLimitOverride: outputTokenLimitOverride ?? defaultAdvancedAiSettings.outputTokenLimitOverride,
+                contextWindowOverride: contextWindowOverride ?? defaultAdvancedAiSettings.contextWindowOverride,
                 screenshotPath: finalScreenshotPath,
                 sendScreenshotsToAi: ocrEnabled,
                 writingStyle: mergedWritingStyle,
@@ -250,12 +288,36 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     saveSettings: async () => {
         try {
             const store = await getStore();
-            const { aiProvider, openaiBaseUrl, openaiApiKey, openaiModel, screenshotPath, sendScreenshotsToAi, writingStyle, enableAutoRetry, maxRetryAttempts, initialRetryDelayMs, enableRequestThrottling, throttleDelayMs, startRecordingHotkey, stopRecordingHotkey, captureHotkey } = get();
+            const {
+                aiProvider,
+                openaiBaseUrl,
+                openaiApiKey,
+                openaiModel,
+                useProviderDefaults,
+                temperatureOverride,
+                outputTokenLimitOverride,
+                contextWindowOverride,
+                screenshotPath,
+                sendScreenshotsToAi,
+                writingStyle,
+                enableAutoRetry,
+                maxRetryAttempts,
+                initialRetryDelayMs,
+                enableRequestThrottling,
+                throttleDelayMs,
+                startRecordingHotkey,
+                stopRecordingHotkey,
+                captureHotkey,
+            } = get();
 
             await store.set("aiProvider", aiProvider);
             await store.set("openaiBaseUrl", openaiBaseUrl);
             await store.set("openaiApiKey", openaiApiKey);
             await store.set("openaiModel", openaiModel);
+            await store.set("useProviderDefaults", useProviderDefaults);
+            await store.set("temperatureOverride", temperatureOverride);
+            await store.set("outputTokenLimitOverride", outputTokenLimitOverride);
+            await store.set("contextWindowOverride", contextWindowOverride);
             await store.set("screenshotPath", screenshotPath);
             await store.set("sendScreenshotsToAi", sendScreenshotsToAi);
             await store.set("writingStyle", writingStyle);
