@@ -1,5 +1,4 @@
-
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -18,6 +17,7 @@ const MonitorPicker = lazy(() => import("./pages/MonitorPicker"));
 
 import { useRecorderStore } from "./store/recorderStore";
 import { useSettingsStore } from "./store/settingsStore";
+import { useStartupStore, type StartupStatusPayload } from "./store/startupStore";
 import { useToastStore } from "./store/toastStore";
 import { useUpdateStore } from "./store/updateStore";
 import { useNotificationStore } from "./store/notificationStore";
@@ -33,45 +33,148 @@ const PageLoader = () => (
   </div>
 );
 
+let settingsHydrationPromise: Promise<void> | null = null;
+let backgroundStartupPromise: Promise<void> | null = null;
+
 function App() {
   const navigate = useNavigate();
-  const { isRecording, setIsRecording, clearSteps } = useRecorderStore();
-  const { startRecordingHotkey, stopRecordingHotkey, loadSettings, isLoaded } = useSettingsStore();
+  const { isRecording, setIsRecording } = useRecorderStore();
+  const { isLoaded, sendScreenshotsToAi } = useSettingsStore();
+  const isShellReady = useStartupStore((state) => state.isShellReady);
 
-  // Load settings on mount
-  useEffect(() => {
-    if (!isLoaded) {
-      loadSettings();
-    }
-  }, [isLoaded, loadSettings]);
-
-  // Track minimum splash display time
-  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setMinTimeElapsed(true), 1500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Hide splash once settings loaded AND minimum time elapsed
-  useEffect(() => {
-    if (isLoaded && minTimeElapsed) {
-      const splash = document.getElementById('splash');
-      if (splash) {
-        splash.classList.add('hidden');
-      }
-    }
-  }, [isLoaded, minTimeElapsed]);
-
-  // Update backend hotkeys when settings change
   useEffect(() => {
     if (isLoaded) {
-      invoke("set_hotkeys", {
-        start: startRecordingHotkey,
-        stop: stopRecordingHotkey,
-      }).catch(console.error);
+      return;
     }
-  }, [startRecordingHotkey, stopRecordingHotkey, isLoaded]);
+
+    if (!settingsHydrationPromise) {
+      const startup = useStartupStore.getState();
+      startup.applyStatus({
+        task: "settings",
+        state: "running",
+        message: "Loading settings",
+      });
+
+      settingsHydrationPromise = useSettingsStore
+        .getState()
+        .hydrateSettings()
+        .then(({ success, ocrEnabled }) => {
+          startup.applyStatus({
+            task: "settings",
+            state: success ? "success" : "failed",
+            message: success ? "Settings loaded" : "Settings loaded with defaults",
+          });
+
+          if (!ocrEnabled) {
+            startup.markOcrDisabled();
+          }
+        });
+    }
+
+    void settingsHydrationPromise;
+  }, [isLoaded]);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+
+    const attachStartupProgress = async () => {
+      try {
+        const snapshot = await invoke<StartupStatusPayload>("get_startup_status");
+        if (!isDisposed) {
+          useStartupStore.getState().applyStatus(snapshot, "backend");
+        }
+      } catch (error) {
+        console.error("Failed to get startup status:", error);
+      }
+
+      try {
+        unlisten = await listen<StartupStatusPayload>("startup-progress", (event) => {
+          useStartupStore.getState().applyStatus(event.payload, "backend");
+        });
+      } catch (error) {
+        console.error("Failed to listen for startup progress:", error);
+      }
+    };
+
+    void attachStartupProgress();
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded || isShellReady) {
+      return;
+    }
+
+    useStartupStore.getState().markShellReady();
+  }, [isLoaded, isShellReady]);
+
+  useEffect(() => {
+    if (!isLoaded || !isShellReady) {
+      return;
+    }
+
+    if (!backgroundStartupPromise) {
+      backgroundStartupPromise = (async () => {
+        const startup = useStartupStore.getState();
+        const settingsStore = useSettingsStore.getState();
+
+        if (!sendScreenshotsToAi) {
+          startup.markOcrDisabled();
+        }
+
+        startup.applyStatus({
+          phase: "background-startup",
+          task: "hotkeys",
+          state: "running",
+          message: "Applying startup settings",
+        });
+
+        const syncResult = await settingsStore.syncSettingsToBackend();
+        startup.applyStatus({
+          phase: "background-startup",
+          task: "hotkeys",
+          state: syncResult.hotkeys ? "success" : "failed",
+          message: syncResult.hotkeys ? "Hotkeys ready" : "Hotkey sync failed",
+        });
+
+        startup.applyStatus({
+          phase: "background-startup",
+          task: "notifications",
+          state: "running",
+          message: "Loading notifications",
+        });
+        const notificationsOk = await useNotificationStore.getState().fetchUnreadCount();
+        startup.applyStatus({
+          phase: "background-startup",
+          task: "notifications",
+          state: notificationsOk ? "success" : "failed",
+          message: notificationsOk ? "Notifications ready" : "Notifications unavailable",
+        });
+
+        startup.applyStatus({
+          phase: "background-startup",
+          task: "updates",
+          state: "running",
+          message: "Checking for updates",
+        });
+        await useUpdateStore.getState().checkForUpdates();
+        const updateError = useUpdateStore.getState().error;
+        startup.applyStatus({
+          phase: "background-startup",
+          task: "updates",
+          state: updateError ? "failed" : "success",
+          message: updateError ? "Update check failed" : "Update check complete",
+        });
+      })();
+    }
+
+    void backgroundStartupPromise;
+  }, [isLoaded, isShellReady, sendScreenshotsToAi]);
 
   // Listen for migration warnings from backend
   useEffect(() => {
@@ -89,20 +192,6 @@ function App() {
     return () => {
       unlistenMigration.then((f) => f());
     };
-  }, []);
-
-  // Check for updates after app loads
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      useUpdateStore.getState().checkForUpdates();
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Fetch unread notification count on mount
-  useEffect(() => {
-    useNotificationStore.getState().fetchUnreadCount();
   }, []);
 
   // Listen for hotkey events
@@ -152,7 +241,7 @@ function App() {
       unlistenStop.then((f) => f());
       unlistenCapture.then((f) => f());
     };
-  }, [isRecording, setIsRecording, clearSteps, navigate]);
+  }, [isRecording, setIsRecording, navigate]);
 
   return (
     <>

@@ -19,6 +19,17 @@ export interface HotkeyBinding {
     key: string;
 }
 
+export interface SettingsHydrationResult {
+    success: boolean;
+    ocrEnabled: boolean;
+}
+
+export interface SettingsSyncResult {
+    assetScope: boolean;
+    ocrSync: boolean;
+    hotkeys: boolean;
+}
+
 interface SettingsState {
     aiProvider: string;
     openaiBaseUrl: string;
@@ -65,7 +76,9 @@ interface SettingsState {
     setStartRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setStopRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setCaptureHotkey: (hotkey: HotkeyBinding) => void;
-    loadSettings: () => Promise<void>;
+    hydrateSettings: () => Promise<SettingsHydrationResult>;
+    syncSettingsToBackend: () => Promise<SettingsSyncResult>;
+    loadSettings: () => Promise<SettingsHydrationResult>;
     saveSettings: () => Promise<void>;
     getDefaultScreenshotPath: () => Promise<string>;
 }
@@ -197,28 +210,50 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         }
     },
 
-    loadSettings: async () => {
+    hydrateSettings: async () => {
         try {
             const store = await getStore();
-            const aiProvider = await store.get<string>("aiProvider");
-            const baseUrl = await store.get<string>("openaiBaseUrl");
-            const apiKey = await store.get<string>("openaiApiKey");
-            const model = await store.get<string>("openaiModel");
-            const useProviderDefaults = await store.get<boolean>("useProviderDefaults");
-            const temperatureOverride = await store.get<number>("temperatureOverride");
-            const outputTokenLimitOverride = await store.get<number>("outputTokenLimitOverride");
-            const contextWindowOverride = await store.get<number>("contextWindowOverride");
-            const screenshotPath = await store.get<string>("screenshotPath");
-            const sendScreenshotsToAi = await store.get<boolean>("sendScreenshotsToAi");
-            const writingStyle = await store.get<WritingStyleOptions>("writingStyle");
-            const enableAutoRetry = await store.get<boolean>("enableAutoRetry");
-            const maxRetryAttempts = await store.get<number>("maxRetryAttempts");
-            const initialRetryDelayMs = await store.get<number>("initialRetryDelayMs");
-            const enableRequestThrottling = await store.get<boolean>("enableRequestThrottling");
-            const throttleDelayMs = await store.get<number>("throttleDelayMs");
-            const startHotkey = await store.get<HotkeyBinding>("startRecordingHotkey");
-            const stopHotkey = await store.get<HotkeyBinding>("stopRecordingHotkey");
-            const captureHotkey = await store.get<HotkeyBinding>("captureHotkey");
+            const [
+                aiProvider,
+                baseUrl,
+                apiKey,
+                model,
+                useProviderDefaults,
+                temperatureOverride,
+                outputTokenLimitOverride,
+                contextWindowOverride,
+                screenshotPath,
+                sendScreenshotsToAi,
+                writingStyle,
+                enableAutoRetry,
+                maxRetryAttempts,
+                initialRetryDelayMs,
+                enableRequestThrottling,
+                throttleDelayMs,
+                startHotkey,
+                stopHotkey,
+                captureHotkey,
+            ] = await Promise.all([
+                store.get<string>("aiProvider"),
+                store.get<string>("openaiBaseUrl"),
+                store.get<string>("openaiApiKey"),
+                store.get<string>("openaiModel"),
+                store.get<boolean>("useProviderDefaults"),
+                store.get<number>("temperatureOverride"),
+                store.get<number>("outputTokenLimitOverride"),
+                store.get<number>("contextWindowOverride"),
+                store.get<string>("screenshotPath"),
+                store.get<boolean>("sendScreenshotsToAi"),
+                store.get<WritingStyleOptions>("writingStyle"),
+                store.get<boolean>("enableAutoRetry"),
+                store.get<number>("maxRetryAttempts"),
+                store.get<number>("initialRetryDelayMs"),
+                store.get<boolean>("enableRequestThrottling"),
+                store.get<number>("throttleDelayMs"),
+                store.get<HotkeyBinding>("startRecordingHotkey"),
+                store.get<HotkeyBinding>("stopRecordingHotkey"),
+                store.get<HotkeyBinding>("captureHotkey"),
+            ]);
 
             // Get default screenshot path if not set
             let finalScreenshotPath = screenshotPath || "";
@@ -230,26 +265,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 }
             }
 
-            // Register the screenshot path with asset protocol scope
-            if (finalScreenshotPath) {
-                try {
-                    await invoke("register_asset_scope", { path: finalScreenshotPath });
-                } catch (error) {
-                    console.error("Failed to register asset scope:", error);
-                }
-            }
-
             // Get provider defaults for any missing values
             const providerConfig = getProvider(aiProvider || getDefaultProvider().id);
             const defaultProvider = getDefaultProvider();
-
-            // Sync OCR enabled state with Rust backend
             const ocrEnabled = sendScreenshotsToAi !== false; // Default to true if not set
-            try {
-                await invoke("set_ocr_enabled", { enabled: ocrEnabled });
-            } catch (error) {
-                console.error("Failed to sync OCR state with backend:", error);
-            }
 
             // Merge loaded writing style with defaults (handles missing fields from old versions)
             const mergedWritingStyle: WritingStyleOptions = {
@@ -279,11 +298,65 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 captureHotkey: captureHotkey || defaultCaptureHotkey,
                 isLoaded: true,
             });
+            return { success: true, ocrEnabled };
         } catch (error) {
             console.error("Failed to load settings:", error);
             set({ isLoaded: true });
+            return {
+                success: false,
+                ocrEnabled: get().sendScreenshotsToAi,
+            };
         }
     },
+
+    syncSettingsToBackend: async () => {
+        const {
+            screenshotPath,
+            sendScreenshotsToAi,
+            startRecordingHotkey,
+            stopRecordingHotkey,
+            captureHotkey,
+        } = get();
+
+        let assetScope = true;
+        let ocrSync = true;
+        let hotkeys = true;
+
+        if (screenshotPath) {
+            try {
+                await invoke("register_asset_scope", { path: screenshotPath });
+            } catch (error) {
+                assetScope = false;
+                console.error("Failed to register asset scope:", error);
+            }
+        }
+
+        try {
+            await invoke("set_ocr_enabled", { enabled: sendScreenshotsToAi });
+        } catch (error) {
+            ocrSync = false;
+            console.error("Failed to sync OCR state with backend:", error);
+        }
+
+        try {
+            await invoke("set_hotkeys", {
+                start: startRecordingHotkey,
+                stop: stopRecordingHotkey,
+                capture: captureHotkey,
+            });
+        } catch (error) {
+            hotkeys = false;
+            console.error("Failed to sync hotkeys with backend:", error);
+        }
+
+        return {
+            assetScope,
+            ocrSync,
+            hotkeys,
+        };
+    },
+
+    loadSettings: async () => get().hydrateSettings(),
 
     saveSettings: async () => {
         try {
@@ -331,21 +404,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             await store.set("captureHotkey", captureHotkey);
             await store.save();
 
-            // Sync OCR enabled state with Rust backend
-            try {
-                await invoke("set_ocr_enabled", { enabled: sendScreenshotsToAi });
-            } catch (error) {
-                console.error("Failed to sync OCR state with backend:", error);
-            }
-
-            // Register the new screenshot path with asset protocol scope
-            if (screenshotPath) {
-                try {
-                    await invoke("register_asset_scope", { path: screenshotPath });
-                } catch (error) {
-                    console.error("Failed to register asset scope:", error);
-                }
-            }
+            await get().syncSettingsToBackend();
         } catch (error) {
             console.error("Failed to save settings:", error);
             throw error;

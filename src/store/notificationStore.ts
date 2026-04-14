@@ -19,7 +19,7 @@ interface NotificationState {
     trayOpen: boolean;
 
     fetchNotifications: () => Promise<void>;
-    fetchUnreadCount: () => Promise<void>;
+    fetchUnreadCount: () => Promise<boolean>;
     addNotification: (input: { title?: string; message: string; variant: NotificationVariant }) => Promise<Notification | null>;
     markAsRead: (id: string) => Promise<void>;
     markAllAsRead: () => Promise<void>;
@@ -53,8 +53,10 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         try {
             const count = await invoke<number>('get_unread_notification_count');
             set({ unreadCount: count });
+            return true;
         } catch (err) {
             console.error('Failed to fetch unread count:', err);
+            return false;
         }
     },
 

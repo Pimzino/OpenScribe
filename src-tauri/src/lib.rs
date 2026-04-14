@@ -19,13 +19,76 @@ use std::io::Write;
 use std::net::{IpAddr, ToSocketAddrs};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 pub struct DatabaseState(pub Mutex<Database>);
+
+#[derive(Clone)]
+pub struct StartupState(pub Arc<Mutex<StartupStatus>>);
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupStatus {
+    phase: String,
+    task: String,
+    state: String,
+    message: String,
+    done: Option<u32>,
+    total: Option<u32>,
+}
+
+impl StartupStatus {
+    fn new(phase: &str, task: &str, state: &str, message: &str) -> Self {
+        Self {
+            phase: phase.to_string(),
+            task: task.to_string(),
+            state: state.to_string(),
+            message: message.to_string(),
+            done: None,
+            total: None,
+        }
+    }
+
+    pub fn running(task: &str, message: &str) -> Self {
+        Self::new("background-startup", task, "running", message)
+    }
+
+    pub fn success(task: &str, message: &str) -> Self {
+        Self::new("background-startup", task, "success", message)
+    }
+
+    pub fn failed(task: &str, message: &str) -> Self {
+        Self::new("background-startup", task, "failed", message)
+    }
+}
+
+impl StartupState {
+    fn new() -> Self {
+        Self(Arc::new(Mutex::new(StartupStatus::new(
+            "booting",
+            "services",
+            "running",
+            "Starting StepSnap",
+        ))))
+    }
+
+    fn snapshot(&self) -> StartupStatus {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+pub(crate) fn emit_startup_status(
+    app: &AppHandle,
+    startup_state: &StartupState,
+    status: StartupStatus,
+) {
+    *startup_state.0.lock().unwrap() = status.clone();
+    let _ = app.emit("startup-progress", &status);
+}
 
 // Show main window - called from frontend once React has mounted
 #[tauri::command]
@@ -34,6 +97,11 @@ async fn show_main_window(app: AppHandle) -> Result<(), String> {
         window.show().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn get_startup_status(startup: State<'_, StartupState>) -> StartupStatus {
+    startup.snapshot()
 }
 
 #[tauri::command]
@@ -2440,6 +2508,8 @@ pub fn run() {
     let start_hotkey_clone = recording_state.start_hotkey.clone();
     let stop_hotkey_clone = recording_state.stop_hotkey.clone();
     let capture_hotkey_clone = recording_state.capture_hotkey.clone();
+    let startup_state = StartupState::new();
+    let startup_state_setup = startup_state.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -2449,12 +2519,27 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(recording_state)
+        .manage(startup_state)
         .setup(move |app| {
+            let app_handle = app.handle().clone();
+
+            emit_startup_status(
+                &app_handle,
+                &startup_state_setup,
+                StartupStatus::running("services", "Starting application"),
+            );
+
             // Initialize database
             let app_data_dir = app
                 .path()
                 .app_data_dir()
                 .expect("Failed to get app data directory");
+
+            emit_startup_status(
+                &app_handle,
+                &startup_state_setup,
+                StartupStatus::running("database", "Checking existing data"),
+            );
 
             // Migration chain: try openscribe -> stepsnap first, then com.openscribe -> stepsnap
             // This handles both v0.0.8-v0.0.10 users (openscribe) and v0.0.7 and earlier (com.openscribe)
@@ -2476,18 +2561,44 @@ pub fn run() {
                 });
             }
 
+            emit_startup_status(
+                &app_handle,
+                &startup_state_setup,
+                StartupStatus::running("database", "Opening local database"),
+            );
             let db = Database::new(app_data_dir).expect("Failed to initialize database");
             app.manage(DatabaseState(Mutex::new(db)));
+            emit_startup_status(
+                &app_handle,
+                &startup_state_setup,
+                StartupStatus::success("database", "Local data ready"),
+            );
 
             // Start the global input listener in a background thread (for recording)
+            emit_startup_status(
+                &app_handle,
+                &startup_state_setup,
+                StartupStatus::running("services", "Starting recorder services"),
+            );
             recorder::start_listener(
                 app.handle().clone(),
                 is_recording_clone,
                 is_picker_open_clone,
                 ocr_enabled_clone,
+                startup_state_setup.clone(),
+            );
+            emit_startup_status(
+                &app_handle,
+                &startup_state_setup,
+                StartupStatus::success("services", "Recorder services ready"),
             );
 
             // Register default hotkeys
+            emit_startup_status(
+                &app_handle,
+                &startup_state_setup,
+                StartupStatus::running("hotkeys", "Registering hotkeys"),
+            );
             let global_shortcut = app.global_shortcut();
 
             let start_binding = start_hotkey_clone.lock().unwrap().clone();
@@ -2518,9 +2629,16 @@ pub fn run() {
                 });
             }
 
+            emit_startup_status(
+                &app_handle,
+                &startup_state_setup,
+                StartupStatus::success("hotkeys", "Hotkeys ready"),
+            );
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_startup_status,
             show_main_window,
             start_recording,
             stop_recording,

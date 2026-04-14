@@ -22,9 +22,9 @@ export function scheduleRecordingDetailPreload(delayMs = 250) {
         };
     }
 
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = globalThis.setTimeout(() => {
         void loadRecordingDetail();
     }, delayMs);
 
-    return () => window.clearTimeout(timeoutId);
+    return () => globalThis.clearTimeout(timeoutId);
 }

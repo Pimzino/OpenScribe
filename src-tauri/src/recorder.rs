@@ -1,5 +1,6 @@
 use crate::accessibility::{get_element_at_point, ElementInfo};
 use crate::ocr::{get_models_dir, OcrConfig, OcrJob, OcrManager};
+use crate::{emit_startup_status, StartupState, StartupStatus};
 use image::codecs::jpeg::JpegEncoder;
 use image::Rgb;
 use imageproc::drawing::{draw_filled_circle_mut, draw_hollow_circle_mut};
@@ -361,6 +362,7 @@ pub fn start_listener(
     is_recording: std::sync::Arc<std::sync::Mutex<bool>>,
     is_picker_open: std::sync::Arc<std::sync::Mutex<bool>>,
     ocr_enabled: std::sync::Arc<std::sync::Mutex<bool>>,
+    startup_state: StartupState,
 ) {
     // Channel 1: Listener -> Capture Logic
     let (tx_event, rx_event) = mpsc::channel::<RecorderEvent>();
@@ -374,6 +376,13 @@ pub fn start_listener(
     let app_clone = app.clone();
     let app_clone_ocr = app.clone();
     let ocr_enabled_clone = ocr_enabled.clone();
+    let startup_state_ocr = startup_state.clone();
+
+    emit_startup_status(
+        &app,
+        &startup_state,
+        StartupStatus::running("ocr", "OCR warmup queued"),
+    );
 
     // Note: Capture hotkey is now handled by the frontend (monitor picker UI)
     // The old capture event listener has been removed
@@ -381,16 +390,31 @@ pub fn start_listener(
     // Thread 4: OCR Processor (processes screenshots asynchronously)
     thread::spawn(move || {
         // Get models directory and initialize OCR engine
+        emit_startup_status(
+            &app_clone_ocr,
+            &startup_state_ocr,
+            StartupStatus::running("ocr", "Loading OCR models"),
+        );
         let models_dir = get_models_dir(&app_clone_ocr);
         let ocr_manager = match OcrManager::new(models_dir.clone(), OcrConfig::default()) {
             Ok(m) => {
                 println!("OCR engine initialized successfully from {:?}", models_dir);
+                emit_startup_status(
+                    &app_clone_ocr,
+                    &startup_state_ocr,
+                    StartupStatus::success("ocr", "OCR ready"),
+                );
                 m
             }
             Err(e) => {
                 eprintln!(
                     "Failed to initialize OCR engine: {}. OCR will be disabled.",
                     e
+                );
+                emit_startup_status(
+                    &app_clone_ocr,
+                    &startup_state_ocr,
+                    StartupStatus::failed("ocr", "OCR unavailable"),
                 );
                 OcrManager::disabled()
             }
