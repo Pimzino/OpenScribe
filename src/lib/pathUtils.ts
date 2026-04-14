@@ -125,6 +125,37 @@ export function normalizeImagePath(path: string): string {
 }
 
 /**
+ * Check whether a path points to a local filesystem location.
+ */
+export function isLocalFilePath(path: string): boolean {
+  const normalized = normalizeImagePath(path);
+
+  return /^[A-Z]:/i.test(normalized)
+    || normalized.startsWith('/')
+    || normalized.startsWith('\\\\')
+    || normalized.startsWith('//');
+}
+
+/**
+ * Check whether a path is an HTTP(S) URL.
+ */
+export function isHttpUrl(path: string): boolean {
+  return /^https?:\/\//i.test(path.trim());
+}
+
+/**
+ * Return the parent directory for a filesystem path.
+ */
+export function getParentDirectory(path: string): string {
+  const normalized = normalizeImagePath(path);
+  const lastBackslash = normalized.lastIndexOf('\\');
+  const lastForwardSlash = normalized.lastIndexOf('/');
+  const lastSeparator = Math.max(lastBackslash, lastForwardSlash);
+
+  return lastSeparator > 0 ? normalized.slice(0, lastSeparator) : normalized;
+}
+
+/**
  * Normalize path to use forward slashes (for URL/markdown compatibility)
  */
 export function normalizeForwardSlashes(path: string): string {

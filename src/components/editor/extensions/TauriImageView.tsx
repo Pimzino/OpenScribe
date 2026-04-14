@@ -1,10 +1,10 @@
-import { useState, useMemo, memo } from 'react';
+import { useEffect, useState, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { NodeViewWrapper, NodeViewProps } from '@tiptap/react';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { Expand } from 'lucide-react';
 import ImageViewer from '../../ImageViewer';
-import { normalizeImagePath, isLocalPath } from './TauriImage';
+import { isLocalPath } from './TauriImage';
+import { resolveDisplayImageSrc } from '../../../lib/localAssets';
 
 export const TauriImageView = memo(function TauriImageView({ node, selected }: NodeViewProps) {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
@@ -13,13 +13,39 @@ export const TauriImageView = memo(function TauriImageView({ node, selected }: N
   const { src: rawSrc, alt, title } = node.attrs;
 
   // Convert local file paths to Tauri asset URLs
-  const src = useMemo(() => {
-    if (!rawSrc) return '';
-    if (isLocalPath(rawSrc)) {
-      const normalizedPath = normalizeImagePath(rawSrc);
-      return convertFileSrc(normalizedPath);
-    }
-    return rawSrc;
+  const [src, setSrc] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const updateSrc = async () => {
+      if (!rawSrc) {
+        if (!cancelled) {
+          setSrc('');
+        }
+        return;
+      }
+
+      try {
+        const resolvedSrc = await resolveDisplayImageSrc(rawSrc);
+        if (!cancelled) {
+          setSrc(resolvedSrc);
+          setImageError(false);
+        }
+      } catch (error) {
+        console.error('Failed to resolve editor image source:', error);
+        if (!cancelled) {
+          setSrc(isLocalPath(rawSrc) ? '' : rawSrc);
+          setImageError(isLocalPath(rawSrc));
+        }
+      }
+    };
+
+    updateSrc();
+
+    return () => {
+      cancelled = true;
+    };
   }, [rawSrc]);
 
   return (

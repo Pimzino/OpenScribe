@@ -7,11 +7,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import ToastHost from "./components/ToastHost";
 import NotificationTray from "./components/notifications/NotificationTray";
+import { loadRecordingDetail } from "./pages/loadRecordingDetail";
 
 // Lazy load pages
 const NewRecording = lazy(() => import("./pages/NewRecording"));
 const RecordingsList = lazy(() => import("./pages/RecordingsList"));
-const RecordingDetail = lazy(() => import("./pages/RecordingDetail"));
+const RecordingDetail = lazy(loadRecordingDetail);
 const Settings = lazy(() => import("./pages/Settings"));
 const MonitorPicker = lazy(() => import("./pages/MonitorPicker"));
 

@@ -197,8 +197,8 @@ export function TiptapEditor({
   if (!editor) {
     return (
       <div
-        className="animate-pulse bg-white/5 rounded-xl skeleton-loader"
-        data-min-height={minHeight}
+        className="animate-pulse bg-white/5 rounded-xl"
+        style={{ minHeight }}
       />
     );
   }
@@ -228,7 +228,7 @@ export function TiptapEditor({
       </div>
 
       {/* Editor Content */}
-      <div className="bg-[#161316] rounded-b-xl scroll-optimized editor-content-area" data-min-height={minHeight}>
+      <div className="bg-[#161316] rounded-b-xl scroll-optimized" style={{ minHeight }}>
         {viewMode === 'rich' ? (
           <EditorContent editor={editor} className="tiptap-content" />
         ) : (

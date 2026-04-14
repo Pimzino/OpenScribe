@@ -7,6 +7,7 @@ import { FileText, Plus, Trash2, Search, X } from "lucide-react";
 import Tooltip from "../components/Tooltip";
 import Sidebar from "../components/Sidebar";
 import DeleteProgressModal from "../components/DeleteProgressModal";
+import { loadRecordingDetail, scheduleRecordingDetailPreload } from "./loadRecordingDetail";
 
 export default function RecordingsList() {
     const navigate = useNavigate();
@@ -30,6 +31,11 @@ export default function RecordingsList() {
     useEffect(() => {
         fetchRecordingsPaginated(1, "");
     }, [fetchRecordingsPaginated]);
+
+    useEffect(() => {
+        const cancelPreload = scheduleRecordingDetailPreload();
+        return cancelPreload;
+    }, []);
 
     // Debounced search effect
     useEffect(() => {
@@ -62,6 +68,10 @@ export default function RecordingsList() {
     const handleNewRecording = () => {
         clearSteps();
         navigate('/new-recording');
+    };
+
+    const handlePreloadRecording = () => {
+        void loadRecordingDetail();
     };
 
     return (
@@ -142,6 +152,8 @@ export default function RecordingsList() {
                                 className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
                             >
                                 <button
+                                    onMouseEnter={handlePreloadRecording}
+                                    onFocus={handlePreloadRecording}
                                     onClick={() => navigate(`/recordings/${recording.id}`)}
                                     className="flex-1 text-left"
                                 >

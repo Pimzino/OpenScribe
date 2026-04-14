@@ -1,35 +1,20 @@
-import { readFile, writeFile } from "@tauri-apps/plugin-fs";
-import { save } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
+import { isHttpUrl, normalizeImagePath } from "../pathUtils";
 
 // Helper to read file as Uint8Array
 export async function getFileBuffer(path: string): Promise<Uint8Array | null> {
     try {
-        let cleanPath = path;
-
-        // Decode URI components (e.g. %20 -> space)
-        try {
-            cleanPath = decodeURIComponent(cleanPath);
-        } catch (e) {
-            // Ignore if malformed
-        }
-
-        // Remove file:// prefix
-        if (cleanPath.startsWith('file://')) {
-            cleanPath = cleanPath.slice(7);
-            // Handle Windows /C:/... -> C:/...
-            if (navigator.userAgent.includes('Windows') && cleanPath.startsWith('/') && cleanPath.includes(':')) {
-                cleanPath = cleanPath.slice(1);
-            }
-        }
-
-        if (cleanPath.startsWith('http')) {
+        if (isHttpUrl(path)) {
+            const cleanPath = path.trim();
             const response = await fetch(cleanPath);
             const buffer = await response.arrayBuffer();
             return new Uint8Array(buffer);
         }
 
-        const data = await readFile(cleanPath);
-        return data;
+        const data = await invoke<number[]>("read_file_bytes", {
+            path: normalizeImagePath(path),
+        });
+        return Uint8Array.from(data);
     } catch (error) {
         console.error(`Failed to read file: ${path}`, error);
         return null;
@@ -64,15 +49,9 @@ export function getMimeType(path: string): string {
 
 // Helper to save file using native file picker
 export async function saveFile(data: Uint8Array, fileName: string, filters: { name: string; extensions: string[] }[]): Promise<boolean> {
-    const path = await save({
-        defaultPath: fileName,
+    return invoke<boolean>("save_file_via_dialog", {
+        data: Array.from(data),
+        defaultName: fileName,
         filters,
     });
-
-    if (!path) {
-        return false; // User cancelled
-    }
-
-    await writeFile(path, data);
-    return true;
 }

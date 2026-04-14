@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { Download, FileText, FileCode, FileType } from "lucide-react";
-import { exportToPdf, exportToHtml, exportToWord, exportToMarkdown } from "../lib/export";
 import Tooltip from "./Tooltip";
 
 interface ExportDropdownProps {
@@ -12,6 +11,7 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [exportingFormat, setExportingFormat] = useState<string | null>(null);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -23,52 +23,46 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const handleExportMarkdown = async () => {
+    const runExport = async (format: string, exporter: () => Promise<void>) => {
         setIsExporting(true);
+        setExportingFormat(format);
         try {
-            await exportToMarkdown(markdown, fileName);
+            await exporter();
             setIsOpen(false);
         } catch (e) {
-            console.error("Markdown Export failed", e);
+            console.error(`${format} export failed`, e);
         } finally {
             setIsExporting(false);
+            setExportingFormat(null);
         }
+    };
+
+    const handleExportMarkdown = async () => {
+        await runExport("Markdown", async () => {
+            const { exportToMarkdown } = await import("../lib/export/markdownExporter");
+            await exportToMarkdown(markdown, fileName);
+        });
     };
 
     const handleExportHtml = async () => {
-        setIsExporting(true);
-        try {
+        await runExport("HTML", async () => {
+            const { exportToHtml } = await import("../lib/export/htmlExporter");
             await exportToHtml(markdown, fileName);
-            setIsOpen(false);
-        } catch (e) {
-            console.error("HTML Export failed", e);
-        } finally {
-            setIsExporting(false);
-        }
+        });
     };
 
     const handleExportPdf = async () => {
-        setIsExporting(true);
-        try {
+        await runExport("PDF", async () => {
+            const { exportToPdf } = await import("../lib/export/pdfExporter");
             await exportToPdf(markdown, fileName);
-            setIsOpen(false);
-        } catch (e) {
-            console.error("PDF Export failed", e);
-        } finally {
-            setIsExporting(false);
-        }
+        });
     };
 
     const handleExportWord = async () => {
-        setIsExporting(true);
-        try {
+        await runExport("Word", async () => {
+            const { exportToWord } = await import("../lib/export/wordExporter");
             await exportToWord(markdown, fileName);
-            setIsOpen(false);
-        } catch (e) {
-            console.error("Word Export failed", e);
-        } finally {
-            setIsExporting(false);
-        }
+        });
     };
 
     return (
@@ -80,7 +74,10 @@ export default function ExportDropdown({ markdown, fileName }: ExportDropdownPro
                     className="p-2 bg-white/10 hover:bg-white/15 rounded-md transition-colors disabled:opacity-50"
                 >
                     {isExporting ? (
-                        <div className="w-[18px] h-[18px] border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                        <div
+                            className="w-[18px] h-[18px] border-2 border-zinc-400 border-t-transparent rounded-full animate-spin"
+                            aria-label={exportingFormat ? `Exporting ${exportingFormat}` : "Exporting"}
+                        />
                     ) : (
                         <Download size={18} />
                     )}

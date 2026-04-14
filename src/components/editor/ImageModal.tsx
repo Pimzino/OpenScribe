@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Link, FolderOpen, ImageIcon } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { registerLocalAssetScope, resolveDisplayImageSrc } from '../../lib/localAssets';
+import { isLocalFilePath } from '../../lib/pathUtils';
 
 type TabType = 'url' | 'browse';
 
@@ -77,29 +78,23 @@ export function ImageModal({
   }, [isOpen, initialSrc, initialAlt]);
 
   // Update preview when inputs change
-  const updatePreview = (src: string) => {
+  const updatePreview = async (src: string) => {
     setPreviewError(false);
     if (!src) {
       setPreviewSrc('');
       return;
     }
 
-    // Check if it's a local path
-    const isLocalPath = /^[A-Z]:/i.test(src) ||
-      src.startsWith('/') ||
-      src.startsWith('file://');
-
-    if (isLocalPath) {
-      // Clean up file:// prefix if present
-      let cleanPath = src;
-      if (cleanPath.startsWith('file://')) {
-        cleanPath = cleanPath.slice(7);
-        if (cleanPath.startsWith('/') && cleanPath.includes(':')) {
-          cleanPath = cleanPath.slice(1);
-        }
+    try {
+      const resolvedSrc = await resolveDisplayImageSrc(src);
+      setPreviewSrc(resolvedSrc);
+    } catch (error) {
+      if (!isLocalFilePath(src)) {
+        setPreviewSrc(src);
+        return;
       }
-      setPreviewSrc(convertFileSrc(cleanPath));
-    } else {
+
+      console.error('Failed to prepare local image preview:', error);
       setPreviewSrc(src);
     }
   };
@@ -131,11 +126,23 @@ export function ImageModal({
   };
 
   const handleInsert = () => {
-    const src = activeTab === 'url' ? urlInput : filePath;
-    if (src) {
+    const insertImage = async () => {
+      const src = activeTab === 'url' ? urlInput : filePath;
+      if (!src) {
+        return;
+      }
+
+      if (activeTab === 'browse') {
+        await registerLocalAssetScope(src);
+      }
+
       onInsert(src, altText);
       handleClose();
-    }
+    };
+
+    insertImage().catch((error) => {
+      console.error('Failed to insert image:', error);
+    });
   };
 
   const handleClose = () => {

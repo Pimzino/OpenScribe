@@ -8,16 +8,21 @@ mod recorder;
 #[cfg(target_os = "linux")]
 mod display;
 
+use base64::{engine::general_purpose, Engine as _};
 use database::{
     Database, DeleteRecordingCleanup, Notification, PaginatedRecordings, Recording,
     RecordingWithSteps, StepInput,
 };
 use recorder::{HotkeyBinding, RecordingState};
+use serde::{Deserialize, Serialize};
 use std::io::Write;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 pub struct DatabaseState(pub Mutex<Database>);
@@ -100,6 +105,316 @@ fn normalize_directory_path(path: &std::path::Path) -> Result<std::path::PathBuf
         .map_err(|e| format!("Invalid path: {}", e))?;
 
     Ok(canonical_parent.join(dir_name))
+}
+
+fn normalize_optional_directory_path(path: Option<String>) -> Result<Option<PathBuf>, String> {
+    match path {
+        Some(path) if !path.trim().is_empty() => {
+            let normalized = normalize_directory_path(std::path::Path::new(&path))?;
+            Ok(Some(normalized))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn read_validated_file_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let validated_path = normalize_file_path(path)?;
+    std::fs::read(&validated_path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+fn write_bytes_to_file(path: &std::path::Path, data: &[u8]) -> Result<(), String> {
+    let validated_path = normalize_file_path(path)?;
+
+    if let Some(parent) = validated_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+    }
+
+    let mut file = std::fs::File::create(&validated_path)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+    file.write_all(data)
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
+fn is_private_or_local_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => ipv4.is_private() || ipv4.is_loopback() || ipv4.is_link_local(),
+        IpAddr::V6(ipv6) => {
+            let first_segment = ipv6.segments()[0];
+            ipv6.is_loopback()
+                || ipv6.is_unicast_link_local()
+                || (first_segment & 0xfe00) == 0xfc00
+        }
+    }
+}
+
+fn is_allowed_insecure_host(host: &str, port: u16) -> bool {
+    if host.eq_ignore_ascii_case("localhost")
+        || host.eq_ignore_ascii_case("host.docker.internal")
+        || host.ends_with(".local")
+    {
+        return true;
+    }
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return is_private_or_local_ip(&ip);
+    }
+
+    let mut saw_address = false;
+    let lookup_target = format!("{host}:{port}");
+    if let Ok(addresses) = lookup_target.to_socket_addrs() {
+        for address in addresses {
+            saw_address = true;
+            if !is_private_or_local_ip(&address.ip()) {
+                return false;
+            }
+        }
+    }
+
+    saw_address
+}
+
+fn validate_ai_base_url(base_url: &str) -> Result<reqwest::Url, String> {
+    let trimmed = base_url.trim();
+    if trimmed.is_empty() {
+        return Err("Base URL is required.".to_string());
+    }
+
+    let url = reqwest::Url::parse(trimmed).map_err(|e| format!("Invalid base URL: {}", e))?;
+    let scheme = url.scheme();
+
+    if scheme != "http" && scheme != "https" {
+        return Err("Base URL must use http or https.".to_string());
+    }
+
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("Base URL must not include embedded credentials.".to_string());
+    }
+
+    if scheme == "http" {
+        let host = url
+            .host_str()
+            .ok_or_else(|| "Base URL must include a hostname.".to_string())?;
+        let port = url.port_or_known_default().unwrap_or(80);
+
+        if !is_allowed_insecure_host(host, port) {
+            return Err(
+                "Plain HTTP is only allowed for localhost or private-network AI endpoints."
+                    .to_string(),
+            );
+        }
+    }
+
+    Ok(url)
+}
+
+fn build_ai_endpoint(base_url: &reqwest::Url, path: &str) -> Result<reqwest::Url, String> {
+    let full_url = format!(
+        "{}/{}",
+        base_url.as_str().trim_end_matches('/'),
+        path.trim_start_matches('/')
+    );
+    reqwest::Url::parse(&full_url).map_err(|e| format!("Invalid endpoint URL: {}", e))
+}
+
+fn ai_http_client(timeout: Duration) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| format!("Failed to create AI HTTP client: {}", e))
+}
+
+fn map_ai_transport_error(error: &reqwest::Error, base_url: &reqwest::Url) -> String {
+    if error.is_timeout() {
+        return "Connection timed out. Check the server URL.".to_string();
+    }
+
+    if error.is_connect() {
+        let host = base_url.host_str().unwrap_or_default();
+        let is_local_server = host.eq_ignore_ascii_case("localhost")
+            || host == "127.0.0.1"
+            || host == "::1"
+            || host.eq_ignore_ascii_case("host.docker.internal");
+
+        if is_local_server {
+            return format!(
+                "Cannot connect to {}. Make sure your local AI server is running.",
+                base_url
+            );
+        }
+
+        return format!(
+            "Connection failed to {}. Please check that the server is running and accessible.",
+            base_url
+        );
+    }
+
+    format!("Connection failed: {}", error)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AiRetryConfig {
+    enable_auto_retry: bool,
+    max_retry_attempts: u32,
+    initial_retry_delay_ms: u64,
+}
+
+impl Default for AiRetryConfig {
+    fn default() -> Self {
+        Self {
+            enable_auto_retry: true,
+            max_retry_attempts: 3,
+            initial_retry_delay_ms: 1000,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AiConnectionResult {
+    success: bool,
+    message: String,
+    models: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SaveFileFilter {
+    name: String,
+    extensions: Vec<String>,
+}
+
+async fn post_ai_chat_completion(
+    base_url: &reqwest::Url,
+    api_key: &str,
+    body: &serde_json::Value,
+    retry_config: &AiRetryConfig,
+) -> Result<String, String> {
+    let endpoint = build_ai_endpoint(base_url, "chat/completions")?;
+    let client = ai_http_client(Duration::from_secs(120))?;
+    let max_attempts = if retry_config.enable_auto_retry {
+        retry_config.max_retry_attempts
+    } else {
+        0
+    };
+    let mut attempt = 0;
+
+    loop {
+        let mut request = client
+            .post(endpoint.clone())
+            .header("Content-Type", "application/json")
+            .json(body);
+
+        if !api_key.is_empty() {
+            request = request.bearer_auth(api_key);
+        }
+
+        let response = match request.send().await {
+            Ok(response) => response,
+            Err(error) => {
+                if retry_config.enable_auto_retry && !error.is_timeout() && attempt < max_attempts {
+                    let delay_ms =
+                        retry_config.initial_retry_delay_ms.saturating_mul(2_u64.pow(attempt));
+                    tokio::time::sleep(Duration::from_millis(delay_ms.min(60_000))).await;
+                    attempt += 1;
+                    continue;
+                }
+
+                return Err(map_ai_transport_error(&error, base_url));
+            }
+        };
+
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+            && retry_config.enable_auto_retry
+            && attempt < max_attempts
+        {
+            let retry_after_ms = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok())
+                .map(|seconds| seconds.saturating_mul(1000))
+                .unwrap_or_else(|| {
+                    retry_config
+                        .initial_retry_delay_ms
+                        .saturating_mul(2_u64.pow(attempt))
+                });
+
+            tokio::time::sleep(Duration::from_millis(retry_after_ms.min(60_000))).await;
+            attempt += 1;
+            continue;
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_body: serde_json::Value = response
+                .json()
+                .await
+                .unwrap_or_else(|_| serde_json::json!({}));
+            let provider_message = error_body
+                .get("error")
+                .and_then(|error| error.get("message"))
+                .and_then(|message| message.as_str())
+                .unwrap_or_default();
+
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                return Err("Authentication failed. Please check your API key in Settings.".to_string());
+            }
+            if status == reqwest::StatusCode::NOT_FOUND {
+                if let Some(model) = body.get("model").and_then(|value| value.as_str()) {
+                    return Err(format!(
+                        "Model \"{}\" not found. Please verify the model name in Settings.",
+                        model
+                    ));
+                }
+                return Err("Requested AI endpoint was not found.".to_string());
+            }
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                return Err(
+                    "Rate limit exceeded after all retries. Try increasing retry settings or wait before trying again."
+                        .to_string(),
+                );
+            }
+            if status.is_server_error() {
+                return Err("The AI server is experiencing issues. Please try again later.".to_string());
+            }
+
+            let extra = if provider_message.is_empty() {
+                String::new()
+            } else {
+                format!(" - {}", provider_message)
+            };
+            return Err(format!(
+                "AI request failed: {} {}{}",
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("Unknown"),
+                extra
+            ));
+        }
+
+        let response_body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Invalid AI response: {}", e))?;
+
+        let content = response_body
+            .get("choices")
+            .and_then(|choices| choices.as_array())
+            .and_then(|choices| choices.first())
+            .and_then(|choice| {
+                choice
+                    .get("message")
+                    .and_then(|message| message.get("content"))
+                    .and_then(|content| content.as_str())
+                    .or_else(|| choice.get("text").and_then(|text| text.as_str()))
+            })
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        return Ok(content);
+    }
 }
 
 #[tauri::command]
@@ -495,6 +810,226 @@ fn validate_screenshot_path(path: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn read_file_base64(path: String) -> Result<String, String> {
+    let bytes = read_validated_file_bytes(std::path::Path::new(&path))?;
+    Ok(general_purpose::STANDARD.encode(bytes))
+}
+
+#[tauri::command]
+fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+    read_validated_file_bytes(std::path::Path::new(&path))
+}
+
+#[tauri::command]
+fn save_file_via_dialog(
+    app: AppHandle,
+    data: Vec<u8>,
+    default_name: String,
+    filters: Vec<SaveFileFilter>,
+) -> Result<bool, String> {
+    let mut dialog = app.dialog().file().set_file_name(default_name);
+
+    for filter in &filters {
+        let extensions: Vec<&str> = filter.extensions.iter().map(|extension| extension.as_str()).collect();
+        dialog = dialog.add_filter(&filter.name, &extensions);
+    }
+
+    let Some(path) = dialog.blocking_save_file() else {
+        return Ok(false);
+    };
+
+    let selected_path = path
+        .into_path()
+        .map_err(|e| format!("Invalid save path: {}", e))?;
+
+    write_bytes_to_file(&selected_path, &data)?;
+    Ok(true)
+}
+
+#[tauri::command]
+async fn ai_test_connection(
+    base_url: String,
+    api_key: String,
+    requires_api_key: bool,
+) -> Result<AiConnectionResult, String> {
+    if requires_api_key && api_key.trim().is_empty() {
+        return Ok(AiConnectionResult {
+            success: false,
+            message: "API key is required for this provider.".to_string(),
+            models: None,
+        });
+    }
+
+    let validated_base_url = match validate_ai_base_url(&base_url) {
+        Ok(url) => url,
+        Err(error) => {
+            return Ok(AiConnectionResult {
+                success: false,
+                message: error,
+                models: None,
+            })
+        }
+    };
+
+    let client = ai_http_client(Duration::from_secs(10))?;
+    let models_endpoint = build_ai_endpoint(&validated_base_url, "models")?;
+    let mut models_request = client
+        .get(models_endpoint)
+        .header("Content-Type", "application/json");
+
+    if !api_key.trim().is_empty() {
+        models_request = models_request.bearer_auth(api_key.trim());
+    }
+
+    let response = match models_request.send().await {
+        Ok(response) => response,
+        Err(error) => {
+            return Ok(AiConnectionResult {
+                success: false,
+                message: map_ai_transport_error(&error, &validated_base_url),
+                models: None,
+            })
+        }
+    };
+
+    if response.status().is_success() {
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .unwrap_or_else(|_| serde_json::json!({}));
+        let models = data
+            .get("data")
+            .and_then(|value| value.as_array())
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|entry| entry.get("id").and_then(|id| id.as_str()))
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let message = format!(
+            "Connected successfully. {} model{} available.",
+            models.len(),
+            if models.len() == 1 { "" } else { "s" }
+        );
+
+        return Ok(AiConnectionResult {
+            success: true,
+            message,
+            models: Some(models),
+        });
+    }
+
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(AiConnectionResult {
+            success: false,
+            message: "Authentication failed. Check your API key.".to_string(),
+            models: None,
+        });
+    }
+
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        let fallback_body = serde_json::json!({
+            "model": "gpt-4o",
+            "messages": [{ "role": "user", "content": "Hi" }],
+            "max_tokens": 1,
+        });
+        let fallback = post_ai_chat_completion(
+            &validated_base_url,
+            api_key.trim(),
+            &fallback_body,
+            &AiRetryConfig::default(),
+        )
+        .await;
+
+        return Ok(match fallback {
+            Ok(_) => AiConnectionResult {
+                success: true,
+                message: "Connected successfully.".to_string(),
+                models: None,
+            },
+            Err(error) => AiConnectionResult {
+                success: false,
+                message: error,
+                models: None,
+            },
+        });
+    }
+
+    Ok(AiConnectionResult {
+        success: false,
+        message: format!(
+            "Server returned {}: {}",
+            response.status().as_u16(),
+            response.status().canonical_reason().unwrap_or("Unknown")
+        ),
+        models: None,
+    })
+}
+
+#[tauri::command]
+async fn ai_fetch_models(
+    base_url: String,
+    api_key: String,
+    requires_api_key: bool,
+) -> Result<Vec<String>, String> {
+    if requires_api_key && api_key.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let validated_base_url = validate_ai_base_url(&base_url)?;
+    let endpoint = build_ai_endpoint(&validated_base_url, "models")?;
+    let client = ai_http_client(Duration::from_secs(10))?;
+    let mut request = client
+        .get(endpoint)
+        .header("Content-Type", "application/json");
+
+    if !api_key.trim().is_empty() {
+        request = request.bearer_auth(api_key.trim());
+    }
+
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    if !response.status().is_success() {
+        return Ok(Vec::new());
+    }
+
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .unwrap_or_else(|_| serde_json::json!({}));
+    let models = data
+        .get("data")
+        .and_then(|value| value.as_array())
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| entry.get("id").and_then(|id| id.as_str()))
+                .map(|id| id.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Ok(models)
+}
+
+#[tauri::command]
+async fn ai_chat_completion(
+    base_url: String,
+    api_key: String,
+    body: serde_json::Value,
+    retry_config: Option<AiRetryConfig>,
+) -> Result<String, String> {
+    let validated_base_url = validate_ai_base_url(&base_url)?;
+    let retry_config = retry_config.unwrap_or_default();
+    post_ai_chat_completion(&validated_base_url, api_key.trim(), &body, &retry_config).await
+}
+
+#[tauri::command]
 fn register_asset_scope(
     app: AppHandle,
     path: String,
@@ -532,7 +1067,6 @@ fn save_cropped_image(
     let validated_path = normalize_file_path(&path_buf)?;
 
     // Decode base64 to bytes
-    use base64::{engine::general_purpose, Engine as _};
     let image_data = general_purpose::STANDARD
         .decode(&base64_data)
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
@@ -569,9 +1103,9 @@ fn copy_screenshot_to_permanent(
     }
 
     // Get the base directory (custom path or default)
-    let base_dir = match custom_screenshot_path {
-        Some(ref path) if !path.is_empty() => PathBuf::from(path),
-        _ => safe_db_lock(&db)?.screenshots_dir(),
+    let base_dir = match normalize_optional_directory_path(custom_screenshot_path)? {
+        Some(path) => path,
+        None => safe_db_lock(&db)?.screenshots_dir(),
     };
 
     // Create recording-specific subfolder with sanitized name
@@ -644,12 +1178,17 @@ fn save_steps_with_path(
     steps: Vec<StepInput>,
     screenshot_path: Option<String>,
 ) -> Result<(), String> {
+    let normalized_screenshot_path =
+        normalize_optional_directory_path(screenshot_path)?.map(|path| {
+            path.to_string_lossy().to_string()
+        });
+
     safe_db_lock(&db)?
         .save_steps_with_path(
             &recording_id,
             &recording_name,
             steps,
-            screenshot_path.as_deref(),
+            normalized_screenshot_path.as_deref(),
         )
         .map_err(|e| e.to_string())
 }
@@ -1904,7 +2443,6 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -1999,6 +2537,12 @@ pub fn run() {
             update_recording_name,
             get_default_screenshot_path,
             validate_screenshot_path,
+            read_file_base64,
+            read_file_bytes,
+            save_file_via_dialog,
+            ai_test_connection,
+            ai_fetch_models,
+            ai_chat_completion,
             register_asset_scope,
             save_cropped_image,
             copy_screenshot_to_permanent,
@@ -2117,6 +2661,59 @@ mod tests {
         let expected = test_dir.path().canonicalize().unwrap().join("screenshots");
 
         assert_eq!(normalized, expected);
+    }
+
+    #[test]
+    fn read_validated_file_bytes_reads_existing_file() {
+        let test_dir = TestDir::new();
+        let file_path = test_dir.path().join("example.bin");
+        fs::write(&file_path, [1_u8, 2, 3, 4]).unwrap();
+
+        let bytes = read_validated_file_bytes(&file_path).unwrap();
+
+        assert_eq!(bytes, vec![1_u8, 2, 3, 4]);
+    }
+
+    #[test]
+    fn read_file_base64_encodes_existing_file_contents() {
+        let test_dir = TestDir::new();
+        let file_path = test_dir.path().join("example.txt");
+        fs::write(&file_path, "hello").unwrap();
+
+        let encoded = read_file_base64(file_path.to_string_lossy().to_string()).unwrap();
+
+        assert_eq!(encoded, general_purpose::STANDARD.encode("hello"));
+    }
+
+    #[test]
+    fn write_bytes_to_file_creates_and_writes_file() {
+        let test_dir = TestDir::new();
+        let file_path = test_dir.path().join("output.txt");
+
+        write_bytes_to_file(&file_path, b"exported").unwrap();
+
+        assert_eq!(fs::read(&file_path).unwrap(), b"exported");
+    }
+
+    #[test]
+    fn validate_ai_base_url_allows_https_hosts() {
+        let url = validate_ai_base_url("https://api.example.com/v1").unwrap();
+
+        assert_eq!(url.as_str(), "https://api.example.com/v1");
+    }
+
+    #[test]
+    fn validate_ai_base_url_allows_private_http_hosts() {
+        let url = validate_ai_base_url("http://192.168.1.10:11434/v1").unwrap();
+
+        assert_eq!(url.as_str(), "http://192.168.1.10:11434/v1");
+    }
+
+    #[test]
+    fn validate_ai_base_url_rejects_public_http_hosts() {
+        let error = validate_ai_base_url("http://example.com/v1").unwrap_err();
+
+        assert!(error.contains("Plain HTTP"));
     }
 
     #[test]

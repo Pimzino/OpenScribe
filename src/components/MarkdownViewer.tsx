@@ -1,9 +1,10 @@
-import React, { useState, useMemo, memo } from "react";
+import React, { useEffect, useState, memo } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { Expand } from "lucide-react";
 import ImageViewer from "./ImageViewer";
+import { isLocalFilePath } from "../lib/pathUtils";
+import { resolveDisplayImageSrc } from "../lib/localAssets";
 
 interface MarkdownViewerProps {
     content: string;
@@ -17,10 +18,38 @@ interface MarkdownImageProps {
 
 const MarkdownImage = memo(function MarkdownImage({ src, alt }: MarkdownImageProps) {
     const [isViewerOpen, setIsViewerOpen] = useState(false);
-    const imageSrc = useMemo(
-        () => src ? convertFileSrc(decodeURIComponent(src)) : '',
-        [src]
-    );
+    const [imageSrc, setImageSrc] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const updateSrc = async () => {
+            if (!src) {
+                if (!cancelled) {
+                    setImageSrc('');
+                }
+                return;
+            }
+
+            try {
+                const resolvedSrc = await resolveDisplayImageSrc(src);
+                if (!cancelled) {
+                    setImageSrc(resolvedSrc);
+                }
+            } catch (error) {
+                console.error('Failed to resolve markdown image source:', error);
+                if (!cancelled) {
+                    setImageSrc(isLocalFilePath(src) ? '' : src);
+                }
+            }
+        };
+
+        updateSrc();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [src]);
 
     return (
         <>
