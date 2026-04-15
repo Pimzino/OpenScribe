@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-04-15
+
+### Fixed
+- Restored the sidebar logo in packaged builds by allowing same-origin app images in the release Content Security Policy
+
 ## [0.2.1] - 2026-04-15
 
 ### Fixed
