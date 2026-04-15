@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-15
+
+### Fixed
+- Sidebar logo now renders reliably again after the recent startup/loading changes
+
+### Improved
+- App startup now shows the splash screen immediately while settings and OCR warm up in the background
+- Added live startup status messaging, including OCR model loading progress
+
 ## [0.2.0] - 2026-04-14
 
 ### Breaking Changes

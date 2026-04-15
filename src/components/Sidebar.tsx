@@ -5,6 +5,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import AboutModal from "./AboutModal";
 import ChangelogModal from "./ChangelogModal";
 import NotificationBell from "./notifications/NotificationBell";
+import logoUrl from "/logo.png";
 
 type Page = "recordings" | "settings" | "new-recording" | "recording-detail";
 
@@ -27,7 +28,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             <aside className="w-64 glass-surface-1 border-r border-white/8 p-4 flex flex-col h-full">
                 <div className="flex items-center justify-between mb-8">
                     <h1 className="text-xl font-bold flex items-center gap-2">
-                        <img src="/logo.png" alt="StepSnap" className="w-8 h-8" />
+                        <img src={logoUrl} alt="StepSnap" className="w-8 h-8" />
                         StepSnap
                     </h1>
                     <NotificationBell />
