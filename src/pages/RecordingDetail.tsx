@@ -97,12 +97,21 @@ export default function RecordingDetail() {
     const [editedName, setEditedName] = useState("");
     const [nameSaving, setNameSaving] = useState(false);
     const hasTriggeredGeneration = useRef(false);
+    const descriptionSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
     useEffect(() => {
         if (id) {
             void getRecording(id);
         }
     }, [id, getRecording]);
+
+    useEffect(() => {
+        const timers = descriptionSaveTimers.current;
+        return () => {
+            timers.forEach(clearTimeout);
+            timers.clear();
+        };
+    }, [id]);
 
     useEffect(() => {
         if (currentRecording?.steps) {
@@ -559,18 +568,37 @@ export default function RecordingDetail() {
         setIsSelectingPosition(false);
     };
 
-    const handleUpdateDescription = async (stepId: string, description: string) => {
-        if (!id) {
+    const handleUpdateDescription = (stepId: string, description: string) => {
+        setLocalSteps((previousSteps) =>
+            previousSteps.map((step) =>
+                step.id === stepId ? { ...step, description } : step,
+            ),
+        );
+
+        if (stepId.startsWith("temp-")) {
+            setHasUnsavedChanges(true);
             return;
         }
 
-        try {
-            await invoke("update_step_description", { stepId, description });
-            await getRecording(id);
-        } catch (updateError) {
-            console.error("Failed to update step description:", updateError);
-            setError(updateError instanceof Error ? updateError.message : "Failed to update step description");
+        const existingTimer = descriptionSaveTimers.current.get(stepId);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
         }
+
+        const timer = setTimeout(async () => {
+            descriptionSaveTimers.current.delete(stepId);
+            try {
+                await invoke("update_step_description", { stepId, description });
+                if (id) {
+                    await getRecording(id);
+                }
+            } catch (updateError) {
+                console.error("Failed to update step description:", updateError);
+                setError(updateError instanceof Error ? updateError.message : "Failed to update step description");
+            }
+        }, 400);
+
+        descriptionSaveTimers.current.set(stepId, timer);
     };
 
     const handleCropSave = async (croppedImageBase64: string) => {
