@@ -311,6 +311,7 @@ function ColorPicker({ currentColor, onColorChange }: ColorPickerProps) {
             </button>
 
             {isOpen && createPortal(
+                // eslint-disable-next-line react/forbid-dom-props -- Dynamic positioning requires inline style
                 <div
                     data-color-picker
                     className="fixed p-2 bg-[#2a2a2a] rounded-lg shadow-xl border border-white/10 grid grid-cols-4 gap-1 z-[100] -translate-x-1/2 -translate-y-full"

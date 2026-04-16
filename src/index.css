@@ -69,9 +69,11 @@ body {
 }
 
 /* Custom Scrollbar - Glass Effect */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #2721E8 rgba(30, 27, 35, 0.65);
+@supports (scrollbar-width: thin) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2721E8 rgba(30, 27, 35, 0.65);
+  }
 }
 
 ::-webkit-scrollbar {
@@ -137,7 +139,12 @@ body {
   /* Note: avoid 'contain: strict' as it creates a containing block for fixed elements */
   .scroll-container {
     will-change: scroll-position;
-    -webkit-overflow-scrolling: touch;
+  }
+
+  @supports (-webkit-overflow-scrolling: touch) {
+    .scroll-container {
+      -webkit-overflow-scrolling: touch;
+    }
   }
 
   /* Sticky element optimization - promotes to compositor layer */

@@ -196,6 +196,7 @@ export function TiptapEditor({
 
   if (!editor) {
     return (
+      // eslint-disable-next-line react/forbid-dom-props -- Dynamic minHeight from props
       <div
         className="animate-pulse bg-white/5 rounded-xl"
         style={{ minHeight }}
@@ -228,6 +229,7 @@ export function TiptapEditor({
       </div>
 
       {/* Editor Content */}
+      {/* eslint-disable-next-line react/forbid-dom-props -- Dynamic minHeight from props */}
       <div className="bg-[#161316] rounded-b-xl scroll-optimized" style={{ minHeight }}>
         {viewMode === 'rich' ? (
           <EditorContent editor={editor} className="tiptap-content" />

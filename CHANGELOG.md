@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-04-16
+
+### Fixed
+- Resolved all VS Code lint warnings: inline style errors in React components and CSS browser compatibility warnings
+- Wrapped `scrollbar-width`, `scrollbar-color`, and `-webkit-overflow-scrolling` in `@supports` blocks for proper progressive enhancement
+- Added `.hintrc` to disable webhint inline-style rules for the Microsoft Edge DevTools extension
+- Added eslint-disable comments for legitimate dynamic inline styles (color pickers, dropdown positioning, dynamic minHeight)
+
 ## [0.2.4] - 2026-04-15
 
 ### Fixed
