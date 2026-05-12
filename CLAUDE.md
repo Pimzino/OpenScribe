@@ -1,0 +1,2 @@
+1. Use Exa MCP for all web research.
+2. Use auggie MCP before editing and writing files. You will use auggie mcp to understand the codebase and the components for which you need to add or make changes to as well as understand how things are put or work together. Use this tool to view the project as a bigger picture rather than just isolating changes to the request you have been given. This is extremely important.
