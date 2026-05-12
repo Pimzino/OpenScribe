@@ -19,6 +19,7 @@ export interface Step {
     ocr_status?: string;
     input_source?: string;
     clip_path?: string;
+    title?: string;
 }
 
 interface RecorderState {

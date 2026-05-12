@@ -37,6 +37,7 @@ export interface Step {
     input_source?: string;
     identified_element_json?: string;
     clip_path?: string;
+    title?: string;
 }
 
 export interface RecordingWithSteps {
@@ -61,6 +62,7 @@ export interface StepInput {
     input_source?: string;
     identified_element_json?: string;
     clip_path?: string;
+    title?: string;
 }
 
 export interface PaginatedRecordings {

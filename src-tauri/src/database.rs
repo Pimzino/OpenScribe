@@ -54,6 +54,7 @@ pub struct Step {
     pub identified_element_json: Option<String>,
     /// Path to the short animated clip captured around this event (Phase 8a).
     pub clip_path: Option<String>,
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,6 +72,7 @@ pub struct StepInput {
     pub description: Option<String>,
     pub is_cropped: Option<bool>,
     pub order_index: Option<i32>,
+    pub title: Option<String>,
     /// If true, the screenshot path is already in permanent storage (no copy needed)
     pub screenshot_is_permanent: Option<bool>,
     #[serde(default)]
@@ -268,6 +270,17 @@ impl Database {
                 .execute("ALTER TABLE steps ADD COLUMN clip_path TEXT", [])?;
         }
 
+        // Migration: Add title column if it doesn't exist
+        let has_title: bool = self
+            .conn
+            .prepare("SELECT title FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_title {
+            self.conn
+                .execute("ALTER TABLE steps ADD COLUMN title TEXT", [])?;
+        }
+
         // Migration: Add documentation_generated_at column to recordings if it doesn't exist
         let has_doc_generated_at: bool = self
             .conn
@@ -432,8 +445,8 @@ impl Database {
             };
 
             self.conn.execute(
-                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped, input_source, screenshot_after_path, identified_element_json, clip_path)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped, input_source, screenshot_after_path, identified_element_json, clip_path, title)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
                 params![
                     step_id,
                     recording_id,
@@ -454,6 +467,7 @@ impl Database {
                     step.screenshot_after,
                     step.identified_element_json,
                     step.clip_path,
+                    step.title
                 ],
             )?;
         }
@@ -517,8 +531,8 @@ impl Database {
             let final_order_index = step.order_index.unwrap_or(index as i32);
 
             self.conn.execute(
-                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped, input_source, screenshot_after_path, identified_element_json, clip_path)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped, input_source, screenshot_after_path, identified_element_json, clip_path, title)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
                 params![
                     step_id,
                     recording_id,
@@ -539,6 +553,7 @@ impl Database {
                     step.screenshot_after,
                     step.identified_element_json,
                     step.clip_path,
+                    step.title
                 ],
             )?;
         }
@@ -694,7 +709,7 @@ impl Database {
                     "SELECT id, recording_id, type_, x, y, text, timestamp, screenshot_path,
                             element_name, element_type, element_value, app_name, order_index, description, is_cropped,
                             ocr_text, ocr_status, input_source, screenshot_after_path,
-                            identified_element_json, clip_path
+                            identified_element_json, clip_path, title
                      FROM steps WHERE recording_id = ?1 ORDER BY order_index"
                 )?;
 
@@ -722,6 +737,7 @@ impl Database {
                             screenshot_after_path: row.get(18)?,
                             identified_element_json: row.get(19)?,
                             clip_path: row.get(20)?,
+                            title: row.get(21)?,
                         })
                     })?
                     .collect::<Result<Vec<_>>>()?;
@@ -1037,6 +1053,7 @@ mod tests {
             description: Some("desc".to_string()),
             is_cropped: Some(false),
             order_index: Some(0),
+            title: None,
             screenshot_is_permanent,
             input_source: None,
             screenshot_after: None,
