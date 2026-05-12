@@ -23,6 +23,9 @@ interface GenerationState {
     // Accumulated document
     accumulatedMarkdown: string;
 
+    // Coherence pass (final document-wide refinement)
+    isPolishing: boolean;
+
     // Cancellation
     abortController: AbortController | null;
 
@@ -33,6 +36,8 @@ interface GenerationState {
     completeStep: (index: number, finalText: string) => void;
     setStepError: (index: number, error: string) => void;
     updateDocument: (markdown: string) => void;
+    startPolishing: () => void;
+    finishPolishing: (refinedDescriptions: string[]) => void;
     finishGeneration: () => void;
     cancelGeneration: () => void;
     resetGeneration: () => void;
@@ -45,6 +50,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     recordingId: null,
     stepProgress: [],
     accumulatedMarkdown: '',
+    isPolishing: false,
     abortController: null,
 
     startGeneration: (recordingId: string, totalSteps: number) => {
@@ -63,6 +69,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
             totalSteps,
             stepProgress,
             accumulatedMarkdown: '',
+            isPolishing: false,
             abortController,
         });
 
@@ -106,14 +113,28 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         set({ accumulatedMarkdown: markdown });
     },
 
+    startPolishing: () => {
+        set({ isPolishing: true });
+    },
+
+    finishPolishing: (refinedDescriptions: string[]) => {
+        set(state => ({
+            isPolishing: false,
+            stepProgress: state.stepProgress.map((sp, i) => {
+                const refined = refinedDescriptions[i];
+                return refined ? { ...sp, completedText: refined } : sp;
+            }),
+        }));
+    },
+
     finishGeneration: () => {
-        set({ isGenerating: false });
+        set({ isGenerating: false, isPolishing: false });
     },
 
     cancelGeneration: () => {
         const { abortController } = get();
         abortController?.abort();
-        set({ isGenerating: false, abortController: null });
+        set({ isGenerating: false, isPolishing: false, abortController: null });
     },
 
     resetGeneration: () => {
@@ -124,6 +145,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
             recordingId: null,
             stepProgress: [],
             accumulatedMarkdown: '',
+            isPolishing: false,
             abortController: null,
         });
     },

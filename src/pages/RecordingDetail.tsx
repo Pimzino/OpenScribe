@@ -72,6 +72,8 @@ export default function RecordingDetail() {
         completeStep,
         setStepError,
         updateDocument,
+        startPolishing,
+        finishPolishing,
         finishGeneration,
         cancelGeneration,
         resetGeneration,
@@ -277,6 +279,8 @@ export default function RecordingDetail() {
             onTextChunk: (index, text) => appendStreamingText(index, text),
             onStepComplete: (index, text) => completeStep(index, text),
             onDocumentUpdate: (markdown) => updateDocument(markdown),
+            onPolishStart: () => startPolishing(),
+            onPolishComplete: (refined) => finishPolishing(refined),
             onError: (index, generationError) => setStepError(index, generationError.message),
             onComplete: async (finalMarkdown) => {
                 const generationState = useGenerationStore.getState();

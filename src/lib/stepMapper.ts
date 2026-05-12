@@ -14,7 +14,10 @@ export interface StepLike {
     element_type?: string;
     element_value?: string;
     app_name?: string;
+    description?: string;
     is_cropped?: boolean;
+    ocr_text?: string;
+    ocr_status?: string;
 }
 
 /**
@@ -35,6 +38,9 @@ export function mapStepsForAI(steps: Step[]): StepLike[] {
         element_type: step.element_type,
         element_value: step.element_value,
         app_name: step.app_name,
+        description: step.description,
         is_cropped: step.is_cropped,
+        ocr_text: step.ocr_text,
+        ocr_status: step.ocr_status,
     }));
 }

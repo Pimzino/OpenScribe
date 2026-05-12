@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-05-12
+
+### Fixed
+- User-written step descriptions and OCR text were silently stripped before reaching the AI during documentation generation; the AI now actually receives the per-step intent context you provide
+
+### Improved
+- Added a document-wide coherence pass after per-step generation: a final AI pass rewrites the guide with natural transitions and references between steps so it reads as a connected walkthrough instead of isolated instructions
+- Coherence pass falls back to the original per-step output on any failure (parse error, count mismatch, model error, or cancellation) so the document is never worse than before
+- Generation UI now shows a "Polishing the guide for cohesion..." indicator while the coherence pass runs
+
 ## [0.2.5] - 2026-04-16
 
 ### Fixed

@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { XCircle, CheckCircle2 } from 'lucide-react';
+import { XCircle, CheckCircle2, Sparkles } from 'lucide-react';
 import { useGenerationStore } from '../../store/generationStore';
 import StepProgressCard from './StepProgressCard';
 import StreamingMarkdownViewer from './StreamingMarkdownViewer';
@@ -20,6 +20,7 @@ interface GenerationSplitViewProps {
 export default function GenerationSplitView({ steps, onCancel, onClose }: GenerationSplitViewProps) {
     const {
         isGenerating,
+        isPolishing,
         stepProgress,
         accumulatedMarkdown,
         currentStepIndex,
@@ -63,6 +64,15 @@ export default function GenerationSplitView({ steps, onCancel, onClose }: Genera
                         style={{ width: `${progressPercent}%` }}
                     />
                 </div>
+
+                {/* Coherence pass banner — shown after per-step generation while
+                    the document is being rewritten for flow. */}
+                {isPolishing && (
+                    <div className="mb-4 flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-200">
+                        <Sparkles size={16} className="animate-pulse" />
+                        <span className="text-sm">Polishing the guide for cohesion...</span>
+                    </div>
+                )}
 
                 {/* Step cards */}
                 <div ref={stepsContainerRef} className="flex-1 overflow-y-auto space-y-3 p-1 mr-1">
@@ -112,6 +122,7 @@ export default function GenerationSplitView({ steps, onCancel, onClose }: Genera
                     <StreamingMarkdownViewer
                         content={accumulatedMarkdown}
                         isGenerating={isGenerating}
+                        isPolishing={isPolishing}
                     />
                 </div>
             </div>

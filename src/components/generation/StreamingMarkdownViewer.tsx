@@ -1,13 +1,14 @@
 import { useRef, useEffect, useState } from 'react';
-import { ArrowDown, Loader2 } from 'lucide-react';
+import { ArrowDown, Loader2, Sparkles } from 'lucide-react';
 import MarkdownViewer from '../MarkdownViewer';
 
 interface StreamingMarkdownViewerProps {
     content: string;
     isGenerating?: boolean;
+    isPolishing?: boolean;
 }
 
-export default function StreamingMarkdownViewer({ content, isGenerating = false }: StreamingMarkdownViewerProps) {
+export default function StreamingMarkdownViewer({ content, isGenerating = false, isPolishing = false }: StreamingMarkdownViewerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [autoScroll, setAutoScroll] = useState(true);
 
@@ -51,12 +52,20 @@ export default function StreamingMarkdownViewer({ content, isGenerating = false 
                     </div>
                 )}
 
-                {/* Generating indicator at bottom */}
+                {/* Generating indicator at bottom — switches to a "polishing" message
+                    once per-step generation finishes and the coherence pass is running. */}
                 {isGenerating && content && (
-                    <div className="flex items-center gap-2 text-white/50 text-sm py-4">
-                        <Loader2 className="animate-spin" size={14} />
-                        <span>Generating...</span>
-                    </div>
+                    isPolishing ? (
+                        <div className="flex items-center gap-2 text-purple-300 text-sm py-4">
+                            <Sparkles className="animate-pulse" size={14} />
+                            <span>Polishing for cohesion...</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 text-white/50 text-sm py-4">
+                            <Loader2 className="animate-spin" size={14} />
+                            <span>Generating...</span>
+                        </div>
+                    )
                 )}
             </div>
 

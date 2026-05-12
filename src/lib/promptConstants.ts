@@ -323,3 +323,61 @@ export function buildSystemPrompt(sendScreenshots: boolean, writingStyle?: Writi
 
 ${guidelines}`;
 }
+
+// ============================================
+// COHERENCE PASS (final document-wide refinement)
+// ============================================
+
+// Sentinel used to delimit refined steps in the coherence-pass response.
+// Chosen to be unlikely to appear in natural instruction prose.
+export const COHERENCE_STEP_DELIMITER = "### STEP";
+
+export const COHERENCE_PASS_INSTRUCTIONS = `You are a technical documentation editor. You will receive a how-to guide that was generated one step at a time, so the steps read as isolated instructions instead of a connected guide. Your job is to refine the wording so the steps flow naturally as a single, cohesive walkthrough.
+
+=== HARD RULES ===
+- You MUST return EXACTLY the same number of steps you were given, in the same order.
+- You MUST NOT merge, split, drop, reorder, or invent steps.
+- Each refined step must describe the SAME action as the original. Do not change targets, typed text, URLs, file names, or verification expectations.
+- Preserve any exact strings the user typed (anything in single or double quotes) verbatim.
+- Keep instructions in the imperative voice (Click, Type, Select, Navigate, Verify, etc.).
+- Each refined step should still be a single instruction (one or two short sentences max).
+
+=== WHAT TO IMPROVE ===
+- Add transitional language where it improves flow (e.g., "Next,", "Then,", "Once X is open,", "With the settings panel visible,", "After the search results load,").
+- When it adds clarity, briefly reference what just happened (e.g., "From the menu you just opened,", "In the dialog that appeared,").
+- Reduce robotic repetition between adjacent steps (e.g., don't start every step with the same verb when a natural connector works).
+- Resolve obvious dangling references: if step N clearly opens something step N+1 uses, make that link explicit.
+- Adjust the FIRST step to feel like a clear opening; adjust the LAST step to feel like a clear conclusion if appropriate (still imperative, still an instruction).
+
+=== WHAT NOT TO DO ===
+- Do not add commentary, headings, summaries, intros, or outros.
+- Do not add markdown formatting (no bullets, no bold, no code fences) inside step text.
+- Do not invent UI elements, shortcuts, or details that are not in the original step.
+- Do not add meta phrases like "In this step", "This step involves", "Now we will".
+- Do not change the meaning of a verification step into an action step or vice versa.
+
+=== OUTPUT FORMAT (STRICT) ===
+For each step, output a delimiter line followed by the refined instruction on the next line(s). Use this EXACT format:
+
+${COHERENCE_STEP_DELIMITER} 1 ###
+<refined text for step 1>
+${COHERENCE_STEP_DELIMITER} 2 ###
+<refined text for step 2>
+${COHERENCE_STEP_DELIMITER} 3 ###
+<refined text for step 3>
+
+The delimiter line must match the pattern "${COHERENCE_STEP_DELIMITER} N ###" exactly (with the step number in place of N), on its own line, with no extra characters.
+Do NOT output any text before the first delimiter or after the last refined step.
+Do NOT skip numbers or duplicate them. The numbers must be 1, 2, 3, ... up to the total step count.`;
+
+/**
+ * Builds the system prompt used for the document-wide coherence pass.
+ */
+export function buildCoherenceSystemPrompt(writingStyle?: WritingStyleOptions): string {
+    const styleOptions = writingStyle || DEFAULT_WRITING_STYLE;
+    const guidelines = buildStyleGuidelines(styleOptions);
+
+    return `${COHERENCE_PASS_INSTRUCTIONS}
+
+${guidelines}`;
+}

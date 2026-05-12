@@ -9,7 +9,11 @@ import {
     resolveModelPolicy,
     withPolicyDiagnostics,
 } from "./aiPolicy";
-import { buildSystemPrompt } from "./promptConstants";
+import {
+    buildSystemPrompt,
+    buildCoherenceSystemPrompt,
+    COHERENCE_STEP_DELIMITER,
+} from "./promptConstants";
 import { normalizePathForMarkdown } from "./pathUtils";
 
 // Sleep utility for delays
@@ -385,6 +389,157 @@ Example: "How to Test Network Connectivity Using Ping"`;
     }
 }
 
+// Parse the refined-document response from the coherence pass.
+// Expected shape (per step):
+//   ### STEP 1 ###
+//   <refined text...>
+//   ### STEP 2 ###
+//   <refined text...>
+// Returns refined text per index. Any step that cannot be located in the
+// response is returned as `null` so the caller can fall back to the original.
+function parseCoherenceResponse(
+    rawResponse: string,
+    expectedStepCount: number
+): (string | null)[] {
+    const result: (string | null)[] = new Array(expectedStepCount).fill(null);
+    if (!rawResponse) return result;
+
+    // Match each delimiter, regardless of surrounding whitespace.
+    // Captures the step number and records both the line's start (for slicing the
+    // previous step's text up to here) and its end (where the next step's text begins).
+    const delimiterPattern = /^[ \t]*###\s*STEP\s+(\d+)\s*###[ \t]*$/gim;
+    interface Marker {
+        stepIndex: number; // zero-based
+        delimiterStart: number;
+        textStart: number;
+    }
+
+    const markers: Marker[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = delimiterPattern.exec(rawResponse)) !== null) {
+        const stepNumber = parseInt(match[1], 10);
+        if (Number.isFinite(stepNumber) && stepNumber >= 1 && stepNumber <= expectedStepCount) {
+            markers.push({
+                stepIndex: stepNumber - 1,
+                delimiterStart: match.index,
+                textStart: match.index + match[0].length,
+            });
+        }
+    }
+
+    for (let i = 0; i < markers.length; i++) {
+        const start = markers[i].textStart;
+        const end = i + 1 < markers.length ? markers[i + 1].delimiterStart : rawResponse.length;
+        const text = rawResponse.slice(start, end).trim();
+        if (!text) continue;
+        // If the same step appears twice, keep the first occurrence to avoid silent overwrites.
+        if (result[markers[i].stepIndex] === null) {
+            result[markers[i].stepIndex] = text;
+        }
+    }
+
+    return result;
+}
+
+// Run a single document-wide coherence pass over all generated step descriptions.
+// Returns refined descriptions on success. On any failure (no API output, parse
+// failure, count mismatch, abort) it logs and returns the originals untouched
+// per-step so the document never gets worse than the per-step output.
+async function refineDocumentCoherence(
+    originalDescriptions: string[],
+    workflowTitle: string | undefined,
+    openaiBaseUrl: string,
+    openaiApiKey: string,
+    aiProviderId: string,
+    openaiModel: string,
+    abortSignal?: AbortSignal
+): Promise<string[]> {
+    if (originalDescriptions.length === 0) return originalDescriptions;
+    if (abortSignal?.aborted) {
+        throw new DOMException("Generation cancelled", "AbortError");
+    }
+
+    const writingStyle = useSettingsStore.getState().writingStyle;
+    const systemPrompt = buildCoherenceSystemPrompt(writingStyle);
+
+    const providerConfig = getProvider(aiProviderId);
+    const policy = resolveModelPolicy({
+        providerId: providerConfig?.id ?? "custom",
+        model: openaiModel,
+        purpose: "coherence-pass",
+        supportsVision: providerConfig?.supportsVision ?? true,
+        settings: getAdvancedAiSettings(),
+    });
+
+    const totalSteps = originalDescriptions.length;
+    const titleLine = workflowTitle
+        ? `WORKFLOW GOAL: "${workflowTitle}"\nUse this goal to keep the refined steps aligned with the user's objective.\n\n`
+        : "";
+    const inputBlock = originalDescriptions
+        .map((desc, i) => `${COHERENCE_STEP_DELIMITER} ${i + 1} ###\n${desc}`)
+        .join("\n");
+    const userPrompt = `${titleLine}You will refine the following ${totalSteps} step instruction(s) so they flow as a connected guide. Return EXACTLY ${totalSteps} refined step(s) in the required delimiter format.
+
+ORIGINAL STEPS:
+${inputBlock}
+
+Now return the refined steps using the exact "${COHERENCE_STEP_DELIMITER} N ###" format, with N from 1 to ${totalSteps}.`;
+
+    // Skip the pass if the prompt would exceed the model's context budget.
+    const approxPromptTokens = Math.ceil(
+        (systemPrompt.length + userPrompt.length) / 4
+    );
+    if (approxPromptTokens > policy.promptTokenBudget) {
+        console.warn(
+            `[AI Service] Skipping coherence pass: prompt ~${approxPromptTokens} tokens exceeds budget ${policy.promptTokenBudget}. ${formatPolicySummary(policy)}`
+        );
+        return originalDescriptions;
+    }
+
+    const rateLimitConfig = getRateLimitConfig();
+    let rawContent: string;
+    try {
+        rawContent = await requestAiChatCompletion(
+            openaiBaseUrl,
+            openaiApiKey,
+            buildChatCompletionBody(policy, openaiModel, [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt },
+            ]),
+            rateLimitConfig
+        );
+    } catch (error) {
+        console.error("[AI Service] Coherence pass failed; keeping per-step output.", withPolicyDiagnostics(error, policy));
+        return originalDescriptions;
+    }
+
+    if (abortSignal?.aborted) {
+        throw new DOMException("Generation cancelled", "AbortError");
+    }
+
+    const stripped = stripReasoningContent(rawContent);
+    if (!stripped) {
+        console.warn("[AI Service] Coherence pass returned empty content; keeping per-step output.");
+        return originalDescriptions;
+    }
+
+    const parsed = parseCoherenceResponse(stripped, totalSteps);
+    const matchedCount = parsed.filter(entry => entry !== null).length;
+
+    if (matchedCount === 0) {
+        console.warn("[AI Service] Coherence pass produced no parseable steps; keeping per-step output.");
+        return originalDescriptions;
+    }
+
+    if (matchedCount < totalSteps) {
+        console.warn(
+            `[AI Service] Coherence pass returned ${matchedCount}/${totalSteps} steps; using originals for the rest.`
+        );
+    }
+
+    return originalDescriptions.map((original, i) => parsed[i] ?? original);
+}
+
 interface AIConfig {
     apiKey?: string;
     baseUrl?: string;
@@ -487,6 +642,25 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
         throw error;
     }
 
+    // Document-wide coherence pass — see generateDocumentationStreaming for rationale.
+    if (stepDescriptions.length > 1) {
+        try {
+            const refined = await refineDocumentCoherence(
+                stepDescriptions,
+                config?.workflowTitle,
+                openaiBaseUrl,
+                openaiApiKey,
+                aiProviderId,
+                openaiModel
+            );
+            for (let i = 0; i < refined.length; i++) {
+                stepDescriptions[i] = refined[i];
+            }
+        } catch (error) {
+            console.error("[AI Service] Coherence pass threw unexpectedly; keeping per-step output.", error);
+        }
+    }
+
     // Use the workflow title (recording name) as the document title
     const title = config?.workflowTitle ?? 'Documentation';
 
@@ -518,6 +692,9 @@ export interface StreamingCallbacks {
     onTitleGenerated?: (title: string) => void;
     onError?: (stepIndex: number, error: Error) => void;
     onComplete?: (finalMarkdown: string) => void;
+    // Document-wide coherence pass lifecycle (after all per-step generation).
+    onPolishStart?: () => void;
+    onPolishComplete?: (refinedDescriptions: string[]) => void;
 }
 
 // Generate step description with streaming
@@ -685,6 +862,37 @@ export async function generateDocumentationStreaming(
         }
     } catch (error) {
         throw error;
+    }
+
+    // Document-wide coherence pass: take the per-step output and rewrite it so
+    // the guide reads as a connected walkthrough (transitions, references to
+    // earlier steps, less robotic repetition). Falls back to per-step output
+    // on any failure so the result is never worse than before.
+    if (stepDescriptions.length > 1) {
+        callbacks.onPolishStart?.();
+        try {
+            const refined = await refineDocumentCoherence(
+                stepDescriptions,
+                config?.workflowTitle,
+                openaiBaseUrl,
+                openaiApiKey,
+                aiProviderId,
+                openaiModel,
+                abortSignal
+            );
+            for (let i = 0; i < refined.length; i++) {
+                stepDescriptions[i] = refined[i];
+            }
+            callbacks.onPolishComplete?.(refined.slice());
+        } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") {
+                throw error;
+            }
+            // Non-abort errors already log inside refineDocumentCoherence and return originals,
+            // but if something else bubbled up we keep the per-step output.
+            console.error("[AI Service] Coherence pass threw unexpectedly; keeping per-step output.", error);
+            callbacks.onPolishComplete?.(stepDescriptions.slice());
+        }
     }
 
     // Use the workflow title (recording name) as the document title
