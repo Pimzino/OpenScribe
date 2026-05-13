@@ -45,7 +45,7 @@ export default function StepsTab({
 
         if (isActive) {
             return (
-                <Tooltip content="Click again to cancel">
+                <Tooltip content="Click again to cancel" className="flex w-full">
                     <button
                         onClick={() => onSelectInsertPosition(index)}
                         className="group relative flex w-full items-center justify-center py-2 text-green-400 transition-colors"
