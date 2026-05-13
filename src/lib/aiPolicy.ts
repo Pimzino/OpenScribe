@@ -1,6 +1,11 @@
 import type { AIProviderId } from "./providers";
 
-export type AiRequestPurpose = "step-description" | "title" | "coherence-pass";
+export type AiRequestPurpose =
+    | "step-description"
+    | "title"
+    | "coherence-pass"
+    | "element-identify"
+    | "instruction-write";
 
 export interface AdvancedAiSettings {
     useProviderDefaults: boolean;
@@ -77,6 +82,8 @@ const DEFAULT_TEMPERATURE = 0.3;
 const DEFAULT_STEP_OUTPUT_TOKENS = 128;
 const DEFAULT_TITLE_OUTPUT_TOKENS = 64;
 const DEFAULT_COHERENCE_OUTPUT_TOKENS = 4096;
+const DEFAULT_IDENTIFY_OUTPUT_TOKENS = 256;
+const DEFAULT_INSTRUCTION_OUTPUT_TOKENS = 128;
 const DEFAULT_PROMPT_SAFETY_BUFFER = 1024;
 const DEFAULT_ESTIMATED_IMAGE_TOKENS = 1536;
 const APPROX_CHARS_PER_TOKEN = 4;
@@ -112,6 +119,8 @@ const CAPABILITY_REGISTRY: Record<AIProviderId, ProviderCapability> = {
             "step-description": DEFAULT_STEP_OUTPUT_TOKENS,
             title: DEFAULT_TITLE_OUTPUT_TOKENS,
             "coherence-pass": DEFAULT_COHERENCE_OUTPUT_TOKENS,
+            "element-identify": DEFAULT_IDENTIFY_OUTPUT_TOKENS,
+            "instruction-write": DEFAULT_INSTRUCTION_OUTPUT_TOKENS,
         },
         promptSafetyBuffer: DEFAULT_PROMPT_SAFETY_BUFFER,
         estimatedImageTokens: DEFAULT_ESTIMATED_IMAGE_TOKENS,
@@ -134,6 +143,8 @@ const CAPABILITY_REGISTRY: Record<AIProviderId, ProviderCapability> = {
             "step-description": DEFAULT_STEP_OUTPUT_TOKENS,
             title: DEFAULT_TITLE_OUTPUT_TOKENS,
             "coherence-pass": DEFAULT_COHERENCE_OUTPUT_TOKENS,
+            "element-identify": DEFAULT_IDENTIFY_OUTPUT_TOKENS,
+            "instruction-write": DEFAULT_INSTRUCTION_OUTPUT_TOKENS,
         },
         promptSafetyBuffer: DEFAULT_PROMPT_SAFETY_BUFFER,
         estimatedImageTokens: DEFAULT_ESTIMATED_IMAGE_TOKENS,
@@ -156,6 +167,8 @@ const CAPABILITY_REGISTRY: Record<AIProviderId, ProviderCapability> = {
             "step-description": DEFAULT_STEP_OUTPUT_TOKENS,
             title: DEFAULT_TITLE_OUTPUT_TOKENS,
             "coherence-pass": DEFAULT_COHERENCE_OUTPUT_TOKENS,
+            "element-identify": DEFAULT_IDENTIFY_OUTPUT_TOKENS,
+            "instruction-write": DEFAULT_INSTRUCTION_OUTPUT_TOKENS,
         },
         promptSafetyBuffer: DEFAULT_PROMPT_SAFETY_BUFFER,
         estimatedImageTokens: DEFAULT_ESTIMATED_IMAGE_TOKENS,
@@ -177,6 +190,8 @@ const CAPABILITY_REGISTRY: Record<AIProviderId, ProviderCapability> = {
             "step-description": DEFAULT_STEP_OUTPUT_TOKENS,
             title: DEFAULT_TITLE_OUTPUT_TOKENS,
             "coherence-pass": DEFAULT_COHERENCE_OUTPUT_TOKENS,
+            "element-identify": DEFAULT_IDENTIFY_OUTPUT_TOKENS,
+            "instruction-write": DEFAULT_INSTRUCTION_OUTPUT_TOKENS,
         },
         promptSafetyBuffer: DEFAULT_PROMPT_SAFETY_BUFFER,
         estimatedImageTokens: DEFAULT_ESTIMATED_IMAGE_TOKENS,
@@ -199,6 +214,8 @@ const CAPABILITY_REGISTRY: Record<AIProviderId, ProviderCapability> = {
             "step-description": DEFAULT_STEP_OUTPUT_TOKENS,
             title: DEFAULT_TITLE_OUTPUT_TOKENS,
             "coherence-pass": DEFAULT_COHERENCE_OUTPUT_TOKENS,
+            "element-identify": DEFAULT_IDENTIFY_OUTPUT_TOKENS,
+            "instruction-write": DEFAULT_INSTRUCTION_OUTPUT_TOKENS,
         },
         promptSafetyBuffer: DEFAULT_PROMPT_SAFETY_BUFFER,
         estimatedImageTokens: DEFAULT_ESTIMATED_IMAGE_TOKENS,
@@ -221,6 +238,8 @@ const CAPABILITY_REGISTRY: Record<AIProviderId, ProviderCapability> = {
             "step-description": DEFAULT_STEP_OUTPUT_TOKENS,
             title: DEFAULT_TITLE_OUTPUT_TOKENS,
             "coherence-pass": DEFAULT_COHERENCE_OUTPUT_TOKENS,
+            "element-identify": DEFAULT_IDENTIFY_OUTPUT_TOKENS,
+            "instruction-write": DEFAULT_INSTRUCTION_OUTPUT_TOKENS,
         },
         promptSafetyBuffer: DEFAULT_PROMPT_SAFETY_BUFFER,
         estimatedImageTokens: DEFAULT_ESTIMATED_IMAGE_TOKENS,
@@ -243,6 +262,8 @@ const CAPABILITY_REGISTRY: Record<AIProviderId, ProviderCapability> = {
             "step-description": DEFAULT_STEP_OUTPUT_TOKENS,
             title: DEFAULT_TITLE_OUTPUT_TOKENS,
             "coherence-pass": DEFAULT_COHERENCE_OUTPUT_TOKENS,
+            "element-identify": DEFAULT_IDENTIFY_OUTPUT_TOKENS,
+            "instruction-write": DEFAULT_INSTRUCTION_OUTPUT_TOKENS,
         },
         promptSafetyBuffer: DEFAULT_PROMPT_SAFETY_BUFFER,
         estimatedImageTokens: DEFAULT_ESTIMATED_IMAGE_TOKENS,

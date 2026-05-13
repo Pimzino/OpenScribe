@@ -17,7 +17,7 @@ import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } fro
 
 export default function NewRecording() {
     const navigate = useNavigate();
-    const { isRecording, setIsRecording, steps, addStep, removeStep, updateStepDescription, updateStepScreenshot, reorderSteps } = useRecorderStore();
+    const { isRecording, setIsRecording, steps, addStep, removeStep, updateStepDescription, updateStepTitle, updateStepScreenshot, reorderSteps } = useRecorderStore();
     const { createRecording, saveStepsWithPath } = useRecordingsStore();
     const { screenshotPath } = useSettingsStore();
     const [recordingName, setRecordingName] = useState("");
@@ -26,7 +26,7 @@ export default function NewRecording() {
     const [generateAfterSave, setGenerateAfterSave] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
-    const [croppingIndex, setCroppingIndex] = useState<number | null>(null);
+    const [croppingTarget, setCroppingTarget] = useState<{ index: number; target: "before" | "after" } | null>(null);
     const [cropTimestamps, setCropTimestamps] = useState<Record<number, number>>({});
 
     const sensors = useSensors(
@@ -109,28 +109,33 @@ export default function NewRecording() {
     };
 
     const handleCropSave = async (croppedImageBase64: string) => {
-        if (croppingIndex === null) return;
+        if (croppingTarget === null) return;
 
-        const step = steps[croppingIndex];
-        if (!step.screenshot) return;
+        const { index, target } = croppingTarget;
+        const step = steps[index];
+        const targetPath = target === "after" ? step?.screenshot_after : step?.screenshot;
+        if (!targetPath) return;
 
         try {
-            // Save cropped image to the same path (overwrite)
+            // Save cropped image to the same path (overwrite in place).
             await invoke("save_cropped_image", {
-                path: step.screenshot,
-                base64Data: croppedImageBase64
+                path: targetPath,
+                base64Data: croppedImageBase64,
             });
 
-            // Update step to mark as cropped
-            updateStepScreenshot(croppingIndex, step.screenshot, true);
+            // For the primary (before) frame, mark the store step as cropped so
+            // the badge appears. The after-frame doesn't track an is_cropped flag.
+            if (target === "before" && step?.screenshot) {
+                updateStepScreenshot(index, step.screenshot, true);
+            }
 
-            // Update timestamp to force image reload (cache busting)
-            setCropTimestamps(prev => ({ ...prev, [croppingIndex]: Date.now() }));
+            // Cache-bust the displayed image regardless of which frame was edited.
+            setCropTimestamps((prev) => ({ ...prev, [index]: Date.now() }));
         } catch (error) {
             console.error("Failed to save cropped image:", error);
         }
 
-        setCroppingIndex(null);
+        setCroppingTarget(null);
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
@@ -168,6 +173,7 @@ export default function NewRecording() {
                 app_name: step.app_name,
                 description: step.description,
                 is_cropped: step.is_cropped,
+                title: step.title,
             }));
 
             await saveStepsWithPath(recordingId, name, stepInputs, screenshotPath || undefined);
@@ -193,13 +199,19 @@ export default function NewRecording() {
             <RecorderOverlay />
 
             {/* Image Editor Modal */}
-            {croppingIndex !== null && steps[croppingIndex]?.screenshot && (
-                <ImageEditor
-                    imageSrc={convertFileSrc(steps[croppingIndex].screenshot!)}
-                    onSave={handleCropSave}
-                    onCancel={() => setCroppingIndex(null)}
-                />
-            )}
+            {croppingTarget !== null && (() => {
+                const editingStep = steps[croppingTarget.index];
+                const editingPath = croppingTarget.target === "after"
+                    ? editingStep?.screenshot_after
+                    : editingStep?.screenshot;
+                return editingPath ? (
+                    <ImageEditor
+                        imageSrc={convertFileSrc(editingPath)}
+                        onSave={handleCropSave}
+                        onCancel={() => setCroppingTarget(null)}
+                    />
+                ) : null;
+            })()}
 
             {/* Name Dialog */}
             {showNameDialog && (
@@ -337,7 +349,7 @@ export default function NewRecording() {
                         items={steps.map((_, idx) => `step-${idx}`)}
                         strategy={rectSortingStrategy}
                     >
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 scroll-optimized">
+                        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 scroll-optimized">
                             {steps.map((step, index) => (
                                 <DraggableStepCard
                                     key={`step-${index}`}
@@ -345,7 +357,7 @@ export default function NewRecording() {
                                     step={step}
                                     index={index}
                                     onDelete={() => deleteStep(index)}
-                                    onCrop={() => setCroppingIndex(index)}
+                                    onCrop={(target) => setCroppingTarget({ index, target })}
                                     onUpdateDescription={(desc) => updateStepDescription(index, desc)}
                                     isDeleting={deletingIndex === index}
                                     cropTimestamp={cropTimestamps[index]}
@@ -356,7 +368,7 @@ export default function NewRecording() {
                 </DndContext>
 
                 {steps.length === 0 && !isRecording && (
-                    <div className="col-span-full flex flex-col items-center justify-center h-64 border-2 border-dashed border-white/20 rounded-lg text-white/50">
+                    <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-center h-64 border-2 border-dashed border-white/20 rounded-lg text-white/50">
                         <p>No steps recorded yet.</p>
                         <p className="text-sm">Click "Start Recording" to begin.</p>
                     </div>

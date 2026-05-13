@@ -24,6 +24,7 @@ export interface Step {
     text?: string;
     timestamp: number;
     screenshot_path?: string;
+    screenshot_after_path?: string;
     element_name?: string;
     element_type?: string;
     element_value?: string;
@@ -33,6 +34,9 @@ export interface Step {
     is_cropped?: boolean;
     ocr_text?: string;
     ocr_status?: string;
+    input_source?: string;
+    identified_element_json?: string;
+    clip_path?: string;
 }
 
 export interface RecordingWithSteps {
@@ -47,12 +51,16 @@ export interface StepInput {
     text?: string;
     timestamp: number;
     screenshot?: string;
+    screenshot_after?: string;
     element_name?: string;
     element_type?: string;
     element_value?: string;
     app_name?: string;
     description?: string;
     is_cropped?: boolean;
+    input_source?: string;
+    identified_element_json?: string;
+    clip_path?: string;
 }
 
 export interface PaginatedRecordings {

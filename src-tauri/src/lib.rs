@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod accessibility;
 mod database;
+mod logging;
 mod ocr;
 mod overlay;
 mod recorder;
@@ -109,12 +110,16 @@ fn start_recording(state: State<'_, RecordingState>, _app: AppHandle) {
     let mut is_recording = state.is_recording.lock().unwrap();
     if !*is_recording {
         *is_recording = true;
+        logging::log(logging::CATEGORY_RECORDER, "info", "Recording started", None);
     }
 }
 
 #[tauri::command]
 fn stop_recording(state: State<'_, RecordingState>) {
     let mut is_recording = state.is_recording.lock().unwrap();
+    if *is_recording {
+        logging::log(logging::CATEGORY_RECORDER, "info", "Recording stopped", None);
+    }
     *is_recording = false;
 }
 
@@ -368,6 +373,25 @@ async fn post_ai_chat_completion(
     };
     let mut attempt = 0;
 
+    let model_name = body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("<unknown>")
+        .to_string();
+    let request_meta = serde_json::json!({
+        "endpoint": endpoint.to_string(),
+        "model": model_name,
+        "host": base_url.host_str().unwrap_or(""),
+        "autoRetry": retry_config.enable_auto_retry,
+        "maxAttempts": retry_config.max_retry_attempts,
+    });
+    logging::log(
+        logging::CATEGORY_AI,
+        "info",
+        "AI chat completion request",
+        Some(&request_meta),
+    );
+
     loop {
         let mut request = client
             .post(endpoint.clone())
@@ -381,6 +405,28 @@ async fn post_ai_chat_completion(
         let response = match request.send().await {
             Ok(response) => response,
             Err(error) => {
+                let transport_kind = if error.is_timeout() {
+                    "timeout"
+                } else if error.is_connect() {
+                    "connect"
+                } else if error.is_request() {
+                    "request"
+                } else {
+                    "other"
+                };
+                logging::log(
+                    logging::CATEGORY_AI,
+                    "warn",
+                    "Transport error on AI request",
+                    Some(&serde_json::json!({
+                        "attempt": attempt,
+                        "kind": transport_kind,
+                        "model": model_name,
+                        "host": base_url.host_str().unwrap_or(""),
+                        "error": error.to_string(),
+                    })),
+                );
+
                 if retry_config.enable_auto_retry && !error.is_timeout() && attempt < max_attempts {
                     let delay_ms =
                         retry_config.initial_retry_delay_ms.saturating_mul(2_u64.pow(attempt));
@@ -389,7 +435,18 @@ async fn post_ai_chat_completion(
                     continue;
                 }
 
-                return Err(map_ai_transport_error(&error, base_url));
+                let mapped = map_ai_transport_error(&error, base_url);
+                logging::log(
+                    logging::CATEGORY_AI,
+                    "error",
+                    "AI request failed (transport)",
+                    Some(&serde_json::json!({
+                        "model": model_name,
+                        "userMessage": mapped,
+                        "providerError": error.to_string(),
+                    })),
+                );
+                return Err(mapped);
             }
         };
 
@@ -409,6 +466,17 @@ async fn post_ai_chat_completion(
                         .saturating_mul(2_u64.pow(attempt))
                 });
 
+            logging::log(
+                logging::CATEGORY_AI,
+                "warn",
+                "Rate-limited (429), backing off",
+                Some(&serde_json::json!({
+                    "attempt": attempt,
+                    "retryAfterMs": retry_after_ms,
+                    "model": model_name,
+                })),
+            );
+
             tokio::time::sleep(Duration::from_millis(retry_after_ms.min(60_000))).await;
             attempt += 1;
             continue;
@@ -416,55 +484,112 @@ async fn post_ai_chat_completion(
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_body: serde_json::Value = response
-                .json()
-                .await
+            let raw_body = response.text().await.unwrap_or_default();
+            let error_body: serde_json::Value = serde_json::from_str(&raw_body)
                 .unwrap_or_else(|_| serde_json::json!({}));
             let provider_message = error_body
                 .get("error")
                 .and_then(|error| error.get("message"))
                 .and_then(|message| message.as_str())
                 .unwrap_or_default();
+            let provider_type = error_body
+                .get("error")
+                .and_then(|e| e.get("type"))
+                .and_then(|t| t.as_str())
+                .unwrap_or_default();
+            let provider_code = error_body
+                .get("error")
+                .and_then(|e| e.get("code"))
+                .map(|c| match c {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                })
+                .unwrap_or_default();
+
+            // Always log the full upstream response body so the user (and we)
+            // can debug opaque provider errors after the fact.
+            logging::log(
+                logging::CATEGORY_AI,
+                "error",
+                "AI request returned non-success status",
+                Some(&serde_json::json!({
+                    "status": status.as_u16(),
+                    "statusText": status.canonical_reason().unwrap_or("Unknown"),
+                    "model": model_name,
+                    "host": base_url.host_str().unwrap_or(""),
+                    "providerMessage": provider_message,
+                    "providerType": provider_type,
+                    "providerCode": provider_code,
+                    "rawBody": raw_body.chars().take(4000).collect::<String>(),
+                })),
+            );
+
+            // Build a detailed error that includes the provider message so the
+            // frontend toast shows enough to act on.
+            let detailed = if provider_message.is_empty() {
+                if raw_body.is_empty() {
+                    format!(
+                        "AI request failed: {} {}",
+                        status.as_u16(),
+                        status.canonical_reason().unwrap_or("Unknown"),
+                    )
+                } else {
+                    format!(
+                        "AI request failed: {} {} - {}",
+                        status.as_u16(),
+                        status.canonical_reason().unwrap_or("Unknown"),
+                        raw_body.chars().take(800).collect::<String>(),
+                    )
+                }
+            } else {
+                format!(
+                    "AI request failed: {} {} - {}",
+                    status.as_u16(),
+                    status.canonical_reason().unwrap_or("Unknown"),
+                    provider_message,
+                )
+            };
 
             if status == reqwest::StatusCode::UNAUTHORIZED {
-                return Err("Authentication failed. Please check your API key in Settings.".to_string());
+                return Err(format!(
+                    "Authentication failed. Please check your API key in Settings. ({})",
+                    detailed
+                ));
             }
             if status == reqwest::StatusCode::NOT_FOUND {
-                if let Some(model) = body.get("model").and_then(|value| value.as_str()) {
-                    return Err(format!(
-                        "Model \"{}\" not found. Please verify the model name in Settings.",
-                        model
-                    ));
-                }
-                return Err("Requested AI endpoint was not found.".to_string());
+                let model_hint = body
+                    .get("model")
+                    .and_then(|value| value.as_str())
+                    .map(|m| format!("Model \"{}\" not found. ", m))
+                    .unwrap_or_default();
+                return Err(format!("{}{}", model_hint, detailed));
             }
             if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                return Err(
-                    "Rate limit exceeded after all retries. Try increasing retry settings or wait before trying again."
-                        .to_string(),
-                );
+                return Err(format!(
+                    "Rate limit exceeded after all retries. {}",
+                    detailed
+                ));
             }
             if status.is_server_error() {
-                return Err("The AI server is experiencing issues. Please try again later.".to_string());
+                return Err(format!(
+                    "The AI server is experiencing issues. {}",
+                    detailed
+                ));
             }
 
-            let extra = if provider_message.is_empty() {
-                String::new()
-            } else {
-                format!(" - {}", provider_message)
-            };
-            return Err(format!(
-                "AI request failed: {} {}{}",
-                status.as_u16(),
-                status.canonical_reason().unwrap_or("Unknown"),
-                extra
-            ));
+            return Err(detailed);
         }
 
-        let response_body: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("Invalid AI response: {}", e))?;
+        let response_body: serde_json::Value = response.json().await.map_err(|e| {
+            let msg = format!("Invalid AI response: {}", e);
+            logging::log(
+                logging::CATEGORY_AI,
+                "error",
+                &msg,
+                Some(&serde_json::json!({ "model": model_name })),
+            );
+            msg
+        })?;
 
         let content = response_body
             .get("choices")
@@ -480,6 +605,17 @@ async fn post_ai_chat_completion(
             .unwrap_or_default()
             .trim()
             .to_string();
+
+        logging::log(
+            logging::CATEGORY_AI,
+            "info",
+            "AI chat completion succeeded",
+            Some(&serde_json::json!({
+                "model": model_name,
+                "responseChars": content.len(),
+                "attempts": attempt + 1,
+            })),
+        );
 
         return Ok(content);
     }
@@ -1228,6 +1364,17 @@ fn update_step_description(
 ) -> Result<(), String> {
     safe_db_lock(&db)?
         .update_step_description(&step_id, &description)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_step_title(
+    db: State<'_, DatabaseState>,
+    step_id: String,
+    title: String,
+) -> Result<(), String> {
+    safe_db_lock(&db)?
+        .update_step_title(&step_id, &title)
         .map_err(|e| e.to_string())
 }
 
@@ -2024,6 +2171,23 @@ fn get_ocr_enabled(state: State<'_, RecordingState>) -> bool {
 }
 
 #[tauri::command]
+fn set_state_diff_enabled(state: State<'_, RecordingState>, enabled: bool) {
+    *state.state_diff_enabled.lock().unwrap() = enabled;
+}
+
+#[tauri::command]
+fn set_after_frame_max_wait_ms(state: State<'_, RecordingState>, ms: u64) {
+    // Clamp to a sensible range to match the frontend slider bounds.
+    let clamped = ms.clamp(500, 5000);
+    *state.after_frame_max_wait_ms.lock().unwrap() = clamped;
+}
+
+#[tauri::command]
+fn set_video_clips_enabled(state: State<'_, RecordingState>, enabled: bool) {
+    *state.video_clips_enabled.lock().unwrap() = enabled;
+}
+
+#[tauri::command]
 fn update_step_ocr(
     db: State<'_, DatabaseState>,
     step_id: String,
@@ -2032,6 +2196,47 @@ fn update_step_ocr(
 ) -> Result<(), String> {
     safe_db_lock(&db)?
         .update_step_ocr(&step_id, ocr_text.as_deref(), &ocr_status)
+        .map_err(|e| e.to_string())
+}
+
+/// Persist the after-frame screenshot path for a step (used by the state-diff
+/// pipeline). The frontend listens for `new-step-after` events from the
+/// recorder, copies the temp file to permanent storage, and then calls this
+/// to record the path against the existing step row.
+#[tauri::command]
+fn update_step_after_screenshot(
+    db: State<'_, DatabaseState>,
+    step_id: String,
+    screenshot_after_path: Option<String>,
+) -> Result<(), String> {
+    safe_db_lock(&db)?
+        .update_step_after_screenshot(&step_id, screenshot_after_path.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+/// Persist the cached Stage A "element identification" JSON for a step. The
+/// frontend writes this after a successful multi-stage call so subsequent
+/// regenerations can skip the vision pass.
+#[tauri::command]
+fn update_step_identified_element(
+    db: State<'_, DatabaseState>,
+    step_id: String,
+    identified_element_json: Option<String>,
+) -> Result<(), String> {
+    safe_db_lock(&db)?
+        .update_step_identified_element(&step_id, identified_element_json.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+/// Persist the path to a step's short video/animated clip (Phase 8a).
+#[tauri::command]
+fn update_step_clip_path(
+    db: State<'_, DatabaseState>,
+    step_id: String,
+    clip_path: Option<String>,
+) -> Result<(), String> {
+    safe_db_lock(&db)?
+        .update_step_clip_path(&step_id, clip_path.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -2505,6 +2710,9 @@ pub fn run() {
     let is_recording_clone = recording_state.is_recording.clone();
     let is_picker_open_clone = recording_state.is_picker_open.clone();
     let ocr_enabled_clone = recording_state.ocr_enabled.clone();
+    let state_diff_enabled_clone = recording_state.state_diff_enabled.clone();
+    let after_frame_max_wait_clone = recording_state.after_frame_max_wait_ms.clone();
+    let video_clips_enabled_clone = recording_state.video_clips_enabled.clone();
     let start_hotkey_clone = recording_state.start_hotkey.clone();
     let stop_hotkey_clone = recording_state.stop_hotkey.clone();
     let capture_hotkey_clone = recording_state.capture_hotkey.clone();
@@ -2534,6 +2742,29 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .expect("Failed to get app data directory");
+
+            // Initialise the file-based logger as early as possible. From this
+            // point onward, all Rust modules and the frontend can log via
+            // `logging::log` / the `log_event` Tauri command.
+            match logging::init(&app_data_dir) {
+                Ok(logs_dir) => {
+                    logging::log(
+                        logging::CATEGORY_APP,
+                        "info",
+                        "StepSnap starting",
+                        Some(&serde_json::json!({
+                            "version": env!("CARGO_PKG_VERSION"),
+                            "appDataDir": app_data_dir.to_string_lossy(),
+                            "logsDir": logs_dir.to_string_lossy(),
+                            "os": std::env::consts::OS,
+                            "arch": std::env::consts::ARCH,
+                        })),
+                    );
+                }
+                Err(err) => {
+                    eprintln!("[startup] Failed to initialise logger: {}", err);
+                }
+            }
 
             emit_startup_status(
                 &app_handle,
@@ -2566,8 +2797,25 @@ pub fn run() {
                 &startup_state_setup,
                 StartupStatus::running("database", "Opening local database"),
             );
-            let db = Database::new(app_data_dir).expect("Failed to initialize database");
+            let db = match Database::new(app_data_dir) {
+                Ok(db) => db,
+                Err(err) => {
+                    logging::log(
+                        logging::CATEGORY_DATABASE,
+                        "error",
+                        "Failed to initialize database",
+                        Some(&serde_json::json!({ "error": err.to_string() })),
+                    );
+                    panic!("Failed to initialize database: {}", err);
+                }
+            };
             app.manage(DatabaseState(Mutex::new(db)));
+            logging::log(
+                logging::CATEGORY_DATABASE,
+                "info",
+                "Database opened",
+                None,
+            );
             emit_startup_status(
                 &app_handle,
                 &startup_state_setup,
@@ -2585,6 +2833,9 @@ pub fn run() {
                 is_recording_clone,
                 is_picker_open_clone,
                 ocr_enabled_clone,
+                state_diff_enabled_clone,
+                after_frame_max_wait_clone,
+                video_clips_enabled_clone,
                 startup_state_setup.clone(),
             );
             emit_startup_status(
@@ -2667,6 +2918,7 @@ pub fn run() {
             update_step_screenshot,
             reorder_steps,
             update_step_description,
+            update_step_title,
             delete_step,
             // Monitor selection commands
             get_monitors,
@@ -2686,6 +2938,13 @@ pub fn run() {
             set_ocr_enabled,
             get_ocr_enabled,
             update_step_ocr,
+            update_step_after_screenshot,
+            update_step_identified_element,
+            update_step_clip_path,
+            // Generation pipeline toggles (Phase 6 / 8a)
+            set_state_diff_enabled,
+            set_after_frame_max_wait_ms,
+            set_video_clips_enabled,
             // Notification commands
             create_notification,
             list_notifications,
@@ -2699,7 +2958,12 @@ pub fn run() {
             request_screen_recording_permission,
             check_accessibility_permission,
             request_accessibility_permission,
-            get_permission_status
+            get_permission_status,
+            // Logging commands
+            logging::log_event,
+            logging::get_logs_dir,
+            logging::ensure_logs_dir,
+            logging::list_log_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

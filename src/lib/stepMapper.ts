@@ -10,6 +10,7 @@ export interface StepLike {
     text?: string;
     timestamp: number;
     screenshot?: string;
+    screenshot_after?: string;
     element_name?: string;
     element_type?: string;
     element_value?: string;
@@ -18,6 +19,10 @@ export interface StepLike {
     is_cropped?: boolean;
     ocr_text?: string;
     ocr_status?: string;
+    input_source?: string;
+    id?: string; // recording_id of source row, used as Stage A cache key
+    identified_element_json?: string;
+    clip_path?: string;
 }
 
 /**
@@ -34,6 +39,7 @@ export function mapStepsForAI(steps: Step[]): StepLike[] {
         text: step.text,
         timestamp: step.timestamp,
         screenshot: step.screenshot_path,
+        screenshot_after: step.screenshot_after_path,
         element_name: step.element_name,
         element_type: step.element_type,
         element_value: step.element_value,
@@ -42,5 +48,9 @@ export function mapStepsForAI(steps: Step[]): StepLike[] {
         is_cropped: step.is_cropped,
         ocr_text: step.ocr_text,
         ocr_status: step.ocr_status,
+        input_source: step.input_source,
+        id: step.id,
+        identified_element_json: step.identified_element_json,
+        clip_path: step.clip_path,
     }));
 }

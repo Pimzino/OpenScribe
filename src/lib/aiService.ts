@@ -12,9 +12,12 @@ import {
 import {
     buildSystemPrompt,
     buildCoherenceSystemPrompt,
+    buildElementIdentifySystemPrompt,
+    buildInstructionWriteSystemPrompt,
     COHERENCE_STEP_DELIMITER,
 } from "./promptConstants";
 import { normalizePathForMarkdown } from "./pathUtils";
+import { log, describeError } from "./logger";
 
 // Sleep utility for delays
 function sleep(ms: number): Promise<void> {
@@ -103,16 +106,38 @@ async function requestAiChatCompletion(
     body: Record<string, unknown>,
     config: RateLimitConfig
 ): Promise<string> {
-    return invoke<string>("ai_chat_completion", {
+    const modelName = typeof body?.model === "string" ? body.model : "<unknown>";
+    log.ai.debug("Dispatching chat completion to backend", {
         baseUrl: openaiBaseUrl,
-        apiKey: openaiApiKey,
-        body,
-        retryConfig: {
-            enableAutoRetry: config.enableAutoRetry,
-            maxRetryAttempts: config.maxRetryAttempts,
-            initialRetryDelayMs: config.initialRetryDelayMs,
-        },
+        model: modelName,
+        autoRetry: config.enableAutoRetry,
+        maxRetryAttempts: config.maxRetryAttempts,
     });
+    try {
+        const result = await invoke<string>("ai_chat_completion", {
+            baseUrl: openaiBaseUrl,
+            apiKey: openaiApiKey,
+            body,
+            retryConfig: {
+                enableAutoRetry: config.enableAutoRetry,
+                maxRetryAttempts: config.maxRetryAttempts,
+                initialRetryDelayMs: config.initialRetryDelayMs,
+            },
+        });
+        log.ai.debug("Chat completion returned", {
+            model: modelName,
+            responseChars: result?.length ?? 0,
+        });
+        return result;
+    } catch (error) {
+        const described = describeError(error);
+        log.ai.error("Chat completion failed", {
+            model: modelName,
+            baseUrl: openaiBaseUrl,
+            ...described.metadata,
+        });
+        throw error;
+    }
 }
 
 function getAdvancedAiSettings() {
@@ -125,6 +150,27 @@ function getAdvancedAiSettings() {
     };
 }
 
+// Action-type-aware fallback when the model returns nothing usable.
+// Better than the original "Perform this action." which the prompts now forbid.
+function buildStepFallback(step: { type_: string; text?: string }): string {
+    if (step.type_ === "click") {
+        return "Click the highlighted element in the screenshot.";
+    }
+    if (step.type_ === "type") {
+        const raw = step.text?.trim();
+        if (raw) {
+            // Escape any double-quotes the user actually typed so the fallback stays well-formed.
+            const escaped = raw.replace(/"/g, '\\"');
+            return `Type "${escaped}" into the focused field.`;
+        }
+        return "Enter the recorded text in the focused field.";
+    }
+    if (step.type_ === "capture") {
+        return "Verify the screen state shown in the screenshot.";
+    }
+    return "Continue with the next part of the workflow.";
+}
+
 function buildWorkflowContext(workflowTitle: string | undefined, contextEntries: string[]): string {
     let contextText = "";
     if (workflowTitle) {
@@ -134,51 +180,6 @@ function buildWorkflowContext(workflowTitle: string | undefined, contextEntries:
         contextText += `\n\nPrevious steps in this workflow:\n${contextEntries.map((desc, i) => `${i + 1}. ${desc}`).join('\n')}\n\nUse this context to understand what the user is trying to accomplish.`;
     }
     return contextText;
-}
-
-// Crop image around a point (for click steps)
-async function cropAroundPoint(
-    base64Image: string,
-    x: number,
-    y: number,
-    radius: number = 300
-): Promise<string> {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-
-            if (!ctx) {
-                resolve(base64Image); // Fallback to original
-                return;
-            }
-
-            // Calculate crop region
-            const startX = Math.max(0, x - radius);
-            const startY = Math.max(0, y - radius);
-            const endX = Math.min(img.width, x + radius);
-            const endY = Math.min(img.height, y + radius);
-            const width = endX - startX;
-            const height = endY - startY;
-
-            canvas.width = width;
-            canvas.height = height;
-
-            // Draw cropped region
-            ctx.drawImage(
-                img,
-                startX, startY, width, height,
-                0, 0, width, height
-            );
-
-            // Return as base64 (without data URL prefix)
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-            resolve(dataUrl.replace(/^data:image\/\w+;base64,/, ''));
-        };
-        img.onerror = () => resolve(base64Image); // Fallback to original
-        img.src = `data:image/jpeg;base64,${base64Image}`;
-    });
 }
 
 // Helper to convert file to base64 for AI APIs
@@ -197,6 +198,7 @@ async function generateStepDescription(
     stepNumber: number,
     totalSteps: number,
     screenshotBase64: string | null,
+    screenshotAfterBase64: string | null,
     previousSteps: string[],
     openaiBaseUrl: string,
     openaiApiKey: string,
@@ -217,12 +219,13 @@ async function generateStepDescription(
         if (step.element_type) parts.push(`Element Type: ${step.element_type}`);
         if (step.app_name) parts.push(`Application: ${step.app_name}`);
 
-        // Add OCR text if available and not sending screenshots
-        if (step.ocr_text && !sendScreenshots) {
+        // Always include OCR text as supplementary signal — even with screenshots on,
+        // the cropped/dense UI may have small or stylized text the vision model misreads.
+        if (step.ocr_text) {
             const truncatedOcr = step.ocr_text.length > 200
                 ? step.ocr_text.substring(0, 200) + '...'
                 : step.ocr_text;
-            parts.push(`Nearby visible text: "${truncatedOcr}"`);
+            parts.push(`Nearby visible text (OCR): "${truncatedOcr}"`);
         }
 
         parts.push(`Click location: (${Math.round(step.x || 0)}, ${Math.round(step.y || 0)})`);
@@ -233,8 +236,7 @@ async function generateStepDescription(
 Typed text: "${step.text}"
 NOTE: The typed text may be partial (for autocomplete) or abbreviated. If user context provides more specific information (like a full URL, file path, or complete value), use that instead of the literal typed text.
 Write an instruction that achieves the user's intent.`;
-        // Add OCR context if available and not sending screenshots
-        if (step.ocr_text && !sendScreenshots) {
+        if (step.ocr_text) {
             const truncatedOcr = step.ocr_text.length > 100
                 ? step.ocr_text.substring(0, 100) + '...'
                 : step.ocr_text;
@@ -245,8 +247,7 @@ Write an instruction that achieves the user's intent.`;
         actionDescription = `ACTION: CAPTURE (Verification Step)
 This is an observation/verification step. The user captured the screen to document a result.
 Write a VERIFICATION instruction (e.g., "Verify that..." or "Observe the...")`;
-        // Add OCR text if available and not sending screenshots
-        if (step.ocr_text && !sendScreenshots) {
+        if (step.ocr_text) {
             const truncatedOcr = step.ocr_text.length > 300
                 ? step.ocr_text.substring(0, 300) + '...'
                 : step.ocr_text;
@@ -269,13 +270,21 @@ This description reveals the user's INTENT. Incorporate this information into yo
         settings: getAdvancedAiSettings(),
     });
 
+    const hasAfterFrame = sendScreenshots && Boolean(screenshotAfterBase64);
+    const twoFrameNote = hasAfterFrame
+        ? `\n\nIMPORTANT: TWO SCREENSHOTS are provided for this step.\n- Image 1 (BEFORE): the screen at the moment of the action. For click steps it shows the click location marked with an orange-red circle.\n- Image 2 (AFTER): the screen ~700ms after the action.\nCompare the two frames. If something changed (panel opened, page loaded, field filled, menu appeared), reflect that outcome in the instruction. If the frames look essentially identical, write the instruction based on the BEFORE frame alone.`
+        : "";
+
     const buildPromptText = (contextEntries: string[]) => {
         const contextText = buildWorkflowContext(workflowTitle, contextEntries);
         return sendScreenshots
-            ? `Step ${stepNumber} of ${totalSteps}\n\n${actionDescription}${contextText}\n\nTASK: Write ONE clear instruction sentence for this step. Use the screenshot to identify UI elements accurately.`
+            ? `Step ${stepNumber} of ${totalSteps}\n\n${actionDescription}${contextText}${twoFrameNote}\n\nTASK: Write ONE clear instruction sentence for this step. Use the screenshot${hasAfterFrame ? "s" : ""} to identify UI elements accurately.`
             : `Step ${stepNumber} of ${totalSteps}\n\n${actionDescription}${contextText}\n\nTASK: Write ONE clear instruction sentence for this step based on the metadata provided.`;
     };
 
+    // Two images cost roughly twice the image-token budget. The aiPolicy layer
+    // already reserves a per-image estimate; we pass image count via includeImage
+    // and account for the after-frame here by widening the reservation when present.
     const contextBudget = fitContextEntriesToBudget({
         contextEntries: previousSteps,
         buildPromptText,
@@ -288,17 +297,28 @@ This description reveals the user's INTENT. Incorporate this information into yo
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
         {
             type: "text",
-            text: promptText
-        }
+            text: promptText,
+        },
     ];
 
-    // Only include image if sendScreenshots is enabled and we have an image
     if (sendScreenshots && screenshotBase64) {
         userContent.push({
             type: "image_url",
             image_url: {
-                url: `data:image/jpeg;base64,${screenshotBase64}`
-            }
+                url: `data:image/jpeg;base64,${screenshotBase64}`,
+            },
+        });
+    }
+
+    // Pass the after-frame as a second image when available. All major
+    // OpenAI-compatible providers (OpenAI, Anthropic via compat, OpenRouter,
+    // Gemini-compat) accept multiple image_url entries in a single user message.
+    if (hasAfterFrame && screenshotAfterBase64) {
+        userContent.push({
+            type: "image_url",
+            image_url: {
+                url: `data:image/jpeg;base64,${screenshotAfterBase64}`,
+            },
         });
     }
 
@@ -319,7 +339,7 @@ This description reveals the user's INTENT. Incorporate this information into yo
     }
 
     if (!rawContent) {
-        return "Perform this action.";
+        return buildStepFallback(step);
     }
 
     if (contextBudget.droppedEntries > 0) {
@@ -330,7 +350,304 @@ This description reveals the user's INTENT. Incorporate this information into yo
 
     // Strip any reasoning/thinking content from the response
     const stripped = stripReasoningContent(rawContent);
-    return stripped || "Perform this action.";
+    return stripped || buildStepFallback(step);
+}
+
+// ============================================
+// TWO-STAGE PROMPTING (6a)
+// ============================================
+
+interface IdentifiedElement {
+    element_label: string;
+    element_role: string;
+    element_location: string;
+    outcome: string;
+    confidence: string;
+}
+
+/**
+ * Parse Stage A's JSON output, tolerating common LLM quirks: code-fence
+ * wrapping, leading/trailing prose, escaped braces. Returns null on any
+ * failure so the orchestrator can fall back to single-call mode.
+ */
+function parseIdentifiedElement(raw: string): IdentifiedElement | null {
+    if (!raw) return null;
+    const stripped = stripReasoningContent(raw).trim();
+    // Try direct parse first.
+    let candidate = stripped;
+    // Strip ```json ... ``` or ``` ... ``` fences if present.
+    const fenceMatch = candidate.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenceMatch) candidate = fenceMatch[1].trim();
+    // If there's prose around a JSON object, extract the first balanced { ... }.
+    if (!candidate.startsWith("{")) {
+        const objMatch = candidate.match(/\{[\s\S]*\}/);
+        if (objMatch) candidate = objMatch[0];
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(candidate);
+    } catch {
+        return null;
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+    const obj = parsed as Record<string, unknown>;
+    const label = typeof obj.element_label === "string" ? obj.element_label.trim() : "";
+    if (!label) return null;
+    return {
+        element_label: label,
+        element_role: typeof obj.element_role === "string" ? obj.element_role : "",
+        element_location: typeof obj.element_location === "string" ? obj.element_location : "",
+        outcome: typeof obj.outcome === "string" ? obj.outcome : "",
+        confidence: typeof obj.confidence === "string" ? obj.confidence : "",
+    };
+}
+
+/**
+ * Stage A — vision call that identifies the UI element and the action's
+ * visible outcome, returning structured JSON. Returns null on any failure
+ * (no API output, unparseable JSON, missing required field).
+ */
+async function identifyElement(
+    step: Step & { ocr_text?: string; identified_element_json?: string },
+    screenshotBase64: string | null,
+    screenshotAfterBase64: string | null,
+    openaiBaseUrl: string,
+    openaiApiKey: string,
+    aiProviderId: string,
+    openaiModel: string,
+    sendScreenshots: boolean,
+    workflowTitle: string | undefined,
+): Promise<IdentifiedElement | null> {
+    // Cache short-circuit — skip the vision call if a prior identification
+    // is already attached to this step.
+    if (step.identified_element_json) {
+        const cached = parseIdentifiedElement(step.identified_element_json);
+        if (cached) return cached;
+    }
+
+    const providerConfig = getProvider(aiProviderId);
+    const policy = resolveModelPolicy({
+        providerId: providerConfig?.id ?? "custom",
+        model: openaiModel,
+        purpose: "element-identify",
+        supportsVision: providerConfig?.supportsVision ?? true,
+        settings: getAdvancedAiSettings(),
+    });
+
+    const systemPrompt = buildElementIdentifySystemPrompt();
+
+    const metaParts: string[] = [];
+    metaParts.push(`ACTION: ${step.type_.toUpperCase()}`);
+    if (step.element_name) metaParts.push(`Element name: "${step.element_name}"`);
+    if (step.element_type) metaParts.push(`Element type: ${step.element_type}`);
+    if (step.app_name) metaParts.push(`Application: ${step.app_name}`);
+    if (step.type_ === "click" && step.x !== undefined && step.y !== undefined) {
+        metaParts.push(`Click position: (${Math.round(step.x)}, ${Math.round(step.y)})`);
+    }
+    if (step.type_ === "type" && step.text) {
+        metaParts.push(`Typed text: "${step.text}"`);
+    }
+    if (step.ocr_text) {
+        const ocrTrunc = step.ocr_text.length > 300 ? step.ocr_text.substring(0, 300) + "..." : step.ocr_text;
+        metaParts.push(`OCR text near the action: "${ocrTrunc}"`);
+    }
+    if (step.description) {
+        metaParts.push(`User-provided context: "${step.description}"`);
+    }
+    if (workflowTitle) {
+        metaParts.push(`Workflow goal: "${workflowTitle}"`);
+    }
+
+    const hasAfter = sendScreenshots && Boolean(screenshotAfterBase64);
+    const userText = `${metaParts.join("\n")}\n\nReturn ONE JSON object with the required shape. No prose, no markdown.${hasAfter ? "\n\nYou have two screenshots: image 1 is BEFORE the action, image 2 is AFTER (~700ms later). Use the diff for the 'outcome' field." : "\n\nYou have one screenshot showing the moment of the action. The 'outcome' field should be an empty string."}`;
+
+    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+        { type: "text", text: userText },
+    ];
+    if (sendScreenshots && screenshotBase64) {
+        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${screenshotBase64}` } });
+    }
+    if (hasAfter && screenshotAfterBase64) {
+        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${screenshotAfterBase64}` } });
+    }
+
+    const rateLimitConfig = getRateLimitConfig();
+    let rawContent: string;
+    try {
+        rawContent = await requestAiChatCompletion(
+            openaiBaseUrl,
+            openaiApiKey,
+            buildChatCompletionBody(policy, openaiModel, [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userContent },
+            ]),
+            rateLimitConfig,
+        );
+    } catch (error) {
+        console.warn("[AI Service] Stage A (identify) failed; falling back to single-call.", withPolicyDiagnostics(error, policy));
+        return null;
+    }
+
+    const parsed = parseIdentifiedElement(rawContent);
+    if (!parsed) {
+        console.warn("[AI Service] Stage A returned unparseable JSON; falling back to single-call.");
+    }
+    return parsed;
+}
+
+/**
+ * Stage B — text-only call that writes the final imperative instruction
+ * from Stage A's structured output plus workflow context.
+ */
+async function writeInstruction(
+    step: Step,
+    identification: IdentifiedElement,
+    previousSteps: string[],
+    openaiBaseUrl: string,
+    openaiApiKey: string,
+    aiProviderId: string,
+    openaiModel: string,
+    workflowTitle: string | undefined,
+): Promise<string> {
+    const writingStyle = useSettingsStore.getState().writingStyle;
+    const systemPrompt = buildInstructionWriteSystemPrompt(writingStyle);
+
+    const providerConfig = getProvider(aiProviderId);
+    const policy = resolveModelPolicy({
+        providerId: providerConfig?.id ?? "custom",
+        model: openaiModel,
+        purpose: "instruction-write",
+        supportsVision: providerConfig?.supportsVision ?? true,
+        settings: getAdvancedAiSettings(),
+    });
+
+    const buildText = (contextEntries: string[]) => {
+        const ctx = buildWorkflowContext(workflowTitle, contextEntries);
+        const typedTextLine = step.type_ === "type" && step.text
+            ? `\nTyped text (preserve verbatim): "${step.text}"`
+            : "";
+        const userDescription = step.description
+            ? `\nUser-provided intent context: "${step.description}"`
+            : "";
+        return `IDENTIFICATION (from vision pass):
+- Element: ${identification.element_label}
+- Role: ${identification.element_role || "unknown"}
+- Location: ${identification.element_location || "unknown"}
+- Outcome: ${identification.outcome || "(none)"}
+- Confidence: ${identification.confidence || "unknown"}
+
+ACTION TYPE: ${step.type_.toUpperCase()}${typedTextLine}${userDescription}${ctx}
+
+Write ONE imperative instruction sentence describing what the reader should do in this step. Include the outcome only when it adds clarity AND is not "no visible change" or empty.`;
+    };
+
+    const contextBudget = fitContextEntriesToBudget({
+        contextEntries: previousSteps,
+        buildPromptText: buildText,
+        fixedTextParts: [systemPrompt],
+        includeImage: false,
+        policy,
+    });
+    const userText = buildText(contextBudget.retainedEntries);
+
+    const rateLimitConfig = getRateLimitConfig();
+    let rawContent: string;
+    try {
+        rawContent = await requestAiChatCompletion(
+            openaiBaseUrl,
+            openaiApiKey,
+            buildChatCompletionBody(policy, openaiModel, [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userText },
+            ]),
+            rateLimitConfig,
+        );
+    } catch (error) {
+        console.warn("[AI Service] Stage B (write) failed; using fallback.", withPolicyDiagnostics(error, policy));
+        return buildStepFallback(step);
+    }
+
+    const stripped = stripReasoningContent(rawContent);
+    return stripped || buildStepFallback(step);
+}
+
+/**
+ * Orchestrator. Runs Stage A then Stage B. If Stage A fails (no parseable
+ * output), falls back to the single-call generateStepDescription path so
+ * the document is never worse than the single-stage flow.
+ *
+ * If Stage A succeeded and a row id is available, persists the identification
+ * JSON via update_step_identified_element so subsequent regenerations skip
+ * the vision call.
+ */
+async function generateStepDescriptionMultiStage(
+    step: Step & { ocr_text?: string; identified_element_json?: string; id?: string },
+    stepNumber: number,
+    totalSteps: number,
+    screenshotBase64: string | null,
+    screenshotAfterBase64: string | null,
+    previousSteps: string[],
+    openaiBaseUrl: string,
+    openaiApiKey: string,
+    aiProviderId: string,
+    openaiModel: string,
+    sendScreenshots: boolean,
+    workflowTitle: string | undefined,
+): Promise<string> {
+    const identification = await identifyElement(
+        step,
+        screenshotBase64,
+        screenshotAfterBase64,
+        openaiBaseUrl,
+        openaiApiKey,
+        aiProviderId,
+        openaiModel,
+        sendScreenshots,
+        workflowTitle,
+    );
+
+    if (!identification) {
+        // Fall back to single-call path so the user never loses a step output.
+        return generateStepDescription(
+            step,
+            stepNumber,
+            totalSteps,
+            screenshotBase64,
+            screenshotAfterBase64,
+            previousSteps,
+            openaiBaseUrl,
+            openaiApiKey,
+            aiProviderId,
+            openaiModel,
+            sendScreenshots,
+            workflowTitle,
+        );
+    }
+
+    // Persist cache for future regenerations. Skip when the step doesn't have
+    // a persisted DB id yet (live recording — will be written when save_steps runs).
+    if (step.id && !step.id.startsWith("temp-") && !step.identified_element_json) {
+        try {
+            await invoke("update_step_identified_element", {
+                stepId: step.id,
+                identifiedElementJson: JSON.stringify(identification),
+            });
+        } catch (error) {
+            // Caching failure is non-fatal.
+            console.warn("[AI Service] Failed to persist Stage A cache:", error);
+        }
+    }
+
+    return writeInstruction(
+        step,
+        identification,
+        previousSteps,
+        openaiBaseUrl,
+        openaiApiKey,
+        aiProviderId,
+        openaiModel,
+        workflowTitle,
+    );
 }
 
 // Generate a title for the documentation based on the workflow
@@ -548,12 +865,15 @@ interface AIConfig {
 }
 
 interface StepLike {
+    /** DB row id, used as the Stage A cache key for multi-stage prompting. */
+    id?: string;
     type_: string;
     x?: number;
     y?: number;
     text?: string;
     timestamp: number;
     screenshot?: string;
+    screenshot_after?: string;
     element_name?: string;
     element_type?: string;
     element_value?: string;
@@ -562,6 +882,9 @@ interface StepLike {
     is_cropped?: boolean;
     ocr_text?: string;
     ocr_status?: string;
+    input_source?: string;
+    identified_element_json?: string;
+    clip_path?: string;
 }
 
 export async function generateDocumentation(steps: StepLike[], config?: AIConfig): Promise<string> {
@@ -572,6 +895,9 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
     const openaiModel = config?.model || storeState.openaiModel;
     const aiProviderId = storeState.aiProvider;
     const sendScreenshotsToAi = storeState.sendScreenshotsToAi;
+    const enableStateDiff = storeState.enableStateDiff !== false;
+    const enableCoherencePass = storeState.enableCoherencePass !== false;
+    const enableMultiStage = storeState.enableMultiStagePrompting === true;
 
     // Get provider configuration to check if API key is required
     const providerConfig = getProvider(storeState.aiProvider);
@@ -593,13 +919,17 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
         throw new Error("No steps to generate documentation from.");
     }
 
-    // Convert all screenshots to base64 first (only if sending screenshots)
+    // Convert all screenshots (and after-frames when present) to base64 upfront.
+    // Skip after-frame resolution entirely when state-diff is disabled.
     const stepsWithBase64 = await Promise.all(
         steps.map(async (step) => ({
             step,
             screenshotBase64: sendScreenshotsToAi && step.screenshot
                 ? await fileToBase64(step.screenshot)
-                : null
+                : null,
+            screenshotAfterBase64: enableStateDiff && sendScreenshotsToAi && step.screenshot_after
+                ? await fileToBase64(step.screenshot_after)
+                : null,
         }))
     );
 
@@ -608,34 +938,42 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
     const rateLimitConfig = getRateLimitConfig();
     try {
         for (let i = 0; i < stepsWithBase64.length; i++) {
-            const { step, screenshotBase64 } = stepsWithBase64[i];
+            const { step, screenshotBase64, screenshotAfterBase64 } = stepsWithBase64[i];
 
             // Apply throttling delay between requests (not before the first one)
             if (i > 0 && rateLimitConfig.enableRequestThrottling && rateLimitConfig.throttleDelayMs > 0) {
                 await sleep(rateLimitConfig.throttleDelayMs);
             }
 
-            // For click steps that haven't been manually cropped, crop image around the click point
-            // For manually cropped steps, capture steps, and type steps, use the image as-is
-            let imageToSend = screenshotBase64;
-            if (sendScreenshotsToAi && step.type_ === 'click' && step.x && step.y && screenshotBase64 && !step.is_cropped) {
-                imageToSend = await cropAroundPoint(screenshotBase64, step.x, step.y, 300);
-            }
-            // For capture steps and manually cropped steps, use full/cropped image as-is
-
-            const description = await generateStepDescription(
-                step,
-                i + 1,
-                steps.length,
-                imageToSend,
-                stepDescriptions.slice(), // Pass previous step descriptions as context
-                openaiBaseUrl,
-                openaiApiKey,
-                aiProviderId,
-                openaiModel,
-                sendScreenshotsToAi,
-                config?.workflowTitle
-            );
+            const description = enableMultiStage
+                ? await generateStepDescriptionMultiStage(
+                      step,
+                      i + 1,
+                      steps.length,
+                      screenshotBase64,
+                      screenshotAfterBase64,
+                      stepDescriptions.slice(),
+                      openaiBaseUrl,
+                      openaiApiKey,
+                      aiProviderId,
+                      openaiModel,
+                      sendScreenshotsToAi,
+                      config?.workflowTitle,
+                  )
+                : await generateStepDescription(
+                      step,
+                      i + 1,
+                      steps.length,
+                      screenshotBase64,
+                      screenshotAfterBase64,
+                      stepDescriptions.slice(),
+                      openaiBaseUrl,
+                      openaiApiKey,
+                      aiProviderId,
+                      openaiModel,
+                      sendScreenshotsToAi,
+                      config?.workflowTitle,
+                  );
             stepDescriptions.push(description);
         }
     } catch (error) {
@@ -643,7 +981,8 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
     }
 
     // Document-wide coherence pass — see generateDocumentationStreaming for rationale.
-    if (stepDescriptions.length > 1) {
+    // Skipped when the user has disabled it in settings (avoids the extra LLM call).
+    if (enableCoherencePass && stepDescriptions.length > 1) {
         try {
             const refined = await refineDocumentCoherence(
                 stepDescriptions,
@@ -703,6 +1042,7 @@ async function generateStepDescriptionStreaming(
     stepNumber: number,
     totalSteps: number,
     screenshotBase64: string | null,
+    screenshotAfterBase64: string | null,
     previousSteps: string[],
     openaiBaseUrl: string,
     openaiApiKey: string,
@@ -722,6 +1062,7 @@ async function generateStepDescriptionStreaming(
         stepNumber,
         totalSteps,
         screenshotBase64,
+        screenshotAfterBase64,
         previousSteps,
         openaiBaseUrl,
         openaiApiKey,
@@ -777,6 +1118,9 @@ export async function generateDocumentationStreaming(
     const openaiModel = config?.model || storeState.openaiModel;
     const aiProviderId = storeState.aiProvider;
     const sendScreenshotsToAi = storeState.sendScreenshotsToAi;
+    const enableStateDiff = storeState.enableStateDiff !== false;
+    const enableCoherencePass = storeState.enableCoherencePass !== false;
+    const enableMultiStage = storeState.enableMultiStagePrompting === true;
 
     const providerConfig = getProvider(storeState.aiProvider);
     const requiresApiKey = providerConfig?.requiresApiKey ?? true;
@@ -797,13 +1141,17 @@ export async function generateDocumentationStreaming(
         throw new Error("No steps to generate documentation from.");
     }
 
-    // Convert all screenshots to base64 first
+    // Convert all screenshots (and after-frames when present) to base64 upfront.
+    // Skip after-frame resolution entirely when state-diff is disabled.
     const stepsWithBase64 = await Promise.all(
         steps.map(async (step) => ({
             step,
             screenshotBase64: sendScreenshotsToAi && step.screenshot
                 ? await fileToBase64(step.screenshot)
-                : null
+                : null,
+            screenshotAfterBase64: enableStateDiff && sendScreenshotsToAi && step.screenshot_after
+                ? await fileToBase64(step.screenshot_after)
+                : null,
         }))
     );
 
@@ -818,35 +1166,55 @@ export async function generateDocumentationStreaming(
 
             callbacks.onStepStart?.(i, steps.length);
 
-            const { step, screenshotBase64 } = stepsWithBase64[i];
+            const { step, screenshotBase64, screenshotAfterBase64 } = stepsWithBase64[i];
 
             // Apply throttling delay between requests
             if (i > 0 && rateLimitConfig.enableRequestThrottling && rateLimitConfig.throttleDelayMs > 0) {
                 await sleep(rateLimitConfig.throttleDelayMs);
             }
 
-            // Crop image for click steps if needed
-            let imageToSend = screenshotBase64;
-            if (sendScreenshotsToAi && step.type_ === 'click' && step.x && step.y && screenshotBase64 && !step.is_cropped) {
-                imageToSend = await cropAroundPoint(screenshotBase64, step.x, step.y, 300);
-            }
-
+            // Send the full screenshot as captured — see generateDocumentation for rationale.
             try {
-                const description = await generateStepDescriptionStreaming(
-                    step,
-                    i + 1,
-                    steps.length,
-                    imageToSend,
-                    stepDescriptions.slice(),
-                    openaiBaseUrl,
-                    openaiApiKey,
-                    aiProviderId,
-                    openaiModel,
-                    sendScreenshotsToAi,
-                    (chunk) => callbacks.onTextChunk?.(i, chunk),
-                    abortSignal,
-                    config?.workflowTitle
-                );
+                let description: string;
+                if (enableMultiStage) {
+                    if (abortSignal?.aborted) {
+                        throw new DOMException("Generation cancelled", "AbortError");
+                    }
+                    description = await generateStepDescriptionMultiStage(
+                        step,
+                        i + 1,
+                        steps.length,
+                        screenshotBase64,
+                        screenshotAfterBase64,
+                        stepDescriptions.slice(),
+                        openaiBaseUrl,
+                        openaiApiKey,
+                        aiProviderId,
+                        openaiModel,
+                        sendScreenshotsToAi,
+                        config?.workflowTitle,
+                    );
+                    // Multi-stage doesn't natively stream — emit the full text
+                    // as one chunk so the UI's streaming view still updates.
+                    callbacks.onTextChunk?.(i, description);
+                } else {
+                    description = await generateStepDescriptionStreaming(
+                        step,
+                        i + 1,
+                        steps.length,
+                        screenshotBase64,
+                        screenshotAfterBase64,
+                        stepDescriptions.slice(),
+                        openaiBaseUrl,
+                        openaiApiKey,
+                        aiProviderId,
+                        openaiModel,
+                        sendScreenshotsToAi,
+                        (chunk) => callbacks.onTextChunk?.(i, chunk),
+                        abortSignal,
+                        config?.workflowTitle,
+                    );
+                }
 
                 stepDescriptions.push(description);
                 callbacks.onStepComplete?.(i, description);
@@ -867,8 +1235,9 @@ export async function generateDocumentationStreaming(
     // Document-wide coherence pass: take the per-step output and rewrite it so
     // the guide reads as a connected walkthrough (transitions, references to
     // earlier steps, less robotic repetition). Falls back to per-step output
-    // on any failure so the result is never worse than before.
-    if (stepDescriptions.length > 1) {
+    // on any failure so the result is never worse than before. Honors the
+    // user's enableCoherencePass setting.
+    if (enableCoherencePass && stepDescriptions.length > 1) {
         callbacks.onPolishStart?.();
         try {
             const refined = await refineDocumentCoherence(

@@ -49,6 +49,12 @@ interface SettingsState {
     initialRetryDelayMs: number;
     enableRequestThrottling: boolean;
     throttleDelayMs: number;
+    // Generation pipeline toggles (Phase 6 / 8a)
+    enableStateDiff: boolean;
+    enableCoherencePass: boolean;
+    enableMultiStagePrompting: boolean;
+    afterFrameMaxWaitMs: number;
+    enableVideoClips: boolean;
     startRecordingHotkey: HotkeyBinding;
     stopRecordingHotkey: HotkeyBinding;
     captureHotkey: HotkeyBinding;
@@ -73,6 +79,11 @@ interface SettingsState {
     setInitialRetryDelayMs: (delay: number) => void;
     setEnableRequestThrottling: (enabled: boolean) => void;
     setThrottleDelayMs: (delay: number) => void;
+    setEnableStateDiff: (enabled: boolean) => void;
+    setEnableCoherencePass: (enabled: boolean) => void;
+    setEnableMultiStagePrompting: (enabled: boolean) => void;
+    setAfterFrameMaxWaitMs: (ms: number) => void;
+    setEnableVideoClips: (enabled: boolean) => void;
     setStartRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setStopRecordingHotkey: (hotkey: HotkeyBinding) => void;
     setCaptureHotkey: (hotkey: HotkeyBinding) => void;
@@ -139,6 +150,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     initialRetryDelayMs: defaultInitialRetryDelayMs,
     enableRequestThrottling: defaultEnableRequestThrottling,
     throttleDelayMs: defaultThrottleDelayMs,
+    enableStateDiff: true,
+    enableCoherencePass: true,
+    enableMultiStagePrompting: false,
+    afterFrameMaxWaitMs: 2000,
+    enableVideoClips: false,
     startRecordingHotkey: defaultStartHotkey,
     stopRecordingHotkey: defaultStopHotkey,
     captureHotkey: defaultCaptureHotkey,
@@ -197,6 +213,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     setInitialRetryDelayMs: (delay) => set({ initialRetryDelayMs: Math.max(100, Math.min(5000, delay)) }),
     setEnableRequestThrottling: (enabled) => set({ enableRequestThrottling: enabled }),
     setThrottleDelayMs: (delay) => set({ throttleDelayMs: Math.max(0, Math.min(5000, delay)) }),
+    setEnableStateDiff: (enabled) => set({ enableStateDiff: enabled }),
+    setEnableCoherencePass: (enabled) => set({ enableCoherencePass: enabled }),
+    setEnableMultiStagePrompting: (enabled) => set({ enableMultiStagePrompting: enabled }),
+    setAfterFrameMaxWaitMs: (ms) => set({ afterFrameMaxWaitMs: Math.max(500, Math.min(5000, Math.round(ms))) }),
+    setEnableVideoClips: (enabled) => set({ enableVideoClips: enabled }),
     setStartRecordingHotkey: (hotkey) => set({ startRecordingHotkey: hotkey }),
     setStopRecordingHotkey: (hotkey) => set({ stopRecordingHotkey: hotkey }),
     setCaptureHotkey: (hotkey) => set({ captureHotkey: hotkey }),
@@ -230,6 +251,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 initialRetryDelayMs,
                 enableRequestThrottling,
                 throttleDelayMs,
+                enableStateDiff,
+                enableCoherencePass,
+                enableMultiStagePrompting,
+                afterFrameMaxWaitMs,
+                enableVideoClips,
                 startHotkey,
                 stopHotkey,
                 captureHotkey,
@@ -250,6 +276,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 store.get<number>("initialRetryDelayMs"),
                 store.get<boolean>("enableRequestThrottling"),
                 store.get<number>("throttleDelayMs"),
+                store.get<boolean>("enableStateDiff"),
+                store.get<boolean>("enableCoherencePass"),
+                store.get<boolean>("enableMultiStagePrompting"),
+                store.get<number>("afterFrameMaxWaitMs"),
+                store.get<boolean>("enableVideoClips"),
                 store.get<HotkeyBinding>("startRecordingHotkey"),
                 store.get<HotkeyBinding>("stopRecordingHotkey"),
                 store.get<HotkeyBinding>("captureHotkey"),
@@ -293,6 +324,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 initialRetryDelayMs: initialRetryDelayMs ?? defaultInitialRetryDelayMs,
                 enableRequestThrottling: enableRequestThrottling ?? defaultEnableRequestThrottling,
                 throttleDelayMs: throttleDelayMs ?? defaultThrottleDelayMs,
+                enableStateDiff: enableStateDiff ?? true,
+                enableCoherencePass: enableCoherencePass ?? true,
+                enableMultiStagePrompting: enableMultiStagePrompting ?? false,
+                afterFrameMaxWaitMs: typeof afterFrameMaxWaitMs === "number" && afterFrameMaxWaitMs > 0
+                    ? Math.max(500, Math.min(5000, Math.round(afterFrameMaxWaitMs)))
+                    : 2000,
+                enableVideoClips: enableVideoClips ?? false,
                 startRecordingHotkey: startHotkey || defaultStartHotkey,
                 stopRecordingHotkey: stopHotkey || defaultStopHotkey,
                 captureHotkey: captureHotkey || defaultCaptureHotkey,
@@ -313,6 +351,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const {
             screenshotPath,
             sendScreenshotsToAi,
+            enableStateDiff,
+            afterFrameMaxWaitMs,
+            enableVideoClips,
             startRecordingHotkey,
             stopRecordingHotkey,
             captureHotkey,
@@ -336,6 +377,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         } catch (error) {
             ocrSync = false;
             console.error("Failed to sync OCR state with backend:", error);
+        }
+
+        // Push the recorder-relevant generation-pipeline toggles. Failures here are
+        // non-fatal — recorder reads defaults until next sync succeeds.
+        try {
+            await invoke("set_state_diff_enabled", { enabled: enableStateDiff });
+        } catch (error) {
+            console.error("Failed to sync state-diff toggle with backend:", error);
+        }
+        try {
+            await invoke("set_after_frame_max_wait_ms", { ms: afterFrameMaxWaitMs });
+        } catch (error) {
+            console.error("Failed to sync after-frame wait cap with backend:", error);
+        }
+        try {
+            await invoke("set_video_clips_enabled", { enabled: enableVideoClips });
+        } catch (error) {
+            console.error("Failed to sync video-clips toggle with backend:", error);
         }
 
         try {
@@ -378,6 +437,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 initialRetryDelayMs,
                 enableRequestThrottling,
                 throttleDelayMs,
+                enableStateDiff,
+                enableCoherencePass,
+                enableMultiStagePrompting,
+                afterFrameMaxWaitMs,
+                enableVideoClips,
                 startRecordingHotkey,
                 stopRecordingHotkey,
                 captureHotkey,
@@ -399,6 +463,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             await store.set("initialRetryDelayMs", initialRetryDelayMs);
             await store.set("enableRequestThrottling", enableRequestThrottling);
             await store.set("throttleDelayMs", throttleDelayMs);
+            await store.set("enableStateDiff", enableStateDiff);
+            await store.set("enableCoherencePass", enableCoherencePass);
+            await store.set("enableMultiStagePrompting", enableMultiStagePrompting);
+            await store.set("afterFrameMaxWaitMs", afterFrameMaxWaitMs);
+            await store.set("enableVideoClips", enableVideoClips);
             await store.set("startRecordingHotkey", startRecordingHotkey);
             await store.set("stopRecordingHotkey", stopRecordingHotkey);
             await store.set("captureHotkey", captureHotkey);

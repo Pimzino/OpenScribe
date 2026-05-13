@@ -29,6 +29,8 @@ import { useRecorderStore } from "../store/recorderStore";
 import { useGenerationStore } from "../store/generationStore";
 import { useRecordingsStore, Step as DBStep } from "../store/recordingsStore";
 import { useSettingsStore } from "../store/settingsStore";
+import { useToastStore } from "../store/toastStore";
+import { log, describeError } from "../lib/logger";
 
 const StepsTab = lazy(() => import("./recording-detail/StepsTab"));
 const DocumentationEditor = lazy(() => import("./recording-detail/DocumentationEditor"));
@@ -85,7 +87,7 @@ export default function RecordingDetail() {
     const [isEditing, setIsEditing] = useState(false);
     const [editedContent, setEditedContent] = useState("");
     const [error, setError] = useState<string | null>(null);
-    const [croppingStepId, setCroppingStepId] = useState<string | null>(null);
+    const [croppingStep, setCroppingStep] = useState<{ stepId: string; target: "before" | "after" } | null>(null);
     const [cropTimestamps, setCropTimestamps] = useState<Record<string, number>>({});
 
     const [localSteps, setLocalSteps] = useState<DBStep[]>([]);
@@ -100,6 +102,10 @@ export default function RecordingDetail() {
     const [nameSaving, setNameSaving] = useState(false);
     const hasTriggeredGeneration = useRef(false);
     const descriptionSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+    // During recording, `new-step` events arrive with the recorder's UUID,
+    // but we store local steps under fresh `temp-...` IDs. This map lets the
+    // `new-step-after` listener find the corresponding local step to update.
+    const recorderIdToTempId = useRef<Map<string, string>>(new Map());
 
     useEffect(() => {
         if (id) {
@@ -108,10 +114,13 @@ export default function RecordingDetail() {
     }, [id, getRecording]);
 
     useEffect(() => {
-        const timers = descriptionSaveTimers.current;
+        const descTimers = descriptionSaveTimers.current;
+        const titleTimers = titleSaveTimers.current;
         return () => {
-            timers.forEach(clearTimeout);
-            timers.clear();
+            descTimers.forEach(clearTimeout);
+            descTimers.clear();
+            titleTimers.forEach(clearTimeout);
+            titleTimers.clear();
         };
     }, [id]);
 
@@ -188,6 +197,10 @@ export default function RecordingDetail() {
         const unlistenStep = listen<any>("new-step", async (event) => {
             const newStep = event.payload;
             const tempId = `temp-${Date.now()}-${Math.random()}`;
+            const recorderId: string | undefined = newStep.id;
+            if (recorderId) {
+                recorderIdToTempId.current.set(recorderId, tempId);
+            }
 
             let finalScreenshotPath = newStep.screenshot;
             if (newStep.screenshot) {
@@ -211,6 +224,47 @@ export default function RecordingDetail() {
                 setInsertPosition((previousValue) => previousValue! + 1);
             }
 
+            setHasUnsavedChanges(true);
+        });
+
+        // After-frame capture: the recorder emits this ~700ms after each new-step
+        // (for non-capture steps). Match it back to the in-memory localStep by the
+        // recorder's UUID, copy the temp file to permanent storage, and update.
+        type StepAfterPayload = { step_id: string; after_screenshot_path: string };
+        const unlistenStepAfter = listen<StepAfterPayload>("new-step-after", async (event) => {
+            const { step_id, after_screenshot_path } = event.payload;
+            const tempId = recorderIdToTempId.current.get(step_id);
+            if (!tempId || !after_screenshot_path) return;
+
+            // Move the temp file to permanent storage (same path scheme as the
+            // primary screenshot) so the URL stays valid across app restarts.
+            const permanentPath = await copyScreenshotToPermanent(after_screenshot_path);
+
+            setLocalSteps((previousSteps) =>
+                previousSteps.map((step) =>
+                    step.id === tempId
+                        ? { ...step, screenshot_after_path: permanentPath }
+                        : step,
+                ),
+            );
+            setHasUnsavedChanges(true);
+        });
+
+        // Video clip capture (8a) — animated GIF capturing the ~2s after the event.
+        // Gated by the enableVideoClips setting in the recorder.
+        type StepClipPayload = { step_id: string; clip_path: string };
+        const unlistenStepClip = listen<StepClipPayload>("new-step-clip", async (event) => {
+            const { step_id, clip_path } = event.payload;
+            const tempId = recorderIdToTempId.current.get(step_id);
+            if (!tempId || !clip_path) return;
+            const permanentPath = await copyScreenshotToPermanent(clip_path);
+            setLocalSteps((previousSteps) =>
+                previousSteps.map((step) =>
+                    step.id === tempId
+                        ? { ...step, clip_path: permanentPath }
+                        : step,
+                ),
+            );
             setHasUnsavedChanges(true);
         });
 
@@ -242,7 +296,11 @@ export default function RecordingDetail() {
 
         return () => {
             unlistenStep.then((stopListening) => stopListening());
+            unlistenStepAfter.then((stopListening) => stopListening());
+            unlistenStepClip.then((stopListening) => stopListening());
             unlistenManualCapture.then((stopListening) => stopListening());
+            // Clear the lookup table so a subsequent recording session starts fresh.
+            recorderIdToTempId.current.clear();
         };
     }, [isRecording, insertPosition, id, currentRecording, screenshotPath]);
 
@@ -281,7 +339,14 @@ export default function RecordingDetail() {
             onDocumentUpdate: (markdown) => updateDocument(markdown),
             onPolishStart: () => startPolishing(),
             onPolishComplete: (refined) => finishPolishing(refined),
-            onError: (index, generationError) => setStepError(index, generationError.message),
+            onError: (index, generationError) => {
+                log.ai.error("Per-step generation failed", {
+                    recordingId: targetRecordingId,
+                    stepIndex: index,
+                    ...describeError(generationError).metadata,
+                });
+                setStepError(index, generationError.message);
+            },
             onComplete: async (finalMarkdown) => {
                 const generationState = useGenerationStore.getState();
                 if (generationState.recordingId !== targetRecordingId) {
@@ -315,7 +380,25 @@ export default function RecordingDetail() {
                 return;
             }
 
-            const errorMessage = generationError instanceof Error ? generationError.message : "Failed to regenerate documentation";
+            const described = describeError(generationError);
+            const errorMessage = described.message || "Failed to regenerate documentation";
+            log.ai.error("Documentation generation failed", {
+                recordingId: targetRecordingId,
+                recordingName: targetRecordingName,
+                stepCount: steps.length,
+                model: openaiModel,
+                ...described.metadata,
+            });
+            // Surface the full provider error as a persistent toast so the user
+            // can read it and copy it to a bug report. The same message is now
+            // also on disk under <appdata>/stepsnap/logs/ai.<date>.log.
+            useToastStore.getState().showToast({
+                title: "AI generation failed",
+                message: errorMessage,
+                variant: "error",
+                durationMs: 15000,
+                persist: true,
+            });
             setError(errorMessage);
             setShowRegenerationModal(false);
             resetGeneration();
@@ -435,6 +518,7 @@ export default function RecordingDetail() {
 
     const handleSelectInsertPosition = (index: number) => {
         setInsertPosition(index);
+        setIsSelectingPosition(true);
     };
 
     const togglePositionSelection = () => {
@@ -501,6 +585,7 @@ export default function RecordingDetail() {
                     text: step.text,
                     timestamp: step.timestamp,
                     screenshot: step.screenshot_path,
+                    screenshot_after: step.screenshot_after_path,
                     element_name: step.element_name,
                     element_type: step.element_type,
                     element_value: step.element_value,
@@ -509,6 +594,9 @@ export default function RecordingDetail() {
                     is_cropped: step.is_cropped,
                     order_index: index,
                     screenshot_is_permanent: true,
+                    input_source: step.input_source,
+                    identified_element_json: step.identified_element_json,
+                    clip_path: step.clip_path,
                 }));
 
             if (stepsToSave.length > 0) {
@@ -606,28 +694,38 @@ export default function RecordingDetail() {
     };
 
     const handleCropSave = async (croppedImageBase64: string) => {
-        if (!croppingStepId || !currentRecording) {
+        if (!croppingStep || !currentRecording) {
             return;
         }
 
-        const step = currentRecording.steps.find((currentStep) => currentStep.id === croppingStepId);
-        if (!step?.screenshot_path) {
+        const stepId = croppingStep.stepId;
+        const target = croppingStep.target;
+        const step = currentRecording.steps.find((currentStep) => currentStep.id === stepId);
+        const targetPath = target === "after" ? step?.screenshot_after_path : step?.screenshot_path;
+        if (!step || !targetPath) {
             return;
         }
 
         try {
             await invoke("save_cropped_image", {
-                path: step.screenshot_path,
+                path: targetPath,
                 base64Data: croppedImageBase64,
             });
 
-            await invoke("update_step_screenshot", {
-                stepId: croppingStepId,
-                screenshotPath: step.screenshot_path,
-                isCropped: true,
-            });
+            if (target === "after") {
+                await invoke("update_step_after_screenshot", {
+                    stepId,
+                    screenshotAfterPath: targetPath,
+                });
+            } else {
+                await invoke("update_step_screenshot", {
+                    stepId,
+                    screenshotPath: targetPath,
+                    isCropped: true,
+                });
+            }
 
-            setCropTimestamps((previousTimestamps) => ({ ...previousTimestamps, [croppingStepId]: Date.now() }));
+            setCropTimestamps((previousTimestamps) => ({ ...previousTimestamps, [stepId]: Date.now() }));
 
             if (id) {
                 await getRecording(id);
@@ -637,7 +735,7 @@ export default function RecordingDetail() {
             setError(cropError instanceof Error ? cropError.message : "Failed to save cropped image");
         }
 
-        setCroppingStepId(null);
+        setCroppingStep(null);
     };
 
     const handleStartEditName = () => {
@@ -690,9 +788,14 @@ export default function RecordingDetail() {
         }
     };
 
-    const croppingStep = croppingStepId
-        ? currentRecording?.steps.find((step) => step.id === croppingStepId)
+    const croppingStepRow = croppingStep
+        ? currentRecording?.steps.find((step) => step.id === croppingStep.stepId)
         : null;
+    const croppingSourcePath = croppingStep
+        ? (croppingStep.target === "after"
+            ? croppingStepRow?.screenshot_after_path
+            : croppingStepRow?.screenshot_path)
+        : undefined;
 
     const isDocumentationStale = !!(
         currentRecording?.recording.documentation &&
@@ -728,12 +831,12 @@ export default function RecordingDetail() {
         <div className="flex h-screen text-white">
             <Sidebar activePage="recording-detail" onNavigate={handleNavigate} />
 
-            {croppingStep?.screenshot_path && (
+            {croppingSourcePath && (
                 <Suspense fallback={<DeferredModalFallback label="Loading image editor..." />}>
                     <LazyImageEditor
-                        imageSrc={convertFileSrc(croppingStep.screenshot_path)}
+                        imageSrc={convertFileSrc(croppingSourcePath)}
                         onSave={handleCropSave}
-                        onCancel={() => setCroppingStepId(null)}
+                        onCancel={() => setCroppingStep(null)}
                     />
                 </Suspense>
             )}
@@ -1033,9 +1136,12 @@ export default function RecordingDetail() {
                             onDeleteStep={(stepId) => {
                                 void handleDeleteStep(stepId);
                             }}
-                            onCropStep={setCroppingStepId}
+                            onCropStep={(stepId, target) => setCroppingStep({ stepId, target })}
                             onUpdateDescription={(stepId, description) => {
                                 void handleUpdateDescription(stepId, description);
+                            }}
+                            onUpdateTitle={(stepId, title) => {
+                                void handleUpdateTitle(stepId, title);
                             }}
                             onSelectInsertPosition={handleSelectInsertPosition}
                             onReorder={handleReorderSteps}

@@ -8,6 +8,7 @@ export interface Step {
     text?: string;
     timestamp: number;
     screenshot?: string; // File path
+    screenshot_after?: string; // After-frame file path (state-diff)
     element_name?: string;
     element_type?: string;
     element_value?: string;
@@ -16,6 +17,8 @@ export interface Step {
     is_cropped?: boolean;
     ocr_text?: string;
     ocr_status?: string;
+    input_source?: string;
+    clip_path?: string;
 }
 
 interface RecorderState {
@@ -26,6 +29,7 @@ interface RecorderState {
     removeStep: (index: number) => void;
     clearSteps: () => void;
     updateStepDescription: (index: number, description: string) => void;
+    updateStepTitle: (index: number, title: string) => void;
     updateStepScreenshot: (index: number, screenshot: string, is_cropped: boolean) => void;
     updateStepOcr: (stepId: string, ocrText: string | null, ocrStatus: string) => void;
     reorderSteps: (sourceIndex: number, destinationIndex: number) => void;
@@ -41,6 +45,11 @@ export const useRecorderStore = create<RecorderState>((set) => ({
     updateStepDescription: (index, description) => set((state) => ({
         steps: state.steps.map((step, i) =>
             i === index ? { ...step, description } : step
+        )
+    })),
+    updateStepTitle: (index, title) => set((state) => ({
+        steps: state.steps.map((step, i) =>
+            i === index ? { ...step, title } : step
         )
     })),
     updateStepScreenshot: (index, screenshot, is_cropped) => set((state) => ({

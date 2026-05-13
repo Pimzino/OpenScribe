@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { log, describeError } from "./logger";
 
 export type AIProviderId =
     | "openai"
@@ -110,16 +111,34 @@ export async function testConnection(
     apiKey: string,
     requiresApiKey: boolean
 ): Promise<TestConnectionResult> {
+    log.ai.info("Testing AI provider connection", { baseUrl, requiresApiKey });
     try {
-        return await invoke<TestConnectionResult>("ai_test_connection", {
+        const result = await invoke<TestConnectionResult>("ai_test_connection", {
             baseUrl,
             apiKey,
             requiresApiKey,
         });
+        if (result.success) {
+            log.ai.info("Provider connection succeeded", {
+                baseUrl,
+                modelCount: result.models?.length ?? 0,
+            });
+        } else {
+            log.ai.warn("Provider connection reported failure", {
+                baseUrl,
+                providerMessage: result.message,
+            });
+        }
+        return result;
     } catch (error) {
+        const described = describeError(error);
+        log.ai.error("Provider connection threw", {
+            baseUrl,
+            ...described.metadata,
+        });
         return {
             success: false,
-            message: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            message: `Connection failed: ${described.message || 'Unknown error'}`,
         };
     }
 }
@@ -130,13 +149,20 @@ export async function fetchModels(
     apiKey: string,
     requiresApiKey: boolean
 ): Promise<string[]> {
+    log.ai.info("Fetching models from provider", { baseUrl, requiresApiKey });
     try {
-        return await invoke<string[]>("ai_fetch_models", {
+        const models = await invoke<string[]>("ai_fetch_models", {
             baseUrl,
             apiKey,
             requiresApiKey,
         });
-    } catch {
+        log.ai.info("Fetched models", { baseUrl, count: models.length });
+        return models;
+    } catch (error) {
+        log.ai.error("Failed to fetch models", {
+            baseUrl,
+            ...describeError(error).metadata,
+        });
         return [];
     }
 }

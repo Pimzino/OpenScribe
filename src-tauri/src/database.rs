@@ -42,6 +42,18 @@ pub struct Step {
     pub is_cropped: Option<bool>,
     pub ocr_text: Option<String>,
     pub ocr_status: Option<String>,
+    /// Where the type-step text came from. See recorder.rs::Step::input_source.
+    pub input_source: Option<String>,
+    /// Path to the after-frame screenshot captured ~700ms after the event,
+    /// used by the AI prompt for state-diff context. None for older steps
+    /// and for capture-type steps.
+    pub screenshot_after_path: Option<String>,
+    /// JSON cache of the Stage A "element identification" output from the
+    /// two-stage prompting pipeline. Skipped/regenerated when the primary
+    /// screenshot path changes.
+    pub identified_element_json: Option<String>,
+    /// Path to the short animated clip captured around this event (Phase 8a).
+    pub clip_path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,6 +73,14 @@ pub struct StepInput {
     pub order_index: Option<i32>,
     /// If true, the screenshot path is already in permanent storage (no copy needed)
     pub screenshot_is_permanent: Option<bool>,
+    #[serde(default)]
+    pub input_source: Option<String>,
+    #[serde(default)]
+    pub screenshot_after: Option<String>,
+    #[serde(default)]
+    pub identified_element_json: Option<String>,
+    #[serde(default)]
+    pub clip_path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -194,6 +214,58 @@ impl Database {
                 "ALTER TABLE steps ADD COLUMN ocr_status TEXT DEFAULT 'pending'",
                 [],
             )?;
+        }
+
+        // Migration: Add input_source column if it doesn't exist.
+        // Records where a type-step's text came from: "keystrokes" | "ax_value"
+        // | "ax_text" | "ax_legacy" | "password". Diagnostic only.
+        let has_input_source: bool = self
+            .conn
+            .prepare("SELECT input_source FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_input_source {
+            self.conn
+                .execute("ALTER TABLE steps ADD COLUMN input_source TEXT", [])?;
+        }
+
+        // Migration: Add screenshot_after_path column for state-diff after-frames.
+        let has_screenshot_after: bool = self
+            .conn
+            .prepare("SELECT screenshot_after_path FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_screenshot_after {
+            self.conn.execute(
+                "ALTER TABLE steps ADD COLUMN screenshot_after_path TEXT",
+                [],
+            )?;
+        }
+
+        // Migration: Add identified_element_json column. Cache for Stage A of
+        // the two-stage prompting pipeline (6a). Storing the JSON lets us skip
+        // the vision call on regenerations.
+        let has_identified: bool = self
+            .conn
+            .prepare("SELECT identified_element_json FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_identified {
+            self.conn.execute(
+                "ALTER TABLE steps ADD COLUMN identified_element_json TEXT",
+                [],
+            )?;
+        }
+
+        // Migration: Add clip_path column (8a — short video/animated clips).
+        let has_clip_path: bool = self
+            .conn
+            .prepare("SELECT clip_path FROM steps LIMIT 1")
+            .is_ok();
+
+        if !has_clip_path {
+            self.conn
+                .execute("ALTER TABLE steps ADD COLUMN clip_path TEXT", [])?;
         }
 
         // Migration: Add documentation_generated_at column to recordings if it doesn't exist
@@ -360,8 +432,8 @@ impl Database {
             };
 
             self.conn.execute(
-                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped, input_source, screenshot_after_path, identified_element_json, clip_path)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
                 params![
                     step_id,
                     recording_id,
@@ -377,7 +449,11 @@ impl Database {
                     step.app_name,
                     index as i32,
                     step.description,
-                    step.is_cropped.unwrap_or(false) as i32
+                    step.is_cropped.unwrap_or(false) as i32,
+                    step.input_source,
+                    step.screenshot_after,
+                    step.identified_element_json,
+                    step.clip_path,
                 ],
             )?;
         }
@@ -441,8 +517,8 @@ impl Database {
             let final_order_index = step.order_index.unwrap_or(index as i32);
 
             self.conn.execute(
-                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                "INSERT INTO steps (id, recording_id, type_, x, y, text, timestamp, screenshot_path, element_name, element_type, element_value, app_name, order_index, description, is_cropped, input_source, screenshot_after_path, identified_element_json, clip_path)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
                 params![
                     step_id,
                     recording_id,
@@ -458,7 +534,11 @@ impl Database {
                     step.app_name,
                     final_order_index,
                     step.description,
-                    step.is_cropped.unwrap_or(false) as i32
+                    step.is_cropped.unwrap_or(false) as i32,
+                    step.input_source,
+                    step.screenshot_after,
+                    step.identified_element_json,
+                    step.clip_path,
                 ],
             )?;
         }
@@ -613,7 +693,8 @@ impl Database {
                 let mut stmt = self.conn.prepare(
                     "SELECT id, recording_id, type_, x, y, text, timestamp, screenshot_path,
                             element_name, element_type, element_value, app_name, order_index, description, is_cropped,
-                            ocr_text, ocr_status
+                            ocr_text, ocr_status, input_source, screenshot_after_path,
+                            identified_element_json, clip_path
                      FROM steps WHERE recording_id = ?1 ORDER BY order_index"
                 )?;
 
@@ -637,6 +718,10 @@ impl Database {
                             is_cropped: row.get::<_, Option<i32>>(14)?.map(|v| v != 0),
                             ocr_text: row.get(15)?,
                             ocr_status: row.get(16)?,
+                            input_source: row.get(17)?,
+                            screenshot_after_path: row.get(18)?,
+                            identified_element_json: row.get(19)?,
+                            clip_path: row.get(20)?,
                         })
                     })?
                     .collect::<Result<Vec<_>>>()?;
@@ -736,6 +821,14 @@ impl Database {
         Ok(())
     }
 
+    pub fn update_step_title(&self, step_id: &str, title: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE steps SET title = ?1 WHERE id = ?2",
+            params![title, step_id],
+        )?;
+        Ok(())
+    }
+
     pub fn delete_step(&self, step_id: &str) -> Result<()> {
         // Get screenshot path before deleting
         let screenshot_path: Option<String> = self
@@ -756,6 +849,42 @@ impl Database {
         self.conn
             .execute("DELETE FROM steps WHERE id = ?1", params![step_id])?;
 
+        Ok(())
+    }
+
+    pub fn update_step_after_screenshot(
+        &self,
+        step_id: &str,
+        screenshot_after_path: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE steps SET screenshot_after_path = ?1 WHERE id = ?2",
+            params![screenshot_after_path, step_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_step_identified_element(
+        &self,
+        step_id: &str,
+        identified_element_json: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE steps SET identified_element_json = ?1 WHERE id = ?2",
+            params![identified_element_json, step_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_step_clip_path(
+        &self,
+        step_id: &str,
+        clip_path: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE steps SET clip_path = ?1 WHERE id = ?2",
+            params![clip_path, step_id],
+        )?;
         Ok(())
     }
 
@@ -909,6 +1038,10 @@ mod tests {
             is_cropped: Some(false),
             order_index: Some(0),
             screenshot_is_permanent,
+            input_source: None,
+            screenshot_after: None,
+            identified_element_json: None,
+            clip_path: None,
         }
     }
 

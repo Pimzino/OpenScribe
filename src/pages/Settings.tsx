@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSettingsStore, HotkeyBinding } from "../store/settingsStore";
-import { Eye, EyeOff, FolderOpen, RotateCcw, ChevronDown, RefreshCw, Check, X, ExternalLink } from "lucide-react";
+import { Eye, EyeOff, FolderOpen, RotateCcw, ChevronDown, RefreshCw, Check, X, ExternalLink, FileText } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
@@ -36,6 +36,11 @@ export default function Settings() {
         initialRetryDelayMs,
         enableRequestThrottling,
         throttleDelayMs,
+        enableStateDiff,
+        enableCoherencePass,
+        enableMultiStagePrompting,
+        afterFrameMaxWaitMs,
+        enableVideoClips,
         startRecordingHotkey,
         stopRecordingHotkey,
         captureHotkey,
@@ -59,6 +64,11 @@ export default function Settings() {
         setInitialRetryDelayMs,
         setEnableRequestThrottling,
         setThrottleDelayMs,
+        setEnableStateDiff,
+        setEnableCoherencePass,
+        setEnableMultiStagePrompting,
+        setAfterFrameMaxWaitMs,
+        setEnableVideoClips,
         setStartRecordingHotkey,
         setStopRecordingHotkey,
         setCaptureHotkey,
@@ -365,6 +375,33 @@ export default function Settings() {
                                     Screenshots will be saved in subfolders named after each recording
                                 </p>
                             </div>
+
+                            {/* Logs */}
+                            <div className="mt-4">
+                                <label className="block text-sm font-medium text-white/80 mb-2">
+                                    Application Logs
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const dir = await invoke<string>("ensure_logs_dir");
+                                                const { openPath } = await import("@tauri-apps/plugin-opener");
+                                                await openPath(dir);
+                                            } catch (err) {
+                                                console.error("Failed to open logs folder", err);
+                                            }
+                                        }}
+                                        className="px-3 py-2 bg-white/10 border border-white/10 rounded-md hover:bg-white/15 transition-colors text-sm text-white inline-flex items-center gap-2"
+                                    >
+                                        <FileText size={14} />
+                                        Open logs folder
+                                    </button>
+                                </div>
+                                <p className="mt-1 text-xs text-white/50">
+                                    Logs are split per category (ai, recorder, database, etc.) and rotated daily. Files older than 30 days are deleted automatically.
+                                </p>
+                            </div>
                         </div>
 
                         {/* AI Section */}
@@ -620,6 +657,143 @@ export default function Settings() {
                                     />
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Generation Pipeline Section */}
+                        <div className="mt-6 border-t border-white/8 pt-6">
+                            <h4 className="text-sm font-medium text-white/80 mb-2">
+                                Generation Pipeline
+                            </h4>
+                            <p className="text-xs text-white/50 mb-4">
+                                Control which AI passes run when generating documentation. Each pass adds one LLM call per recording.
+                            </p>
+
+                            {/* State diff (after-frame) toggle */}
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="pr-4">
+                                    <label className="block text-sm font-medium text-white/80">
+                                        State diff (after-frames)
+                                    </label>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        Capture a second screenshot ~700ms after each click/type and send both frames to the AI so it can describe the outcome. Roughly doubles vision tokens per step.
+                                    </p>
+                                </div>
+                                <button
+                                    aria-label={`State diff: ${enableStateDiff ? 'enabled' : 'disabled'}`}
+                                    onClick={() => setEnableStateDiff(!enableStateDiff)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                                        enableStateDiff ? 'bg-[#2721E8]' : 'bg-white/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            enableStateDiff ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {/* Coherence pass toggle */}
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="pr-4">
+                                    <label className="block text-sm font-medium text-white/80">
+                                        Coherence pass
+                                    </label>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        After all steps are generated, run one final LLM call to rewrite them as a connected guide with natural transitions. Adds one LLM call per recording.
+                                    </p>
+                                </div>
+                                <button
+                                    aria-label={`Coherence pass: ${enableCoherencePass ? 'enabled' : 'disabled'}`}
+                                    onClick={() => setEnableCoherencePass(!enableCoherencePass)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                                        enableCoherencePass ? 'bg-[#2721E8]' : 'bg-white/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            enableCoherencePass ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {/* Multi-stage prompting toggle */}
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="pr-4">
+                                    <label className="block text-sm font-medium text-white/80">
+                                        Multi-stage prompting (experimental)
+                                    </label>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        Split each step into a vision identification call + a text-only writing call. Slower and costlier but typically more accurate when element metadata is sparse.
+                                    </p>
+                                </div>
+                                <button
+                                    aria-label={`Multi-stage prompting: ${enableMultiStagePrompting ? 'enabled' : 'disabled'}`}
+                                    onClick={() => setEnableMultiStagePrompting(!enableMultiStagePrompting)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                                        enableMultiStagePrompting ? 'bg-[#2721E8]' : 'bg-white/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            enableMultiStagePrompting ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {/* Video clips toggle */}
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="pr-4">
+                                    <label className="block text-sm font-medium text-white/80">
+                                        Capture short video clips (experimental)
+                                    </label>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        Keep a continuous frame buffer during recording and save a short animated clip around each event. Adds ~10-15 MB per recording and modest CPU overhead.
+                                    </p>
+                                </div>
+                                <button
+                                    aria-label={`Video clips: ${enableVideoClips ? 'enabled' : 'disabled'}`}
+                                    onClick={() => setEnableVideoClips(!enableVideoClips)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                                        enableVideoClips ? 'bg-[#2721E8]' : 'bg-white/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            enableVideoClips ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {/* After-frame settling cap */}
+                            {enableStateDiff && (
+                                <div className="mb-2">
+                                    <label className="block text-sm font-medium text-white/80 mb-1">
+                                        After-frame settling cap
+                                    </label>
+                                    <p className="text-xs text-white/50 mb-3">
+                                        Maximum time to wait for the UI to stabilise after an event before capturing the after-frame. Longer caps catch slower animations but increase background CPU briefly.
+                                    </p>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="range"
+                                            min={500}
+                                            max={5000}
+                                            step={100}
+                                            value={afterFrameMaxWaitMs}
+                                            onChange={(e) => setAfterFrameMaxWaitMs(Number(e.target.value))}
+                                            className="flex-1"
+                                            aria-label="After-frame settling cap in milliseconds"
+                                        />
+                                        <span className="text-sm text-white/70 tabular-nums w-16 text-right">
+                                            {afterFrameMaxWaitMs} ms
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Rate Limit Mitigation Section */}

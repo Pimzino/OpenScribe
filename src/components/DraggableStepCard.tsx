@@ -2,7 +2,7 @@ import { useState, useMemo, memo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { X, Pencil, GripVertical, ImageOff } from "lucide-react";
+import { Trash2, Pencil, GripVertical, ImageOff } from "lucide-react";
 import Tooltip from "./Tooltip";
 import Spinner from "./Spinner";
 import ImageViewer from "./ImageViewer";
@@ -15,12 +15,16 @@ interface Step {
     timestamp: number;
     screenshot?: string; // For NewRecording page
     screenshot_path?: string; // For RecordingDetail page
+    screenshot_after?: string; // For NewRecording page (after-frame)
+    screenshot_after_path?: string; // For RecordingDetail page (after-frame)
     element_name?: string;
     element_type?: string;
     element_value?: string;
     app_name?: string;
     description?: string;
     is_cropped?: boolean;
+    input_source?: string;
+    clip_path?: string;
 }
 
 interface DraggableStepCardProps {
@@ -28,7 +32,9 @@ interface DraggableStepCardProps {
     index: number;
     id: string;
     onDelete?: () => void;
-    onCrop?: () => void;
+    /** Receives "after" when the user is currently viewing the after-frame,
+     *  so the image editor edits the correct image. */
+    onCrop?: (target: "before" | "after") => void;
     onUpdateDescription: (description: string) => void;
     isDeleting?: boolean;
     cropTimestamp?: number;
@@ -41,6 +47,7 @@ const DraggableStepCard = memo(function DraggableStepCard({
     onDelete,
     onCrop,
     onUpdateDescription,
+    onUpdateTitle,
     isDeleting,
     cropTimestamp,
 }: DraggableStepCardProps) {
@@ -59,14 +66,21 @@ const DraggableStepCard = memo(function DraggableStepCard({
         opacity: isDragging ? 0.5 : 1,
     };
 
-    const hasScreenshot = step.screenshot || step.screenshot_path;
+    const beforePath = step.screenshot || step.screenshot_path;
+    const afterPath = step.screenshot_after || step.screenshot_after_path;
+    const hasScreenshot = Boolean(beforePath);
+    const hasAfter = Boolean(afterPath);
     const [isViewerOpen, setIsViewerOpen] = useState(false);
+    // Per-card local state. Resets on remount. We never persist this — it's a
+    // viewing preference, not a property of the step itself.
+    const [frameMode, setFrameMode] = useState<"before" | "after">("before");
 
+    const activePath = frameMode === "after" && hasAfter ? afterPath : beforePath;
     const screenshotSrc = useMemo(
-        () => hasScreenshot
-            ? convertFileSrc(step.screenshot || step.screenshot_path!) + (cropTimestamp ? `?t=${cropTimestamp}` : '')
+        () => activePath
+            ? convertFileSrc(activePath) + (cropTimestamp ? `?t=${cropTimestamp}` : '')
             : '',
-        [hasScreenshot, step.screenshot, step.screenshot_path, cropTimestamp]
+        [activePath, cropTimestamp]
     );
 
     return (
@@ -74,7 +88,7 @@ const DraggableStepCard = memo(function DraggableStepCard({
         {isViewerOpen && hasScreenshot && (
             <ImageViewer
                 imageSrc={screenshotSrc}
-                title={`Step ${index + 1} Screenshot`}
+                title={`Step ${index + 1} ${frameMode === "after" && hasAfter ? "(After)" : "Screenshot"}`}
                 onClose={() => setIsViewerOpen(false)}
             />
         )}
@@ -95,9 +109,9 @@ const DraggableStepCard = memo(function DraggableStepCard({
             {/* Action Buttons */}
             <div className="absolute top-2 right-2 z-10 flex gap-1">
                 {hasScreenshot && onCrop && (
-                    <Tooltip content="Edit screenshot">
+                    <Tooltip content={frameMode === "after" && hasAfter ? "Edit after-frame" : "Edit screenshot"}>
                         <button
-                            onClick={onCrop}
+                            onClick={() => onCrop(frameMode === "after" && hasAfter ? "after" : "before")}
                             className="p-1 bg-[#2721E8] hover:bg-[#4a45f5] rounded-full flex items-center justify-center transition-colors"
                         >
                             <Pencil size={14} />
@@ -123,7 +137,7 @@ const DraggableStepCard = memo(function DraggableStepCard({
                     <>
                         <img
                             src={screenshotSrc}
-                            alt={`Step ${index + 1}`}
+                            alt={`Step ${index + 1} ${frameMode === "after" ? "after-frame" : "screenshot"}`}
                             loading="lazy"
                             decoding="async"
                             className="w-full h-full object-cover cursor-pointer hover:opacity-90"
@@ -135,6 +149,49 @@ const DraggableStepCard = memo(function DraggableStepCard({
                         {step.is_cropped && (
                             <div className="absolute bottom-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs">
                                 Edited
+                            </div>
+                        )}
+                        {step.clip_path && (
+                            <Tooltip content="Video clip captured for this step">
+                                <div className="absolute bottom-2 left-20 bg-purple-600/80 px-2 py-1 rounded text-[10px] font-medium">
+                                    Clip
+                                </div>
+                            </Tooltip>
+                        )}
+                        {/* Before/After toggle — only when both frames exist.
+                            Bottom-right so it doesn't collide with the action-button
+                            cluster anchored to the card's top-right corner. */}
+                        {hasAfter && (
+                            <div
+                                className="absolute bottom-2 right-2 inline-flex bg-black/60 rounded-md overflow-hidden text-[10px] font-medium select-none"
+                                onClick={(e) => e.stopPropagation()}
+                                role="group"
+                                aria-label="Choose frame to display"
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => setFrameMode("before")}
+                                    aria-pressed={frameMode === "before"}
+                                    className={`px-2 py-1 transition-colors ${
+                                        frameMode === "before"
+                                            ? "bg-white/15 text-white"
+                                            : "text-white/60 hover:text-white/80"
+                                    }`}
+                                >
+                                    Before
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFrameMode("after")}
+                                    aria-pressed={frameMode === "after"}
+                                    className={`px-2 py-1 transition-colors ${
+                                        frameMode === "after"
+                                            ? "bg-white/15 text-white"
+                                            : "text-white/60 hover:text-white/80"
+                                    }`}
+                                >
+                                    After
+                                </button>
                             </div>
                         )}
                     </>
@@ -158,8 +215,29 @@ const DraggableStepCard = memo(function DraggableStepCard({
                         </p>
                     )}
                     {step.type_ === "type" && step.text && (
-                        <div className="bg-[#161316] p-3 rounded border border-white/8 font-mono text-sm text-[#49B8D3] break-words mb-2">
+                        <div className="bg-[#161316] p-3 rounded border border-white/8 font-mono text-sm text-[#49B8D3] break-words mb-2 relative">
                             "{step.text}"
+                            {step.input_source && (
+                                <Tooltip
+                                    content={
+                                        step.input_source === "ax_value" || step.input_source === "ax_text" || step.input_source === "ax_legacy"
+                                            ? `Final value read from the input field via accessibility API (${step.input_source})`
+                                            : step.input_source === "keystrokes"
+                                                ? "Raw keystroke buffer — autocomplete, paste, and IME input may be incomplete"
+                                                : `Source: ${step.input_source}`
+                                    }
+                                >
+                                    <span
+                                        className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-medium font-sans ${
+                                            step.input_source === "keystrokes"
+                                                ? "bg-white/10 text-white/60"
+                                                : "bg-green-600/30 text-green-300"
+                                        }`}
+                                    >
+                                        {step.input_source === "keystrokes" ? "Keys" : "AX"}
+                                    </span>
+                                </Tooltip>
+                            )}
                         </div>
                     )}
                     {step.type_ === "capture" && (
