@@ -62,10 +62,16 @@
   --bg-gradient: linear-gradient(135deg, #161316 0%, #1a1625 25%, #161316 50%, #1c1428 75%, #161316 100%);
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background: var(--bg-gradient);
   background-attachment: fixed;
-  min-height: 100vh;
 }
 
 /* Custom Scrollbar - Glass Effect */
