@@ -8,6 +8,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-13
+
+First production release. This version brings a redesigned editing experience, a refreshed app shell, and a significantly more capable AI generation pipeline on top of the fixes that were originally planned for the next patch release.
+
+### Added
+- **Vertical playbook layout** - The recording detail and new-recording views now show steps as single-column numbered cards with a step title, paragraph description, large screenshot, an "Edit image" pill under the image, and a footer Delete action
+- **Per-step titles** - Each step now has its own title field, persisted to the database and surfaced as H2 headings in generated documentation; new `update_step_title` Tauri command and DB migration to add the column
+- **AI-generated step titles with bidirectional doc sync** - Per-step AI calls return structured `{title, instructions}` JSON; titles render as H2 headings in the saved document and sync both ways — editing a step card rewrites the matching heading in the doc, and editing a heading in the doc editor writes back into the step title
+- **User titles are authoritative** - Step titles you type yourself are echoed verbatim by the AI and never overwritten on (re)generation
+- **"+ Add step" inline connectors** - Insert a new step at any position directly from the connector between cards; clicking the active "Insert here" connector again cancels the selection
+- **Custom titlebar** - New thin titlebar hosts the BMC link, notification bell, gear dropdown (Settings / About / What's new / version), and custom minimise / maximise / close buttons with live maximised-state tracking
+- **PageShell** - New sticky page shell so the page header (title, action buttons, view switcher) and toolbar remain reachable while scrolling long recordings
+- **Floating Settings panel** - Settings is now a right-anchored floating drawer (mirroring the notification tray) instead of a full route — opens from the gear menu, dismisses with Escape or the X button, and always opens to General
+- **Logging infrastructure** - New backend `logging.rs` and frontend `logger.ts` plumbing for structured diagnostics across the app
+- **Focused-field value capture** - The recorder can now read the final value of the currently focused input via the platform accessibility API (more reliable than the raw keystroke stream for autocomplete, paste, and IME input). Password and secure fields are detected and replaced with a `[password]` sentinel — actual content is never logged or persisted
+- **State-diff (after-frame) AI pass** - Optionally captures a second screenshot shortly after each click/type and sends both frames to the AI so it can describe the outcome of the action, not just the action itself
+- **Multi-stage prompting toggle** - Opt-in multi-stage prompt pipeline for more deliberate generation on complex steps
+- **Optional video clip context** - Opt-in setting to include short video clips alongside screenshots when supported by the provider
+- **Configurable after-frame wait** - Tunable delay (500-5000ms) for how long to wait before capturing the after-frame
+- **CLAUDE.md** - Project guidelines documenting the use of Exa and auggie MCP for research and codebase context
+
+### Changed
+- **Settings page split into sections** - The 1313-line `Settings.tsx` is replaced by five focused section components (General, AI Provider with Advanced AI flattened in, Generation with Writing Style flattened in, Reliability, Shortcuts)
+- **AI step prompt now returns strict JSON** - Per-step AI output is parsed as `{title, instructions}` instead of plain text, with stricter rules against placeholder/stalling instructions ("Click here", "Perform this action", etc.) and a fallback ladder using screenshot content, on-screen position, neighbouring UI, and workflow goal when element metadata is sparse
+- **Larger AI service refactor** - Substantial reorganisation of `aiService.ts`, prompt constants, provider handling, and policy enforcement to support the new generation passes and JSON output
+- **All interactive tooltips now use the custom Tooltip component** - Replaces native `title=` tooltips on buttons across StepsTab insert connectors, ImageEditor toolbar/color/close buttons, StreamingMarkdown scroll-to-bottom, and notification tray + card actions, for consistent styling and behaviour
+- **Recording list rows** - Padding moved onto the inner button so the full row is a hit target; long recording names truncate gracefully
+- **Notification tray** - Re-anchored as a right-side drawer under the titlebar with a slide-in animation, matching the new Settings panel; added a header X close button so both panels dismiss the same way
+- **About / Changelog / UpdateChangelog modals** - Forced text-white on titles so headings aren't dim against the new chrome
+- **Increased vertical spacing between step cards** - Insert-slot padding bumped (py-1 → py-4 inactive, py-2 → py-5 active) so steps breathe like the playbook reference design
+
+### Removed
+- **Sidebar** - The left sidebar is gone; routes now mount directly under the titlebar. The MonitorPicker keeps its bare layout in its own window
+- **`/settings` route and `pages/Settings.tsx`** - Replaced by the floating SettingsPanel; the gear menu now opens the panel instead of navigating
+- **Redundant "Select Position" toolbar button** - Insert-position selection is now handled entirely by the "+ Add step" connectors between cards
+
+### Fixed
+- **"Insert here" pill no longer mis-centered** - Tooltip's wrapper was hard-coded to `inline-flex`, which collapsed a `w-full` child; the active Insert-here connector now stays centered between the green guide lines
+- User-written step descriptions and OCR text were silently stripped before reaching the AI during documentation generation; the AI now actually receives the per-step intent context you provide (carried forward from the planned 0.2.7 patch)
+
+### Improved
+- **Document-wide coherence pass** - After per-step generation, a final AI pass rewrites the guide with natural transitions and references between steps so it reads as a connected walkthrough instead of isolated instructions; falls back to the original per-step output on any failure (parse error, count mismatch, model error, or cancellation) so the document is never worse than before. Generation UI shows a "Polishing the guide for cohesion..." indicator while it runs (toggleable in Generation settings, carried forward from the planned 0.2.7 patch)
+- **Tauri window capabilities** - Granted close, maximize, toggle/internal-toggle, is-maximized, and start-dragging permissions on the main window so the custom titlebar drag region and controls work correctly with decorations off
+
+### Security
+- Focused-field capture treats password and secure input fields as opaque — the literal sentinel `[password]` is stored in place of the value and callers are forbidden from logging or persisting the real content. Large field values are capped (head/tail preserved) so multi-line editor dumps cannot bloat payloads
+
 ## [0.2.6] - 2026-05-12
 
 ### Fixed
