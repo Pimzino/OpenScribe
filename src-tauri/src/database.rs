@@ -21,6 +21,16 @@ pub struct Recording {
     pub documentation: Option<String>,
     pub documentation_generated_at: Option<i64>,
     pub step_count: i32,
+    /// Path to the first step's screenshot, used as a cover thumbnail in the
+    /// V2 recordings-list row. None for empty recordings or steps without a
+    /// screenshot.
+    #[serde(default)]
+    pub first_screenshot_path: Option<String>,
+    /// Duration of the recording in ms, derived from
+    /// MAX(step.timestamp) - MIN(step.timestamp). None when there are fewer
+    /// than two steps.
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -594,6 +604,8 @@ impl Database {
                 documentation: row.get(4)?,
                 documentation_generated_at: row.get(5)?,
                 step_count: row.get(6)?,
+                first_screenshot_path: None,
+                duration_ms: None,
             })
         })?;
 
@@ -629,10 +641,16 @@ impl Database {
         // Calculate total pages
         let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i32;
 
-        // Get paginated recordings
+        // Get paginated recordings. Correlated subqueries surface the data
+        // needed by the V2 list row (cover thumbnail, duration).
         let query_sql = format!(
             "SELECT r.id, r.name, r.created_at, r.updated_at, r.documentation, r.documentation_generated_at,
-                    (SELECT COUNT(*) FROM steps WHERE recording_id = r.id) as step_count
+                    (SELECT COUNT(*) FROM steps WHERE recording_id = r.id) as step_count,
+                    (SELECT screenshot_path FROM steps
+                       WHERE recording_id = r.id AND screenshot_path IS NOT NULL
+                       ORDER BY order_index ASC LIMIT 1) as first_screenshot_path,
+                    (SELECT MAX(timestamp) - MIN(timestamp) FROM steps
+                       WHERE recording_id = r.id) as duration_ms
              FROM recordings r
              {}
              ORDER BY r.updated_at DESC
@@ -642,34 +660,28 @@ impl Database {
             if search.is_some() { "3" } else { "2" }
         );
 
+        let map_row = |row: &rusqlite::Row<'_>| -> Result<Recording> {
+            Ok(Recording {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+                documentation: row.get(4)?,
+                documentation_generated_at: row.get(5)?,
+                step_count: row.get(6)?,
+                first_screenshot_path: row.get(7)?,
+                duration_ms: row.get(8)?,
+            })
+        };
+
         let recordings: Vec<Recording> = if let Some(ref search_term) = search {
             let search_pattern = format!("%{}%", search_term);
             let mut stmt = self.conn.prepare(&query_sql)?;
-            let rows = stmt.query_map(params![search_pattern, per_page, offset], |row| {
-                Ok(Recording {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    created_at: row.get(2)?,
-                    updated_at: row.get(3)?,
-                    documentation: row.get(4)?,
-                    documentation_generated_at: row.get(5)?,
-                    step_count: row.get(6)?,
-                })
-            })?;
+            let rows = stmt.query_map(params![search_pattern, per_page, offset], map_row)?;
             rows.collect::<Result<Vec<_>>>()?
         } else {
             let mut stmt = self.conn.prepare(&query_sql)?;
-            let rows = stmt.query_map(params![per_page, offset], |row| {
-                Ok(Recording {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    created_at: row.get(2)?,
-                    updated_at: row.get(3)?,
-                    documentation: row.get(4)?,
-                    documentation_generated_at: row.get(5)?,
-                    step_count: row.get(6)?,
-                })
-            })?;
+            let rows = stmt.query_map(params![per_page, offset], map_row)?;
             rows.collect::<Result<Vec<_>>>()?
         };
 
@@ -699,6 +711,9 @@ impl Database {
                     documentation: row.get(4)?,
                     documentation_generated_at: row.get(5)?,
                     step_count: row.get(6)?,
+                    // Derived below from the loaded steps to avoid extra SQL.
+                    first_screenshot_path: None,
+                    duration_ms: None,
                 })
             })
             .optional()?;
@@ -741,6 +756,22 @@ impl Database {
                         })
                     })?
                     .collect::<Result<Vec<_>>>()?;
+
+                let mut rec = rec;
+                rec.first_screenshot_path = steps
+                    .iter()
+                    .find_map(|s| s.screenshot_path.clone());
+
+                if steps.len() >= 2 {
+                    let (mut min_ts, mut max_ts) = (i64::MAX, i64::MIN);
+                    for s in &steps {
+                        if s.timestamp < min_ts { min_ts = s.timestamp; }
+                        if s.timestamp > max_ts { max_ts = s.timestamp; }
+                    }
+                    if max_ts >= min_ts {
+                        rec.duration_ms = Some(max_ts - min_ts);
+                    }
+                }
 
                 Ok(Some(RecordingWithSteps {
                     recording: rec,

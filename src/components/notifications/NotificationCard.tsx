@@ -2,27 +2,12 @@ import { useState } from "react";
 import { X, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { useNotificationStore, type Notification, type NotificationVariant } from "../../store/notificationStore";
 import Tooltip from "../Tooltip";
+import { formatRelativeTime } from "../../lib/relativeTime";
 
 function getVariantAccentColor(variant: NotificationVariant): string {
     if (variant === "success") return "#22c55e";
     if (variant === "error") return "#ef4444";
     return "#49B8D3";
-}
-
-function formatRelativeTime(timestamp: number): string {
-    const now = Date.now();
-    const diff = now - timestamp;
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (seconds < 60) return "Just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days === 1) return "Yesterday";
-    if (days < 7) return `${days}d ago`;
-    return new Date(timestamp).toLocaleDateString();
 }
 
 interface NotificationCardProps {

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRecordingsStore, Recording } from "../store/recordingsStore";
+import { useRecordingsStore } from "../store/recordingsStore";
 import Pagination from "../components/Pagination";
 import { useRecorderStore } from "../store/recorderStore";
-import { FileText, Plus, Trash2, Search, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import Tooltip from "../components/Tooltip";
 import PageShell from "../components/PageShell";
 import DeleteProgressModal from "../components/DeleteProgressModal";
+import RecordingsListView from "../components/recordings/RecordingsListView";
 import { loadRecordingDetail, scheduleRecordingDetailPreload } from "./loadRecordingDetail";
 
 export default function RecordingsList() {
@@ -49,16 +50,6 @@ export default function RecordingsList() {
     const handleDelete = (id: string, name: string) => {
         setDeleteConfirm(null);
         deleteRecording(id, name).catch(() => undefined);
-    };
-
-    const formatDate = (timestamp: number) => {
-        return new Date(timestamp).toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
     };
 
     const handleNewRecording = () => {
@@ -140,44 +131,12 @@ export default function RecordingsList() {
                     </div>
                 ) : recordings.length > 0 ? (
                     <>
-                    <div className="glass-surface-2 rounded-xl divide-y divide-white/8 overflow-hidden">
-                        {recordings.map((recording: Recording) => (
-                            <div
-                                key={recording.id}
-                                className="flex items-center transition-colors hover:bg-white/5"
-                            >
-                                <button
-                                    onMouseEnter={handlePreloadRecording}
-                                    onFocus={handlePreloadRecording}
-                                    onClick={() => navigate(`/recordings/${recording.id}`)}
-                                    className="flex min-w-0 flex-1 items-center gap-4 p-4 text-left"
-                                >
-                                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white/10">
-                                        <FileText size={18} className="text-white/50" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="truncate font-medium">{recording.name}</p>
-                                        <p className="truncate text-sm text-white/50">
-                                            {recording.step_count} steps • {formatDate(recording.updated_at)}
-                                        </p>
-                                    </div>
-                                </button>
-                                <div className="flex flex-shrink-0 items-center gap-2 pr-4">
-                                    <Tooltip content="Delete recording">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setDeleteConfirm({ id: recording.id, name: recording.name });
-                                            }}
-                                            className="rounded-md p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-red-500"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </Tooltip>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                    <RecordingsListView
+                        recordings={recordings}
+                        onOpen={(id) => navigate(`/recordings/${id}`)}
+                        onPreload={handlePreloadRecording}
+                        onDelete={(id, name) => setDeleteConfirm({ id, name })}
+                    />
                     <Pagination
                         currentPage={currentPage}
                         totalPages={totalPages}

@@ -13,6 +13,8 @@ export interface Recording {
     documentation: string | null;
     documentation_generated_at: number | null;
     step_count: number;
+    first_screenshot_path?: string | null;
+    duration_ms?: number | null;
 }
 
 export interface Step {
