@@ -23,6 +23,7 @@ export interface StepLike {
     id?: string; // recording_id of source row, used as Stage A cache key
     identified_element_json?: string;
     clip_path?: string;
+    title?: string;
 }
 
 /**
@@ -52,5 +53,6 @@ export function mapStepsForAI(steps: Step[]): StepLike[] {
         id: step.id,
         identified_element_json: step.identified_element_json,
         clip_path: step.clip_path,
+        title: step.title,
     }));
 }

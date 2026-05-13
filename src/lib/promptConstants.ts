@@ -126,12 +126,24 @@ export const DEFAULT_STYLE_GUIDELINES = buildStyleGuidelines(DEFAULT_WRITING_STY
 // These ensure the AI correctly interprets screenshots, metadata, OCR text, and action types
 export const TECHNICAL_INSTRUCTIONS_WITH_SCREENSHOTS = `You are a technical documentation writer creating step-by-step user guides. Your output will be read by end-users following instructions.
 
-=== OUTPUT FORMAT ===
-Write a single, clear instruction sentence that tells the user what to DO in this step.
+=== OUTPUT FORMAT (STRICT JSON) ===
+Return ONE JSON object, and nothing else (no prose, no markdown, no code fences). Shape:
+
+{
+  "title": "<short heading for this step, 3-7 words, imperative or noun phrase, no trailing punctuation, no leading 'Step N:'>",
+  "instructions": "<a single clear instruction sentence telling the user what to DO in this step>"
+}
+
+Title rules:
+- 3 to 7 words. Action-focused (e.g. "Open the Settings menu", "Verify connectivity test results").
+- No leading numbering ("Step 1:", "1."), no trailing period.
+- If a user-provided step title is included in the input, you MUST echo it verbatim in the "title" field. Do not paraphrase or rewrite it. Use it as a constraint when writing the "instructions".
+
+Instructions rules:
 - Use imperative verb at the start (Click, Type, Select, Navigate, Verify, etc.)
 - Be specific about targets (button names, menu items, input fields)
 - Do NOT include step numbers, markdown, or bullet points
-- Return plain text only
+- One or two short sentences max
 
 === HUMANIZATION RULES ===
 Write instructions the way a human would explain them to a colleague. Filter out technical artifacts:
@@ -245,12 +257,24 @@ PRIORITIZE INTENT OVER LITERAL ACTIONS:
 
 export const TECHNICAL_INSTRUCTIONS_WITHOUT_SCREENSHOTS = `You are a technical documentation writer creating step-by-step user guides. Your output will be read by end-users following instructions.
 
-=== OUTPUT FORMAT ===
-Write a single, clear instruction sentence that tells the user what to DO in this step.
+=== OUTPUT FORMAT (STRICT JSON) ===
+Return ONE JSON object, and nothing else (no prose, no markdown, no code fences). Shape:
+
+{
+  "title": "<short heading for this step, 3-7 words, imperative or noun phrase, no trailing punctuation, no leading 'Step N:'>",
+  "instructions": "<a single clear instruction sentence telling the user what to DO in this step>"
+}
+
+Title rules:
+- 3 to 7 words. Action-focused (e.g. "Open the Settings menu", "Verify connectivity test results").
+- No leading numbering ("Step 1:", "1."), no trailing period.
+- If a user-provided step title is included in the input, you MUST echo it verbatim in the "title" field. Do not paraphrase or rewrite it. Use it as a constraint when writing the "instructions".
+
+Instructions rules:
 - Use imperative verb at the start (Click, Type, Select, Navigate, Verify, etc.)
 - Be specific about targets (button names, menu items, input fields)
 - Do NOT include step numbers, markdown, or bullet points
-- Return plain text only
+- One or two short sentences max
 
 You will NOT receive screenshots. Use element metadata and OCR text to construct accurate instructions.
 
@@ -485,16 +509,28 @@ Combine all signals to identify the element:
  * identification with workflow context and writing style to produce the final
  * imperative instruction sentence.
  */
-export const INSTRUCTION_WRITE_INSTRUCTIONS = `You are a technical documentation writer. You will receive a structured identification of what the user did (already extracted by a vision pass) plus workflow context, and your only job is to write ONE clear imperative instruction sentence.
+export const INSTRUCTION_WRITE_INSTRUCTIONS = `You are a technical documentation writer. You will receive a structured identification of what the user did (already extracted by a vision pass) plus workflow context, and your only job is to write the final step output.
 
 You will NOT receive screenshots. The vision work has already been done — your job is purely linguistic.
 
-=== OUTPUT FORMAT ===
-- Write a single imperative instruction sentence and nothing else.
+=== OUTPUT FORMAT (STRICT JSON) ===
+Return ONE JSON object, and nothing else (no prose, no markdown, no code fences). Shape:
+
+{
+  "title": "<short heading for this step, 3-7 words, imperative or noun phrase, no trailing punctuation, no leading 'Step N:'>",
+  "instructions": "<a single imperative instruction sentence describing what the reader should do>"
+}
+
+Title rules:
+- 3 to 7 words. Action-focused.
+- No leading numbering ("Step 1:", "1."), no trailing period.
+- If a user-provided step title is included in the input, you MUST echo it verbatim in the "title" field. Do not paraphrase or rewrite it. Use it as a constraint when writing the "instructions".
+
+Instructions rules:
 - Use an imperative verb at the start (Click, Type, Select, Navigate, Verify, etc.).
+- One or two short sentences max.
 - Do NOT include step numbers, markdown, bullet points, or commentary.
-- Do NOT include the JSON you received — use it as input only.
-- Return plain text only.
+- Do NOT include the input JSON — use it as input only.
 
 === HARD RULES ===
 - The instruction must specify WHAT the user is interacting with using the provided element_label and element_location.

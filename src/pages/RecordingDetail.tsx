@@ -24,6 +24,7 @@ import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
 import type { StreamingCallbacks } from "../lib/aiService";
 import { mapStepsForAI } from "../lib/stepMapper";
+import { extractH2s, isDefaultStepHeading, replaceNthH2 } from "../lib/markdownHeadings";
 import { useRecorderStore } from "../store/recorderStore";
 import { useGenerationStore } from "../store/generationStore";
 import { useRecordingsStore, Step as DBStep } from "../store/recordingsStore";
@@ -336,6 +337,20 @@ export default function RecordingDetail() {
             onStepStart: (index) => updateStepStatus(index, "generating"),
             onTextChunk: (index, text) => appendStreamingText(index, text),
             onStepComplete: (index, text) => completeStep(index, text),
+            onStepTitle: (index, title) => {
+                // Producer only fires this when the step had no user title,
+                // so we persist directly. Local state is refreshed via
+                // getRecording in onComplete; mirror it into localSteps now
+                // so the step card reflects the AI title during streaming.
+                const stepId = steps[index]?.id;
+                if (!stepId || stepId.startsWith("temp-")) return;
+                setLocalSteps((previousSteps) =>
+                    previousSteps.map((s) => (s.id === stepId ? { ...s, title } : s)),
+                );
+                void invoke("update_step_title", { stepId, title }).catch((err) => {
+                    console.error("Failed to persist AI-generated step title:", err);
+                });
+            },
             onDocumentUpdate: (markdown) => updateDocument(markdown),
             onPolishStart: () => startPolishing(),
             onPolishComplete: (refined) => finishPolishing(refined),
@@ -427,6 +442,33 @@ export default function RecordingDetail() {
 
         setError(null);
         try {
+            // Sync H2 headings back into step.title so the step cards stay
+            // aligned with manual doc edits. Best-effort: if the user added
+            // or removed headings, we only touch the positions that line up
+            // with existing steps.
+            const headings = extractH2s(editedContent);
+            const titleUpdates: Promise<unknown>[] = [];
+            for (let i = 0; i < Math.min(headings.length, localSteps.length); i++) {
+                const step = localSteps[i];
+                if (!step.id || step.id.startsWith("temp-")) continue;
+                const heading = headings[i];
+                // "Step N" is the default — treat it as "no custom title".
+                const desired = isDefaultStepHeading(heading, i) ? "" : heading.trim();
+                const current = step.title?.trim() ?? "";
+                if (desired !== current) {
+                    titleUpdates.push(
+                        invoke("update_step_title", { stepId: step.id, title: desired }).catch(
+                            (err) => {
+                                console.error("Failed to sync step title from doc edit:", err);
+                            },
+                        ),
+                    );
+                }
+            }
+            if (titleUpdates.length > 0) {
+                await Promise.all(titleUpdates);
+            }
+
             await saveDocumentation(id, editedContent);
             await getRecording(id);
             setIsEditing(false);
@@ -679,6 +721,10 @@ export default function RecordingDetail() {
     };
 
     const handleUpdateTitle = (stepId: string, title: string) => {
+        // Determine the step index BEFORE updating local state so the doc
+        // rewrite targets the correct H2 regardless of any concurrent reorders.
+        const stepIndex = localSteps.findIndex((s) => s.id === stepId);
+
         setLocalSteps((previousSteps) =>
             previousSteps.map((step) =>
                 step.id === stepId ? { ...step, title } : step,
@@ -699,6 +745,19 @@ export default function RecordingDetail() {
             titleSaveTimers.current.delete(stepId);
             try {
                 await invoke("update_step_title", { stepId, title });
+
+                // Mirror the edit into the saved documentation markdown so
+                // the heading stays in sync with the step card. We resolve
+                // the doc from the freshest store value at flush time.
+                const currentDoc = useRecordingsStore.getState().currentRecording?.recording.documentation;
+                if (currentDoc && stepIndex >= 0 && id) {
+                    const headingText = title.trim() || `Step ${stepIndex + 1}`;
+                    const updatedDoc = replaceNthH2(currentDoc, stepIndex, headingText);
+                    if (updatedDoc !== currentDoc) {
+                        await saveDocumentation(id, updatedDoc);
+                    }
+                }
+
                 if (id) {
                     await getRecording(id);
                 }

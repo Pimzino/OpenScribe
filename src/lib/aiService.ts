@@ -150,6 +150,62 @@ function getAdvancedAiSettings() {
     };
 }
 
+// Result shape returned by per-step generators. The orchestrator emits the
+// title to the UI via callback (only-fill-blanks) and uses `instructions` as
+// the body of the step heading in the rendered markdown.
+export interface StepGenerationResult {
+    title: string | null;
+    instructions: string;
+}
+
+// Parse the per-step JSON output { title, instructions }. Tolerates the same
+// LLM quirks as parseIdentifiedElement: code-fence wrapping, leading/trailing
+// prose, escaped braces. Falls back to plain-text instructions when the model
+// returned a non-JSON sentence instead.
+function parseStepJson(raw: string, fallbackInstructions: string): StepGenerationResult {
+    if (!raw) return { title: null, instructions: fallbackInstructions };
+    const stripped = stripReasoningContent(raw).trim();
+    if (!stripped) return { title: null, instructions: fallbackInstructions };
+
+    let candidate = stripped;
+    const fenceMatch = candidate.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenceMatch) candidate = fenceMatch[1].trim();
+    if (!candidate.startsWith("{")) {
+        const objMatch = candidate.match(/\{[\s\S]*\}/);
+        if (objMatch) candidate = objMatch[0];
+    }
+
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(candidate);
+    } catch {
+        // Not JSON — assume the model returned a bare instruction sentence.
+        return { title: null, instructions: stripped };
+    }
+    if (!parsed || typeof parsed !== "object") {
+        return { title: null, instructions: stripped };
+    }
+
+    const obj = parsed as Record<string, unknown>;
+    const rawTitle = typeof obj.title === "string" ? obj.title.trim() : "";
+    const rawInstructions = typeof obj.instructions === "string" ? obj.instructions.trim() : "";
+
+    const instructions = rawInstructions || fallbackInstructions;
+    const title = rawTitle ? sanitizeStepTitle(rawTitle) : null;
+    return { title, instructions };
+}
+
+// Normalize an AI-returned title to a clean heading: strip wrapping quotes,
+// drop trailing punctuation, collapse whitespace, drop leading "Step N:" prefixes.
+function sanitizeStepTitle(raw: string): string | null {
+    let t = raw.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
+    t = t.replace(/^["'`“”‘’]+|["'`“”‘’]+$/g, "").trim();
+    t = t.replace(/^step\s+\d+\s*[:.\-–—]\s*/i, "").trim();
+    t = t.replace(/[.!?:;,\s]+$/g, "").trim();
+    if (!t) return null;
+    return t;
+}
+
 // Action-type-aware fallback when the model returns nothing usable.
 // Better than the original "Perform this action." which the prompts now forbid.
 function buildStepFallback(step: { type_: string; text?: string }): string {
@@ -194,7 +250,7 @@ async function fileToBase64(filePath: string): Promise<string> {
 
 // Generate description for a single step
 async function generateStepDescription(
-    step: Step & { ocr_text?: string },
+    step: Step & { ocr_text?: string; title?: string },
     stepNumber: number,
     totalSteps: number,
     screenshotBase64: string | null,
@@ -206,7 +262,7 @@ async function generateStepDescription(
     openaiModel: string,
     sendScreenshots: boolean,
     workflowTitle?: string
-): Promise<string> {
+): Promise<StepGenerationResult> {
     // Get writing style options from settings
     const writingStyle = useSettingsStore.getState().writingStyle;
     const systemPrompt = buildSystemPrompt(sendScreenshots, writingStyle);
@@ -259,6 +315,14 @@ Write a VERIFICATION instruction (e.g., "Verify that..." or "Observe the...")`;
     if (step.description) {
         actionDescription += `\n\nIMPORTANT USER CONTEXT: "${step.description}"
 This description reveals the user's INTENT. Incorporate this information into your instruction - don't just describe the literal action.`;
+    }
+
+    // User-provided step title is authoritative — the model must echo it
+    // verbatim in the JSON "title" field, and use it as a constraint when
+    // writing "instructions".
+    const userTitle = step.title?.trim();
+    if (userTitle) {
+        actionDescription += `\n\nUSER-PROVIDED STEP TITLE (authoritative — return verbatim in your "title" field): "${userTitle}"`;
     }
 
     const providerConfig = getProvider(aiProviderId);
@@ -338,8 +402,10 @@ This description reveals the user's INTENT. Incorporate this information into yo
         throw withPolicyDiagnostics(error, policy);
     }
 
+    const fallback = buildStepFallback(step);
+
     if (!rawContent) {
-        return buildStepFallback(step);
+        return { title: userTitle || null, instructions: fallback };
     }
 
     if (contextBudget.droppedEntries > 0) {
@@ -348,9 +414,13 @@ This description reveals the user's INTENT. Incorporate this information into yo
         );
     }
 
-    // Strip any reasoning/thinking content from the response
-    const stripped = stripReasoningContent(rawContent);
-    return stripped || buildStepFallback(step);
+    const parsed = parseStepJson(rawContent, fallback);
+    // If the user set a title, force-echo it regardless of what the model returned.
+    // The prompt asks for verbatim echo, but this guards against misbehaving models.
+    return {
+        title: userTitle || parsed.title,
+        instructions: parsed.instructions,
+    };
 }
 
 // ============================================
@@ -500,7 +570,7 @@ async function identifyElement(
  * from Stage A's structured output plus workflow context.
  */
 async function writeInstruction(
-    step: Step,
+    step: Step & { title?: string },
     identification: IdentifiedElement,
     previousSteps: string[],
     openaiBaseUrl: string,
@@ -508,7 +578,7 @@ async function writeInstruction(
     aiProviderId: string,
     openaiModel: string,
     workflowTitle: string | undefined,
-): Promise<string> {
+): Promise<StepGenerationResult> {
     const writingStyle = useSettingsStore.getState().writingStyle;
     const systemPrompt = buildInstructionWriteSystemPrompt(writingStyle);
 
@@ -521,6 +591,8 @@ async function writeInstruction(
         settings: getAdvancedAiSettings(),
     });
 
+    const userTitle = step.title?.trim();
+
     const buildText = (contextEntries: string[]) => {
         const ctx = buildWorkflowContext(workflowTitle, contextEntries);
         const typedTextLine = step.type_ === "type" && step.text
@@ -529,6 +601,9 @@ async function writeInstruction(
         const userDescription = step.description
             ? `\nUser-provided intent context: "${step.description}"`
             : "";
+        const userTitleLine = userTitle
+            ? `\nUSER-PROVIDED STEP TITLE (authoritative — return verbatim in your "title" field): "${userTitle}"`
+            : "";
         return `IDENTIFICATION (from vision pass):
 - Element: ${identification.element_label}
 - Role: ${identification.element_role || "unknown"}
@@ -536,9 +611,9 @@ async function writeInstruction(
 - Outcome: ${identification.outcome || "(none)"}
 - Confidence: ${identification.confidence || "unknown"}
 
-ACTION TYPE: ${step.type_.toUpperCase()}${typedTextLine}${userDescription}${ctx}
+ACTION TYPE: ${step.type_.toUpperCase()}${typedTextLine}${userDescription}${userTitleLine}${ctx}
 
-Write ONE imperative instruction sentence describing what the reader should do in this step. Include the outcome only when it adds clarity AND is not "no visible change" or empty.`;
+Return the JSON { "title", "instructions" } described in the system prompt. Include the outcome in "instructions" only when it adds clarity AND is not "no visible change" or empty.`;
     };
 
     const contextBudget = fitContextEntriesToBudget({
@@ -551,6 +626,7 @@ Write ONE imperative instruction sentence describing what the reader should do i
     const userText = buildText(contextBudget.retainedEntries);
 
     const rateLimitConfig = getRateLimitConfig();
+    const fallback = buildStepFallback(step);
     let rawContent: string;
     try {
         rawContent = await requestAiChatCompletion(
@@ -564,11 +640,18 @@ Write ONE imperative instruction sentence describing what the reader should do i
         );
     } catch (error) {
         console.warn("[AI Service] Stage B (write) failed; using fallback.", withPolicyDiagnostics(error, policy));
-        return buildStepFallback(step);
+        return { title: userTitle || null, instructions: fallback };
     }
 
-    const stripped = stripReasoningContent(rawContent);
-    return stripped || buildStepFallback(step);
+    if (!rawContent) {
+        return { title: userTitle || null, instructions: fallback };
+    }
+
+    const parsed = parseStepJson(rawContent, fallback);
+    return {
+        title: userTitle || parsed.title,
+        instructions: parsed.instructions,
+    };
 }
 
 /**
@@ -581,7 +664,7 @@ Write ONE imperative instruction sentence describing what the reader should do i
  * the vision call.
  */
 async function generateStepDescriptionMultiStage(
-    step: Step & { ocr_text?: string; identified_element_json?: string; id?: string },
+    step: Step & { ocr_text?: string; identified_element_json?: string; id?: string; title?: string },
     stepNumber: number,
     totalSteps: number,
     screenshotBase64: string | null,
@@ -593,7 +676,7 @@ async function generateStepDescriptionMultiStage(
     openaiModel: string,
     sendScreenshots: boolean,
     workflowTitle: string | undefined,
-): Promise<string> {
+): Promise<StepGenerationResult> {
     const identification = await identifyElement(
         step,
         screenshotBase64,
@@ -885,6 +968,8 @@ interface StepLike {
     input_source?: string;
     identified_element_json?: string;
     clip_path?: string;
+    /** User-set or previously-AI-generated step title. Drives the H2 heading. */
+    title?: string;
 }
 
 export async function generateDocumentation(steps: StepLike[], config?: AIConfig): Promise<string> {
@@ -945,7 +1030,7 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
                 await sleep(rateLimitConfig.throttleDelayMs);
             }
 
-            const description = enableMultiStage
+            const result = enableMultiStage
                 ? await generateStepDescriptionMultiStage(
                       step,
                       i + 1,
@@ -974,7 +1059,14 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
                       sendScreenshotsToAi,
                       config?.workflowTitle,
                   );
-            stepDescriptions.push(description);
+            // Only-fill-blanks: keep the user's title if they set one;
+            // otherwise adopt the AI's. The orchestrator's StepLike is the
+            // same array passed in by the caller, so the heading renderer
+            // picks this up automatically.
+            if (!step.title?.trim() && result.title) {
+                step.title = result.title;
+            }
+            stepDescriptions.push(result.instructions);
         }
     } catch (error) {
         throw error;
@@ -1009,8 +1101,9 @@ export async function generateDocumentation(steps: StepLike[], config?: AIConfig
     for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         const description = stepDescriptions[i];
+        const heading = step.title?.trim() || `Step ${i + 1}`;
 
-        markdown += `## Step ${i + 1}\n\n`;
+        markdown += `## ${heading}\n\n`;
         markdown += `${description}\n\n`;
 
         if (step.screenshot) {
@@ -1029,6 +1122,11 @@ export interface StreamingCallbacks {
     onStepComplete?: (stepIndex: number, fullDescription: string) => void;
     onDocumentUpdate?: (markdown: string) => void;
     onTitleGenerated?: (title: string) => void;
+    // Per-step AI-generated title. Fires once per step right after parsing,
+    // before onStepComplete. The UI uses this to live-update step.title.
+    // Note: the user-set title takes precedence — the generator forwards the
+    // user's title here when one was set, so consumers can simply assign.
+    onStepTitle?: (stepIndex: number, title: string) => void;
     onError?: (stepIndex: number, error: Error) => void;
     onComplete?: (finalMarkdown: string) => void;
     // Document-wide coherence pass lifecycle (after all per-step generation).
@@ -1036,9 +1134,11 @@ export interface StreamingCallbacks {
     onPolishComplete?: (refinedDescriptions: string[]) => void;
 }
 
-// Generate step description with streaming
+// Generate step description with streaming. Returns the full {title, instructions}
+// result; `onChunk` is called once with the instructions text so the UI's
+// streaming view still updates (no token-by-token streaming with JSON output).
 async function generateStepDescriptionStreaming(
-    step: Step & { ocr_text?: string },
+    step: Step & { ocr_text?: string; title?: string },
     stepNumber: number,
     totalSteps: number,
     screenshotBase64: string | null,
@@ -1052,12 +1152,12 @@ async function generateStepDescriptionStreaming(
     onChunk: (text: string) => void,
     abortSignal?: AbortSignal,
     workflowTitle?: string
-): Promise<string> {
+): Promise<StepGenerationResult> {
     if (abortSignal?.aborted) {
         throw new DOMException('Generation cancelled', 'AbortError');
     }
 
-    const description = await generateStepDescription(
+    const result = await generateStepDescription(
         step,
         stepNumber,
         totalSteps,
@@ -1076,11 +1176,14 @@ async function generateStepDescriptionStreaming(
         throw new DOMException('Generation cancelled', 'AbortError');
     }
 
-    onChunk(description);
-    return description;
+    onChunk(result.instructions);
+    return result;
 }
 
-// Build partial markdown document from completed steps
+// Build partial markdown document from completed steps. Step headings come
+// from `step.title` (set by the user or by AI generation); when blank,
+// falls back to "Step N" so older recordings and in-flight generation both
+// render correctly.
 function buildPartialMarkdown(
     steps: StepLike[],
     stepDescriptions: string[],
@@ -1092,8 +1195,9 @@ function buildPartialMarkdown(
     for (let i = 0; i < completedCount; i++) {
         const step = steps[i];
         const description = stepDescriptions[i];
+        const heading = step.title?.trim() || `Step ${i + 1}`;
 
-        markdown += `## Step ${i + 1}\n\n`;
+        markdown += `## ${heading}\n\n`;
         markdown += `${description}\n\n`;
 
         if (step.screenshot) {
@@ -1175,12 +1279,12 @@ export async function generateDocumentationStreaming(
 
             // Send the full screenshot as captured — see generateDocumentation for rationale.
             try {
-                let description: string;
+                let result: StepGenerationResult;
                 if (enableMultiStage) {
                     if (abortSignal?.aborted) {
                         throw new DOMException("Generation cancelled", "AbortError");
                     }
-                    description = await generateStepDescriptionMultiStage(
+                    result = await generateStepDescriptionMultiStage(
                         step,
                         i + 1,
                         steps.length,
@@ -1196,9 +1300,9 @@ export async function generateDocumentationStreaming(
                     );
                     // Multi-stage doesn't natively stream — emit the full text
                     // as one chunk so the UI's streaming view still updates.
-                    callbacks.onTextChunk?.(i, description);
+                    callbacks.onTextChunk?.(i, result.instructions);
                 } else {
-                    description = await generateStepDescriptionStreaming(
+                    result = await generateStepDescriptionStreaming(
                         step,
                         i + 1,
                         steps.length,
@@ -1216,8 +1320,16 @@ export async function generateDocumentationStreaming(
                     );
                 }
 
-                stepDescriptions.push(description);
-                callbacks.onStepComplete?.(i, description);
+                // Only-fill-blanks: keep the user's title if set; otherwise adopt the AI's.
+                // Mutate the in-array StepLike so buildPartialMarkdown picks it up,
+                // and notify the UI so it can persist + reflect it in local state.
+                if (!step.title?.trim() && result.title) {
+                    step.title = result.title;
+                    callbacks.onStepTitle?.(i, result.title);
+                }
+
+                stepDescriptions.push(result.instructions);
+                callbacks.onStepComplete?.(i, result.instructions);
 
                 // Update accumulated document
                 const partialMarkdown = buildPartialMarkdown(steps, stepDescriptions, i + 1);
