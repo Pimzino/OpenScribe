@@ -6,13 +6,17 @@ interface TooltipProps {
     content: string;
     position?: "top" | "bottom" | "left" | "right";
     delay?: number;
+    /** Override the default `inline-flex items-center` wrapper. Use when the
+     *  trigger needs to span the full row (e.g. `flex w-full`). */
+    className?: string;
 }
 
 export default function Tooltip({
     children,
     content,
     position = "top",
-    delay = 200
+    delay = 200,
+    className = "inline-flex items-center",
 }: TooltipProps) {
     const [isVisible, setIsVisible] = useState(false);
     const [isPositioned, setIsPositioned] = useState(false);
@@ -90,7 +94,7 @@ export default function Tooltip({
                 onMouseLeave={hideTooltip}
                 onFocus={showTooltip}
                 onBlur={hideTooltip}
-                className="inline-flex items-center"
+                className={className}
             >
                 {children}
             </div>
