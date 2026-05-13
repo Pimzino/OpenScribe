@@ -67,7 +67,7 @@ export default function UpdateChangelogModal({ isOpen, onClose }: UpdateChangelo
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999]">
-            <div className="glass-surface-2 rounded-2xl shadow-2xl p-6 w-[480px] max-h-[80vh] flex flex-col relative">
+            <div className="glass-surface-2 relative flex max-h-[80vh] w-[480px] flex-col rounded-2xl p-6 text-white shadow-2xl">
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 p-1 hover:bg-white/10 rounded-lg transition-colors"

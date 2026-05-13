@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import ToastHost from "./components/ToastHost";
+import TitleBar from "./components/TitleBar";
 import NotificationTray from "./components/notifications/NotificationTray";
 import { loadRecordingDetail } from "./pages/loadRecordingDetail";
 
@@ -243,22 +244,38 @@ function App() {
     };
   }, [isRecording, setIsRecording, navigate]);
 
+  const isMonitorPicker =
+    typeof window !== "undefined" &&
+    (window.location.hash === "#/monitor-picker" ||
+      window.location.hash.startsWith("#/monitor-picker/"));
+
   return (
     <>
       <ToastHost />
       <UpdateNotification />
       <NotificationTray />
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/" element={<RecordingsList />} />
-          <Route path="/new-recording" element={<NewRecording />} />
-          <Route path="/recordings" element={<RecordingsList />} />
-          <Route path="/recordings/:id" element={<RecordingDetail />} />
-          <Route path="/settings" element={<Settings />} />
-          {/* Monitor selection route for separate window */}
-          <Route path="/monitor-picker" element={<MonitorPicker />} />
-        </Routes>
-      </Suspense>
+      {isMonitorPicker ? (
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/monitor-picker" element={<MonitorPicker />} />
+          </Routes>
+        </Suspense>
+      ) : (
+        <div className="flex h-screen flex-col">
+          <TitleBar />
+          <div className="flex min-h-0 flex-1">
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<RecordingsList />} />
+                <Route path="/new-recording" element={<NewRecording />} />
+                <Route path="/recordings" element={<RecordingsList />} />
+                <Route path="/recordings/:id" element={<RecordingDetail />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </Suspense>
+          </div>
+        </div>
+      )}
     </>
   );
 }

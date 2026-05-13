@@ -17,6 +17,7 @@
         "width": 1024,
         "height": 768,
         "visible": true,
+        "decorations": false,
         "backgroundColor": "#161316"
       }
     ],

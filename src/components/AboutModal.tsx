@@ -46,7 +46,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="glass-surface-2 rounded-2xl shadow-2xl p-6 w-96 relative">
+            <div className="glass-surface-2 relative w-96 rounded-2xl p-6 text-white shadow-2xl">
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 p-1 hover:bg-white/10 rounded-lg transition-colors"

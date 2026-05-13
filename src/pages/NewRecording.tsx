@@ -9,7 +9,7 @@ import { useSettingsStore } from "../store/settingsStore";
 import { Play, Square, Wand2, Save, ArrowLeft, RotateCcw } from "lucide-react";
 import RecorderOverlay from "../features/recorder/RecorderOverlay";
 import Tooltip from "../components/Tooltip";
-import Sidebar from "../components/Sidebar";
+import PageShell from "../components/PageShell";
 import ImageEditor from "../components/ImageEditor";
 import DraggableStepCard from "../components/DraggableStepCard";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
@@ -198,7 +198,7 @@ export default function NewRecording() {
     };
 
     return (
-        <div className="flex h-screen text-white relative">
+        <div className="relative flex h-full w-full text-white">
             <RecorderOverlay />
 
             {/* Image Editor Modal */}
@@ -258,31 +258,23 @@ export default function NewRecording() {
                 </div>
             )}
 
-            <Sidebar
-                activePage="new-recording"
-                onNavigate={(page) => {
-                    if (page === "recordings") navigate('/');
-                    else if (page === "settings") navigate('/settings');
-                }}
-            />
-
-            {/* Main Content */}
-            <main className="flex-1 p-8 overflow-auto">
-                <div className="flex justify-between items-center mb-8">
-                    <div className="flex items-center gap-4">
+            <PageShell
+                leading={
+                    <>
                         <Tooltip content="Go back">
                             <button
                                 aria-label="Go back"
                                 onClick={() => navigate('/')}
-                                className="p-2 hover:bg-white/10 rounded-md transition-colors"
+                                className="flex-shrink-0 p-2 hover:bg-white/10 rounded-md transition-colors"
                             >
                                 <ArrowLeft size={18} />
                             </button>
                         </Tooltip>
-                        <h2 className="text-2xl font-bold">New Recording</h2>
-                    </div>
-
-                    <div className="flex items-center gap-2">
+                        <h2 className="truncate text-base font-semibold sm:text-lg">New Recording</h2>
+                    </>
+                }
+                actions={
+                    <>
                         {!isRecording ? (
                             steps.length === 0 ? (
                                 <Tooltip content="Start recording">
@@ -339,9 +331,9 @@ export default function NewRecording() {
                                 </Tooltip>
                             </>
                         )}
-                    </div>
-                </div>
-
+                    </>
+                }
+            >
                 {/* Steps Preview */}
                 <DndContext
                     sensors={sensors}
@@ -377,7 +369,7 @@ export default function NewRecording() {
                         <p className="text-sm">Click "Start Recording" to begin.</p>
                     </div>
                 )}
-            </main>
+            </PageShell>
         </div>
     );
 }

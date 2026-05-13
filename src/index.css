@@ -177,9 +177,15 @@ body {
     box-shadow: 0 0 15px rgba(39, 33, 232, 0.15);
   }
 
-  /* Notification tray fade-in animation */
+  /* Notification tray fade-in animation (legacy, slides from left) */
   .animate-tray-in {
     animation: trayFadeIn 0.15s ease-out;
+  }
+
+  /* Notification tray slide-in from right edge */
+  .animate-tray-slide-in {
+    animation: traySlideInRight 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top right;
   }
 }
 
@@ -191,6 +197,17 @@ body {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes traySlideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
   }
 }
 

@@ -19,7 +19,7 @@ import {
 
 import ExportDropdown from "../components/ExportDropdown";
 import MarkdownViewer from "../components/MarkdownViewer";
-import Sidebar from "../components/Sidebar";
+import PageShell from "../components/PageShell";
 import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
 import type { StreamingCallbacks } from "../lib/aiService";
@@ -469,20 +469,6 @@ export default function RecordingDetail() {
         return true;
     };
 
-    const handleNavigate = async (page: "recordings" | "settings") => {
-        const canNavigate = await confirmDiscardUnsavedChanges();
-        if (!canNavigate) {
-            return;
-        }
-
-        if (page === "recordings") {
-            navigate("/");
-            return;
-        }
-
-        navigate("/settings");
-    };
-
     const handleReorderSteps = (activeId: string, overId: string) => {
         const oldIndex = localSteps.findIndex((step) => step.id === activeId);
         const newIndex = localSteps.findIndex((step) => step.id === overId);
@@ -837,7 +823,7 @@ export default function RecordingDetail() {
 
     if (!id) {
         return (
-            <div className="flex h-screen items-center justify-center text-white">
+            <div className="flex h-full w-full items-center justify-center text-white">
                 <div className="text-white/50">Invalid recording ID</div>
             </div>
         );
@@ -845,7 +831,7 @@ export default function RecordingDetail() {
 
     if (loading && !currentRecording) {
         return (
-            <div className="flex h-screen items-center justify-center text-white">
+            <div className="flex h-full w-full items-center justify-center text-white">
                 <div className="text-white/50">Loading recording...</div>
             </div>
         );
@@ -853,16 +839,14 @@ export default function RecordingDetail() {
 
     if (!currentRecording) {
         return (
-            <div className="flex h-screen items-center justify-center text-white">
+            <div className="flex h-full w-full items-center justify-center text-white">
                 <div className="text-white/50">Recording not found</div>
             </div>
         );
     }
 
     return (
-        <div className="flex h-screen text-white">
-            <Sidebar activePage="recording-detail" onNavigate={handleNavigate} />
-
+        <div className="flex h-full w-full text-white">
             {croppingSourcePath && (
                 <Suspense fallback={<DeferredModalFallback label="Loading image editor..." />}>
                     <LazyImageEditor
@@ -887,9 +871,9 @@ export default function RecordingDetail() {
                 </div>
             )}
 
-            <main className="scroll-container flex-1 overflow-y-auto overflow-x-hidden p-8">
-                <div className="mb-6 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+            <PageShell
+                leading={
+                    <>
                         <Tooltip content="Go back">
                             <button
                                 aria-label="Go back"
@@ -899,12 +883,12 @@ export default function RecordingDetail() {
                                         navigate("/recordings");
                                     }
                                 }}
-                                className="rounded-md p-2 transition-colors hover:bg-white/10"
+                                className="flex-shrink-0 rounded-md p-2 transition-colors hover:bg-white/10"
                             >
                                 <ArrowLeft size={18} />
                             </button>
                         </Tooltip>
-                        <div>
+                        <div className="flex min-w-0 flex-1 flex-col">
                             {isEditingName ? (
                                 <div className="flex items-center gap-2">
                                     <input
@@ -919,27 +903,47 @@ export default function RecordingDetail() {
                                         autoFocus
                                         aria-label="Recording name"
                                         placeholder="Enter recording name"
-                                        className="min-w-[200px] rounded-md border border-white/20 bg-white/10 px-2 py-1 text-2xl font-bold focus:border-[#2721E8] focus:outline-none disabled:opacity-50"
+                                        className="w-full min-w-0 rounded-md border border-white/20 bg-white/10 px-2 py-0.5 text-base font-semibold focus:border-[#2721E8] focus:outline-none disabled:opacity-50 sm:text-lg"
                                     />
                                     {nameSaving && <Spinner size="sm" />}
                                 </div>
                             ) : (
-                                <Tooltip content="Click to rename">
+                                <Tooltip content="Click to rename" className="flex min-w-0 max-w-full">
                                     <h2
                                         onClick={handleStartEditName}
-                                        className="cursor-pointer text-2xl font-bold transition-colors hover:text-white/80"
+                                        className="block w-full cursor-pointer truncate text-base font-semibold leading-tight transition-colors hover:text-white/80 sm:text-lg"
                                     >
                                         {currentRecording.recording.name}
                                     </h2>
                                 </Tooltip>
                             )}
-                            <p className="text-sm text-white/50">
-                                {currentRecording.steps.length} steps • Created {new Date(currentRecording.recording.created_at).toLocaleDateString()}
+                            <p className="truncate text-xs text-white/45">
+                                {currentRecording.steps.length} steps • {new Date(currentRecording.recording.created_at).toLocaleDateString()}
                             </p>
                         </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
+                    </>
+                }
+                actions={
+                    <>
+                        <div className="glass-surface-2 flex gap-0.5 rounded-md p-0.5">
+                            <button
+                                onClick={() => setActiveTab("docs")}
+                                className={`rounded-[5px] px-3 py-1 text-xs font-medium transition-colors ${
+                                    activeTab === "docs" ? "bg-[#2721E8]/30 text-white" : "text-white/60 hover:text-white"
+                                }`}
+                            >
+                                Documentation
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("steps")}
+                                className={`rounded-[5px] px-3 py-1 text-xs font-medium transition-colors ${
+                                    activeTab === "steps" ? "bg-[#2721E8]/30 text-white" : "text-white/60 hover:text-white"
+                                }`}
+                            >
+                                Steps
+                            </button>
+                        </div>
+                        <div className="mx-1 h-6 w-px bg-white/10" />
                         {activeTab === "steps" && (
                             <>
                                 {hasUnsavedChanges && (
@@ -957,14 +961,14 @@ export default function RecordingDetail() {
                                         </Tooltip>
                                         <Tooltip content="Save changes">
                                             <button
+                                                aria-label="Save changes"
                                                 onClick={() => {
                                                     void handleSaveChanges();
                                                 }}
                                                 disabled={saving}
-                                                className="flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 transition-colors hover:bg-green-700 disabled:opacity-50"
+                                                className="rounded-md bg-green-600 p-2 transition-colors hover:bg-green-700 disabled:opacity-50"
                                             >
                                                 {saving ? <Spinner size="sm" /> : <Save size={18} />}
-                                                <span className="text-sm font-medium">Save Changes</span>
                                             </button>
                                         </Tooltip>
                                     </>
@@ -972,26 +976,26 @@ export default function RecordingDetail() {
                                 {insertPosition !== null && !isRecording && (
                                     <Tooltip content="Start recording more steps">
                                         <button
+                                            aria-label="Start recording more steps"
                                             onClick={() => {
                                                 void startRecordingMore();
                                             }}
-                                            className="flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 transition-colors hover:bg-green-700"
+                                            className="rounded-md bg-green-600 p-2 transition-colors hover:bg-green-700"
                                         >
                                             <Play size={18} />
-                                            <span className="text-sm font-medium">Record More</span>
                                         </button>
                                     </Tooltip>
                                 )}
                                 {isRecording && (
                                     <Tooltip content="Stop recording">
                                         <button
+                                            aria-label="Stop recording"
                                             onClick={() => {
                                                 void stopRecordingMore();
                                             }}
-                                            className="flex animate-pulse items-center gap-2 rounded-md bg-red-600 px-3 py-2 transition-colors hover:bg-red-700"
+                                            className="animate-pulse rounded-md bg-red-600 p-2 transition-colors hover:bg-red-700"
                                         >
                                             <Square size={18} />
-                                            <span className="text-sm font-medium">Stop Recording</span>
                                         </button>
                                     </Tooltip>
                                 )}
@@ -1055,28 +1059,9 @@ export default function RecordingDetail() {
                                 </button>
                             </Tooltip>
                         )}
-                    </div>
-                </div>
-
-                <div className="glass-surface-1 mb-6 flex w-fit gap-1 rounded-xl p-1">
-                    <button
-                        onClick={() => setActiveTab("docs")}
-                        className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                            activeTab === "docs" ? "bg-[#2721E8]/30 text-white" : "text-white/60 hover:text-white"
-                        }`}
-                    >
-                        Documentation
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("steps")}
-                        className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                            activeTab === "steps" ? "bg-[#2721E8]/30 text-white" : "text-white/60 hover:text-white"
-                        }`}
-                    >
-                        Steps
-                    </button>
-                </div>
-
+                    </>
+                }
+            >
                 {error && (
                     <div className="mb-6 rounded-lg border border-red-500/50 bg-red-500/20 p-4">
                         <p className="text-sm text-red-400">{error}</p>
@@ -1163,7 +1148,7 @@ export default function RecordingDetail() {
                         />
                     </Suspense>
                 )}
-            </main>
+            </PageShell>
         </div>
     );
 }

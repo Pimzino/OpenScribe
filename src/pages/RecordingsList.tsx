@@ -5,7 +5,7 @@ import Pagination from "../components/Pagination";
 import { useRecorderStore } from "../store/recorderStore";
 import { FileText, Plus, Trash2, Search, X } from "lucide-react";
 import Tooltip from "../components/Tooltip";
-import Sidebar from "../components/Sidebar";
+import PageShell from "../components/PageShell";
 import DeleteProgressModal from "../components/DeleteProgressModal";
 import { loadRecordingDetail, scheduleRecordingDetailPreload } from "./loadRecordingDetail";
 
@@ -61,10 +61,6 @@ export default function RecordingsList() {
         });
     };
 
-    const handleNavigate = (page: "recordings" | "settings") => {
-        if (page === "settings") navigate('/settings');
-    };
-
     const handleNewRecording = () => {
         clearSteps();
         navigate('/new-recording');
@@ -75,7 +71,7 @@ export default function RecordingsList() {
     };
 
     return (
-        <div className="flex h-screen text-white">
+        <div className="flex h-full w-full text-white">
             {/* Delete Confirmation Dialog */}
             {deleteConfirm && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -102,12 +98,11 @@ export default function RecordingsList() {
                 </div>
             )}
 
-            <Sidebar activePage="recordings" onNavigate={handleNavigate} />
-
-            {/* Main Content */}
-            <main className="flex-1 p-8 overflow-auto">
-                <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-2xl font-bold">My Recordings</h2>
+            <PageShell
+                leading={
+                    <h2 className="truncate text-base font-semibold sm:text-lg">My Recordings</h2>
+                }
+                actions={
                     <Tooltip content="New recording">
                         <button
                             onClick={handleNewRecording}
@@ -116,29 +111,29 @@ export default function RecordingsList() {
                             <Plus size={18} />
                         </button>
                     </Tooltip>
-                </div>
-
-                {/* Search */}
-                <div className="relative mb-6">
-                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50 z-10 pointer-events-none" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search recordings..."
-                        className="w-full pl-10 pr-10 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8]"
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-white/50 hover:text-white transition-colors"
-                            aria-label="Clear search"
-                        >
-                            <X size={18} />
-                        </button>
-                    )}
-                </div>
-
+                }
+                toolbar={
+                    <div className="relative">
+                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50 z-10 pointer-events-none" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search recordings..."
+                            className="w-full pl-10 pr-10 py-2 bg-[#161316]/70 backdrop-blur-sm border border-white/10 rounded-md text-white placeholder-white/50 focus:outline-none focus:border-[#2721E8]"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery("")}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-white/50 hover:text-white transition-colors"
+                                aria-label="Clear search"
+                            >
+                                <X size={18} />
+                            </button>
+                        )}
+                    </div>
+                }
+            >
                 {loading && recordings.length === 0 ? (
                     <div className="flex items-center justify-center h-64">
                         <div className="text-white/50">Loading recordings...</div>
@@ -149,34 +144,32 @@ export default function RecordingsList() {
                         {recordings.map((recording: Recording) => (
                             <div
                                 key={recording.id}
-                                className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                                className="flex items-center transition-colors hover:bg-white/5"
                             >
                                 <button
                                     onMouseEnter={handlePreloadRecording}
                                     onFocus={handlePreloadRecording}
                                     onClick={() => navigate(`/recordings/${recording.id}`)}
-                                    className="flex-1 text-left"
+                                    className="flex min-w-0 flex-1 items-center gap-4 p-4 text-left"
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
-                                            <FileText size={18} className="text-white/50" />
-                                        </div>
-                                        <div>
-                                            <p className="font-medium">{recording.name}</p>
-                                            <p className="text-sm text-white/50">
-                                                {recording.step_count} steps • {formatDate(recording.updated_at)}
-                                            </p>
-                                        </div>
+                                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white/10">
+                                        <FileText size={18} className="text-white/50" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="truncate font-medium">{recording.name}</p>
+                                        <p className="truncate text-sm text-white/50">
+                                            {recording.step_count} steps • {formatDate(recording.updated_at)}
+                                        </p>
                                     </div>
                                 </button>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-shrink-0 items-center gap-2 pr-4">
                                     <Tooltip content="Delete recording">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setDeleteConfirm({ id: recording.id, name: recording.name });
                                             }}
-                                            className="p-2 hover:bg-white/10 rounded-md transition-colors text-white/60 hover:text-red-500"
+                                            className="rounded-md p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-red-500"
                                         >
                                             <Trash2 size={18} />
                                         </button>
@@ -210,7 +203,7 @@ export default function RecordingsList() {
                         )}
                     </div>
                 )}
-            </main>
+            </PageShell>
 
             {/* Delete Progress Modal */}
             <DeleteProgressModal

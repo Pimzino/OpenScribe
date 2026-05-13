@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSettingsStore, HotkeyBinding } from "../store/settingsStore";
-import { Eye, EyeOff, FolderOpen, RotateCcw, ChevronDown, RefreshCw, Check, X, ExternalLink, FileText } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, FolderOpen, RotateCcw, ChevronDown, RefreshCw, Check, X, ExternalLink, FileText } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
-import Sidebar from "../components/Sidebar";
+import PageShell from "../components/PageShell";
 import Spinner from "../components/Spinner";
 import Tooltip from "../components/Tooltip";
 import { resolveModelPolicy } from "../lib/aiPolicy";
@@ -308,19 +308,25 @@ export default function Settings() {
         return () => document.removeEventListener('click', handleClickOutside);
     }, []);
 
-    const handleNavigate = (page: "recordings" | "settings") => {
-        if (page === "recordings") navigate("/");
-    };
-
     return (
-        <div className="flex h-screen text-white">
-            <Sidebar activePage="settings" onNavigate={handleNavigate} />
-
-            {/* Main Content */}
-            <main className="flex-1 p-8 overflow-auto">
+        <div className="flex h-full w-full text-white">
+            <PageShell
+                leading={
+                    <>
+                        <Tooltip content="Go back">
+                            <button
+                                aria-label="Go back"
+                                onClick={() => navigate(-1)}
+                                className="flex-shrink-0 rounded-md p-2 transition-colors hover:bg-white/10"
+                            >
+                                <ArrowLeft size={18} />
+                            </button>
+                        </Tooltip>
+                        <h2 className="truncate text-base font-semibold sm:text-lg">Settings</h2>
+                    </>
+                }
+            >
                 <div className="max-w-2xl">
-                    <h2 className="text-2xl font-bold mb-8">Settings</h2>
-
                     <div className="space-y-6">
                         {/* Storage Section */}
                         <div>
@@ -1301,7 +1307,7 @@ export default function Settings() {
                         </div>
                     </div>
                 </div>
-            </main>
+            </PageShell>
         </div>
     );
 }

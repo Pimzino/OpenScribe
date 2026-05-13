@@ -40,7 +40,7 @@ export default function NotificationTray() {
             {/* Panel */}
             <div
                 ref={panelRef}
-                className="fixed left-64 top-0 bottom-0 w-96 z-[9991] glass-surface-1 border-r border-white/8 flex flex-col shadow-2xl animate-tray-in"
+                className="glass-surface-2 animate-tray-slide-in fixed bottom-3 right-3 top-12 z-[9991] flex w-[min(380px,calc(100vw-1.5rem))] flex-col rounded-xl border border-white/10 shadow-2xl"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-white/8">
