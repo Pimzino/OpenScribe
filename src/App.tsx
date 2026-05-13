@@ -7,13 +7,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import ToastHost from "./components/ToastHost";
 import TitleBar from "./components/TitleBar";
 import NotificationTray from "./components/notifications/NotificationTray";
+import SettingsPanel from "./components/settings/SettingsPanel";
 import { loadRecordingDetail } from "./pages/loadRecordingDetail";
 
 // Lazy load pages
 const NewRecording = lazy(() => import("./pages/NewRecording"));
 const RecordingsList = lazy(() => import("./pages/RecordingsList"));
 const RecordingDetail = lazy(loadRecordingDetail);
-const Settings = lazy(() => import("./pages/Settings"));
 const MonitorPicker = lazy(() => import("./pages/MonitorPicker"));
 
 import { useRecorderStore } from "./store/recorderStore";
@@ -270,10 +270,10 @@ function App() {
                 <Route path="/new-recording" element={<NewRecording />} />
                 <Route path="/recordings" element={<RecordingsList />} />
                 <Route path="/recordings/:id" element={<RecordingDetail />} />
-                <Route path="/settings" element={<Settings />} />
               </Routes>
             </Suspense>
           </div>
+          <SettingsPanel />
         </div>
       )}
     </>

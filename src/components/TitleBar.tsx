@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -18,10 +17,11 @@ import AboutModal from "./AboutModal";
 import ChangelogModal from "./ChangelogModal";
 import Tooltip from "./Tooltip";
 import NotificationBell from "./notifications/NotificationBell";
+import { useSettingsPanelStore } from "../store/settingsPanelStore";
 import logoUrl from "/logo.png";
 
 export default function TitleBar() {
-    const navigate = useNavigate();
+    const openSettingsPanel = useSettingsPanelStore((s) => s.openPanel);
     const [isMaximized, setIsMaximized] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [showAbout, setShowAbout] = useState(false);
@@ -144,7 +144,7 @@ export default function TitleBar() {
                                 <button
                                     onClick={() => {
                                         setMenuOpen(false);
-                                        navigate("/settings");
+                                        openSettingsPanel();
                                     }}
                                     className="flex w-full items-center gap-3 px-3 py-2 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
                                 >

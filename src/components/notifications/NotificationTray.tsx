@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Check, Trash2, BellOff } from "lucide-react";
+import { Check, Trash2, BellOff, X } from "lucide-react";
 import { useNotificationStore } from "../../store/notificationStore";
 import NotificationCard from "./NotificationCard";
 import Tooltip from "../Tooltip";
@@ -73,6 +73,15 @@ export default function NotificationTray() {
                                 </button>
                             </Tooltip>
                         )}
+                        <Tooltip content="Close">
+                            <button
+                                onClick={() => setTrayOpen(false)}
+                                aria-label="Close notifications"
+                                className="p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </Tooltip>
                     </div>
                 </div>
 
