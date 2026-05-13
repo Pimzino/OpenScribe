@@ -167,12 +167,15 @@ export default function NewRecording() {
                 text: step.text,
                 timestamp: step.timestamp,
                 screenshot: step.screenshot,
+                screenshot_after: step.screenshot_after,
                 element_name: step.element_name,
                 element_type: step.element_type,
                 element_value: step.element_value,
                 app_name: step.app_name,
                 description: step.description,
                 is_cropped: step.is_cropped,
+                input_source: step.input_source,
+                clip_path: step.clip_path,
                 title: step.title,
             }));
 
@@ -359,6 +362,7 @@ export default function NewRecording() {
                                     onDelete={() => deleteStep(index)}
                                     onCrop={(target) => setCroppingTarget({ index, target })}
                                     onUpdateDescription={(desc) => updateStepDescription(index, desc)}
+                                    onUpdateTitle={(title) => updateStepTitle(index, title)}
                                     isDeleting={deletingIndex === index}
                                     cropTimestamp={cropTimestamps[index]}
                                 />

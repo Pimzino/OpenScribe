@@ -102,6 +102,7 @@ export default function RecordingDetail() {
     const [nameSaving, setNameSaving] = useState(false);
     const hasTriggeredGeneration = useRef(false);
     const descriptionSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+    const titleSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     // During recording, `new-step` events arrive with the recorder's UUID,
     // but we store local steps under fresh `temp-...` IDs. This map lets the
     // `new-step-after` listener find the corresponding local step to update.
@@ -592,6 +593,7 @@ export default function RecordingDetail() {
                     app_name: step.app_name,
                     description: step.description,
                     is_cropped: step.is_cropped,
+                    title: step.title,
                     order_index: index,
                     screenshot_is_permanent: true,
                     input_source: step.input_source,
@@ -691,6 +693,39 @@ export default function RecordingDetail() {
         }, 400);
 
         descriptionSaveTimers.current.set(stepId, timer);
+    };
+
+    const handleUpdateTitle = (stepId: string, title: string) => {
+        setLocalSteps((previousSteps) =>
+            previousSteps.map((step) =>
+                step.id === stepId ? { ...step, title } : step,
+            ),
+        );
+
+        if (stepId.startsWith("temp-")) {
+            setHasUnsavedChanges(true);
+            return;
+        }
+
+        const existingTimer = titleSaveTimers.current.get(stepId);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+        }
+
+        const timer = setTimeout(async () => {
+            titleSaveTimers.current.delete(stepId);
+            try {
+                await invoke("update_step_title", { stepId, title });
+                if (id) {
+                    await getRecording(id);
+                }
+            } catch (updateError) {
+                console.error("Failed to update step title:", updateError);
+                setError(updateError instanceof Error ? updateError.message : "Failed to update step title");
+            }
+        }, 400);
+
+        titleSaveTimers.current.set(stepId, timer);
     };
 
     const handleCropSave = async (croppedImageBase64: string) => {

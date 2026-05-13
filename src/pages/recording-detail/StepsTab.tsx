@@ -14,6 +14,7 @@ interface StepsTabProps {
     onDeleteStep: (stepId: string) => void;
     onCropStep: (stepId: string, target: "before" | "after") => void;
     onUpdateDescription: (stepId: string, description: string) => void;
+    onUpdateTitle?: (stepId: string, title: string) => void;
     onSelectInsertPosition: (index: number) => void;
     onReorder: (activeId: string, overId: string) => void;
 }
@@ -103,31 +104,13 @@ export default function StepsTab({
                                 onDelete={() => onDeleteStep(step.id)}
                                 onCrop={(target) => onCropStep(step.id, target)}
                                 onUpdateDescription={(description) => onUpdateDescription(step.id, description)}
+                                onUpdateTitle={onUpdateTitle ? (title) => onUpdateTitle(step.id, title) : undefined}
                                 isDeleting={deletingStepId === step.id}
                                 cropTimestamp={cropTimestamps[step.id]}
                             />
                         </div>
                     ))}
-                    {isSelectingPosition && (
-                        <button
-                            onClick={() => onSelectInsertPosition(steps.length)}
-                            className={`flex h-32 items-center justify-center rounded-lg transition-all ${
-                                insertPosition === steps.length
-                                    ? "border-2 border-green-500 bg-green-500/20"
-                                    : "border-2 border-dashed border-white/20 bg-white/10 hover:bg-white/15"
-                            }`}
-                        >
-                            <div className="text-center">
-                                <MapPin
-                                    size={24}
-                                    className={insertPosition === steps.length ? "mx-auto text-green-500" : "mx-auto text-white/60"}
-                                />
-                                <span className={`text-sm ${insertPosition === steps.length ? "font-medium text-green-500" : "text-white/60"}`}>
-                                    {insertPosition === steps.length ? "Insert Here" : "Insert at End"}
-                                </span>
-                            </div>
-                        </button>
-                    )}
+                    {renderInsertSlot(steps.length, true)}
                 </div>
             </SortableContext>
         </DndContext>
