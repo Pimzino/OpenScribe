@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "stepsnap",
+  "productName": "StepSnap",
   "version": "../package.json",
   "identifier": "stepsnap",
   "build": {
