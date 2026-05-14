@@ -17,6 +17,7 @@ interface ShowToastInput {
     durationMs?: number;
     persist?: boolean;
     title?: string;
+    logCategory?: string;
 }
 
 interface ToastState {
@@ -42,7 +43,7 @@ function generateToastId(): string {
 export const useToastStore = create<ToastState>((set) => ({
     toasts: [],
 
-    showToast: ({ message, variant, durationMs, persist, title }) => {
+    showToast: ({ message, variant, durationMs, persist, title, logCategory }) => {
         const id = generateToastId();
         const finalDurationMs = durationMs ?? DEFAULT_DURATION_MS;
         const createdAt = Date.now();
@@ -61,6 +62,7 @@ export const useToastStore = create<ToastState>((set) => ({
                 title,
                 message,
                 variant,
+                logCategory,
             }).catch(console.error);
         }
 

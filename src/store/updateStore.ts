@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { getVersion } from '@tauri-apps/api/app';
+import { log, describeError } from '../lib/logger';
+import { useToastStore } from './toastStore';
 
 export interface UpdateInfo {
     version: string;
@@ -37,10 +40,21 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     checkForUpdates: async () => {
         set({ error: null });
 
+        let currentVersion = '';
+        try {
+            currentVersion = await getVersion();
+        } catch {
+            // getVersion failure is benign; the updater plugin reads it again itself.
+        }
+
         try {
             const update = await check();
 
             if (update) {
+                log.app.info('Update available', {
+                    currentVersion: update.currentVersion,
+                    remoteVersion: update.version,
+                });
                 set({
                     updateAvailable: true,
                     updateInfo: {
@@ -53,6 +67,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
                 });
                 return true;
             } else {
+                log.app.info('Update check: already on latest', { currentVersion });
                 set({
                     updateAvailable: false,
                     updateInfo: null,
@@ -61,8 +76,16 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
                 return false;
             }
         } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to check for updates';
+            const { message, metadata } = describeError(err);
+            log.app.error('Update check failed', { currentVersion, ...metadata });
             set({ error: message });
+            useToastStore.getState().showToast({
+                variant: 'error',
+                title: "Couldn't check for updates",
+                message: 'See the app log for details.',
+                persist: true,
+                logCategory: 'app',
+            });
             return false;
         }
     },
@@ -104,12 +127,20 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
             // Relaunch the application to apply the update
             await relaunch();
         } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to install update';
+            const { message, metadata } = describeError(err);
+            log.app.error('Update install failed', metadata);
             set({
                 error: message,
                 isDownloading: false,
                 isInstalling: false,
                 downloadProgress: 0,
+            });
+            useToastStore.getState().showToast({
+                variant: 'error',
+                title: "Update couldn't be installed",
+                message: 'See the app log for details.',
+                persist: true,
+                logCategory: 'app',
             });
         }
     },

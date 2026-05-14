@@ -110,12 +110,14 @@ export const log = {
  */
 export function describeError(error: unknown): { message: string; metadata: Record<string, unknown> } {
     if (error instanceof Error) {
+        const causes = collectCauses(error);
         return {
             message: error.message || error.name || "Unknown error",
             metadata: {
                 name: error.name,
                 message: error.message,
                 stack: error.stack,
+                ...(causes.length > 0 ? { causes } : {}),
             },
         };
     }
@@ -128,4 +130,26 @@ export function describeError(error: unknown): { message: string; metadata: Reco
     } catch {
         return { message: String(error), metadata: { raw: String(error) } };
     }
+}
+
+/**
+ * Walk `error.cause` up to a sensible depth so wrapped errors (HTTP client →
+ * TLS → IO, etc.) end up in the log as a structured array instead of collapsing
+ * to just the outermost message.
+ */
+function collectCauses(error: Error): Array<{ name: string; message: string }> {
+    const out: Array<{ name: string; message: string }> = [];
+    const seen = new Set<unknown>([error]);
+    let cursor: unknown = (error as { cause?: unknown }).cause;
+    while (cursor && !seen.has(cursor) && out.length < 8) {
+        seen.add(cursor);
+        if (cursor instanceof Error) {
+            out.push({ name: cursor.name, message: cursor.message });
+            cursor = (cursor as { cause?: unknown }).cause;
+        } else {
+            out.push({ name: "non-error", message: String(cursor) });
+            break;
+        }
+    }
+    return out;
 }

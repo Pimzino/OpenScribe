@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-05-14
+
+### Fixed
+- **Auto-update now works behind corporate HTTPS-inspecting proxies (Cisco Umbrella, Zscaler, Netskope, etc.)** - The Rust HTTP stack used by both the in-app updater and direct AI calls was built with `rustls-tls`, which trusts only a bundled set of *public* root CAs and ignores the OS trust store. Behind an inspecting proxy the corporate root CA lives only in the Windows/macOS/Linux trust store, so the TLS handshake failed and the updater silently reported "you're on the latest version". Switched reqwest to `rustls-tls-native-roots`, which pulls in `rustls-native-certs` and loads the OS root CAs on startup so corporate-signed certificates are now trusted
+
+### Added
+- **Updater errors now surface as notifications instead of being silent** - When `check()` or the download/install step throws, a red error toast is raised, persisted into the notification tray, and the underlying error is written to the `app` log. The About modal "Check for Updates" panel now distinguishes "already on latest" from "couldn't check" and points the user to the tray
+- **"View log" action on notification cards** - Notifications that carry a `log_category` (currently the updater error path; more call sites can opt in) render a small View log chip alongside the timestamp. Clicking it opens today's `<category>.<date>.log` file directly in the OS-default handler, or the most recent file for that category, or the logs folder as a final fallback
+- New `resolve_log_file` Tauri command and `log_category` column on `notifications` (additive migration via `PRAGMA table_info`, no rebuild of existing data)
+- `describeError()` now walks the `error.cause` chain so wrapped client/TLS/IO errors are preserved in the log instead of collapsing to just the outermost message
+
 ## [1.0.1] - 2026-05-14
 
 ### Added

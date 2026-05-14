@@ -2248,9 +2248,10 @@ fn create_notification(
     title: Option<String>,
     message: String,
     variant: String,
+    log_category: Option<String>,
 ) -> Result<Notification, String> {
     safe_db_lock(&db)?
-        .create_notification(title.as_deref(), &message, &variant)
+        .create_notification(title.as_deref(), &message, &variant, log_category.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -2964,6 +2965,7 @@ pub fn run() {
             logging::get_logs_dir,
             logging::ensure_logs_dir,
             logging::list_log_files,
+            logging::resolve_log_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

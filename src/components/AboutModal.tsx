@@ -16,7 +16,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
     const [showUpdateChangelog, setShowUpdateChangelog] = useState(false);
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
     const [updateMessage, setUpdateMessage] = useState<string | null>(null);
-    const { checkForUpdates, updateAvailable, updateInfo } = useUpdateStore();
+    const { checkForUpdates, updateAvailable, updateInfo, error: updateError } = useUpdateStore();
 
     useEffect(() => {
         if (isOpen && !version) {
@@ -30,8 +30,11 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
         try {
             const hasUpdate = await checkForUpdates();
+            const checkError = useUpdateStore.getState().error;
             if (hasUpdate) {
                 setUpdateMessage("Update available!");
+            } else if (checkError) {
+                setUpdateMessage("Couldn't check for updates. See the notification tray for details.");
             } else {
                 setUpdateMessage("You're running the latest version.");
             }
@@ -83,7 +86,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
                 {updateMessage && (
                     <div className="mt-2">
-                        <p className={`text-xs ${updateAvailable ? "text-[#49B8D3]" : "text-white/50"}`}>
+                        <p className={`text-xs ${updateAvailable ? "text-[#49B8D3]" : updateError ? "text-red-400" : "text-white/50"}`}>
                             {updateMessage}
                         </p>
                         {updateAvailable && updateInfo?.body && (

@@ -118,6 +118,7 @@ pub struct Notification {
     pub variant: String,
     pub is_read: bool,
     pub created_at: i64,
+    pub log_category: Option<String>,
 }
 
 pub struct Database {
@@ -329,6 +330,28 @@ impl Database {
             "CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC)",
             [],
         )?;
+
+        // Migration: add log_category column to notifications if missing.
+        // Lets a notification carry the category of its underlying log line so
+        // the card can offer a "View log" action that opens the right file.
+        let has_log_category: bool = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(notifications)")?;
+            let cols = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            let mut found = false;
+            for col in cols {
+                if col? == "log_category" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        if !has_log_category {
+            self.conn.execute(
+                "ALTER TABLE notifications ADD COLUMN log_category TEXT",
+                [],
+            )?;
+        }
 
         // Cleanup: Remove notifications older than 30 days
         let thirty_days_ago = std::time::SystemTime::now()
@@ -955,6 +978,7 @@ impl Database {
         title: Option<&str>,
         message: &str,
         variant: &str,
+        log_category: Option<&str>,
     ) -> Result<Notification> {
         let id = Uuid::new_v4().to_string();
         let now = std::time::SystemTime::now()
@@ -963,9 +987,9 @@ impl Database {
             .as_millis() as i64;
 
         self.conn.execute(
-            "INSERT INTO notifications (id, title, message, variant, is_read, created_at)
-             VALUES (?1, ?2, ?3, ?4, 0, ?5)",
-            params![id, title, message, variant, now],
+            "INSERT INTO notifications (id, title, message, variant, is_read, created_at, log_category)
+             VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6)",
+            params![id, title, message, variant, now, log_category],
         )?;
 
         Ok(Notification {
@@ -975,12 +999,13 @@ impl Database {
             variant: variant.to_string(),
             is_read: false,
             created_at: now,
+            log_category: log_category.map(|s| s.to_string()),
         })
     }
 
     pub fn list_notifications(&self, limit: i32, offset: i32) -> Result<Vec<Notification>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, message, variant, is_read, created_at
+            "SELECT id, title, message, variant, is_read, created_at, log_category
              FROM notifications
              ORDER BY created_at DESC
              LIMIT ?1 OFFSET ?2",
@@ -994,6 +1019,7 @@ impl Database {
                 variant: row.get(3)?,
                 is_read: row.get::<_, i32>(4)? != 0,
                 created_at: row.get(5)?,
+                log_category: row.get(6)?,
             })
         })?;
 

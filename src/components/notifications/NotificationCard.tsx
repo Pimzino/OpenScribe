@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { X, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Check, ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useNotificationStore, type Notification, type NotificationVariant } from "../../store/notificationStore";
 import Tooltip from "../Tooltip";
 import { formatRelativeTime } from "../../lib/relativeTime";
+import { log } from "../../lib/logger";
 
 function getVariantAccentColor(variant: NotificationVariant): string {
     if (variant === "success") return "#22c55e";
@@ -28,6 +30,23 @@ export default function NotificationCard({ notification }: NotificationCardProps
         }
         if (isLong) {
             setExpanded((prev) => !prev);
+        }
+    };
+
+    const handleViewLog = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!notification.log_category) return;
+        try {
+            const path = await invoke<string>("resolve_log_file", {
+                category: notification.log_category,
+            });
+            const { openPath } = await import("@tauri-apps/plugin-opener");
+            await openPath(path);
+        } catch (err) {
+            log.app.error("Failed to open log file from notification", {
+                category: notification.log_category,
+                error: err instanceof Error ? err.message : String(err),
+            });
         }
     };
 
@@ -75,6 +94,15 @@ export default function NotificationCard({ notification }: NotificationCardProps
                                 className="text-white/40 hover:text-white/70 transition-colors"
                             >
                                 {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            </button>
+                        )}
+                        {notification.log_category && (
+                            <button
+                                onClick={handleViewLog}
+                                className="flex items-center gap-1 text-[11px] text-white/50 hover:text-white transition-colors"
+                            >
+                                <FileText size={11} />
+                                <span>View log</span>
                             </button>
                         )}
                     </div>

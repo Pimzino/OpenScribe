@@ -306,3 +306,55 @@ pub fn list_log_files() -> Result<Vec<String>, String> {
 pub fn is_known_category(category: &str) -> bool {
     KNOWN_CATEGORIES.contains(&category)
 }
+
+/// Resolve the most useful log path for a notification's "View log" action.
+///
+/// Preference order:
+///   1. Today's file for the requested category, if it exists
+///   2. The most recent file for that category (`<category>.<date>.log`)
+///   3. The logs directory itself, so the user can browse
+///
+/// `category` is validated against `KNOWN_CATEGORIES` to keep arbitrary paths
+/// out of the call.
+#[tauri::command]
+pub fn resolve_log_file(category: String) -> Result<String, String> {
+    if !is_known_category(&category) {
+        return Err(format!("Unknown log category: {}", category));
+    }
+    let dir = logs_dir().ok_or_else(|| "Logger not initialised".to_string())?;
+
+    let today_path = log_file_path(&dir, &category, Local::now().date_naive());
+    if today_path.exists() {
+        return Ok(today_path.to_string_lossy().into_owned());
+    }
+
+    let prefix = format!("{}.", category);
+    let mut newest: Option<(NaiveDate, PathBuf)> = None;
+    for entry in fs::read_dir(&dir)
+        .map_err(|e| format!("read_dir {}: {}", dir.display(), e))?
+        .flatten()
+    {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Some(stem) = name.strip_suffix(".log") else {
+            continue;
+        };
+        let Some(date_str) = stem.strip_prefix(&prefix) else {
+            continue;
+        };
+        let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") else {
+            continue;
+        };
+        if newest.as_ref().map_or(true, |(d, _)| date > *d) {
+            newest = Some((date, path));
+        }
+    }
+
+    if let Some((_, path)) = newest {
+        return Ok(path.to_string_lossy().into_owned());
+    }
+
+    Ok(dir.to_string_lossy().into_owned())
+}

@@ -1,6 +1,6 @@
 [package]
 name = "stepsnap"
-version = "1.0.1"
+version = "1.0.2"
 description = "A desktop app for creating step-by-step documentation with AI assistance"
 authors = ["StepSnap Contributors"]
 edition = "2021"
@@ -36,7 +36,11 @@ image = "0.25"
 imageproc = "0.25"
 rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1.8", features = ["v4"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# `rustls-tls-native-roots` keeps rustls as the TLS backend but loads OS trust
+# store roots (via rustls-native-certs) so corporate CAs added by group policy
+# (Cisco Umbrella, Zscaler, Netskope, etc.) are trusted. Without this, every
+# HTTPS request behind an inspecting proxy fails the rustls handshake.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 
 # OCR dependencies
 pure-onnx-ocr = "0.1"

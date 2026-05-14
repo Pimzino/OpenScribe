@@ -10,6 +10,7 @@ export interface Notification {
     variant: NotificationVariant;
     is_read: boolean;
     created_at: number;
+    log_category: string | null;
 }
 
 interface NotificationState {
@@ -20,7 +21,7 @@ interface NotificationState {
 
     fetchNotifications: () => Promise<void>;
     fetchUnreadCount: () => Promise<boolean>;
-    addNotification: (input: { title?: string; message: string; variant: NotificationVariant }) => Promise<Notification | null>;
+    addNotification: (input: { title?: string; message: string; variant: NotificationVariant; logCategory?: string }) => Promise<Notification | null>;
     markAsRead: (id: string) => Promise<void>;
     markAllAsRead: () => Promise<void>;
     deleteNotification: (id: string) => Promise<void>;
@@ -66,6 +67,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
                 title: input.title ?? null,
                 message: input.message,
                 variant: input.variant,
+                logCategory: input.logCategory ?? null,
             });
             set((state) => ({
                 notifications: [notification, ...state.notifications],
