@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-05-14
+
+### Added
+- **Redesigned recordings list** - Each row now shows the first-step screenshot as a cover thumbnail (with a deterministic gradient fallback keyed off the recording id), step count, derived recording duration, and relative time, grouped under sticky **Today / Yesterday / This week / Earlier** section headers
+- `first_screenshot_path` and `duration_ms` on the backend `Recording` model, surfaced from `list_recordings_paginated` via correlated subqueries and derived from steps in `get_recording`
+- Shared `formatRelativeTime`, `formatDuration`, and `bucketRecordingsByDate` helpers (`src/lib/relativeTime.ts`, `src/lib/recordingMeta.ts`); the notification card now reuses `formatRelativeTime` instead of its own copy
+
+### Fixed
+- **Page no longer bounces or slides on overscroll** - Locked html/body height/overflow and set `overscroll-behavior: none` so horizontal drags and vertical end-of-scroll no longer rubber-band the whole page; inner scroll containers still scroll normally
+
 ## [1.0.0] - 2026-05-13
 
 First production release. This version brings a redesigned editing experience, a refreshed app shell, and a significantly more capable AI generation pipeline on top of the fixes that were originally planned for the next patch release.
